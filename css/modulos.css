@@ -167,3 +167,10 @@
 .mov-botones { flex-basis: 100%; display: grid; gap: 8px; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 4px; }
 @media (min-width: 900px) { .mov-botones { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
 .mov-botones .btn { padding: 0 6px; }
+/* Usuarios en el teléfono: datos arriba, etiqueta y botones abajo. */
+@media (max-width: 560px) {
+  .usuario-fila { flex-wrap: wrap; }
+  .usuario-fila .item-cuerpo { flex: 1 1 calc(100% - 60px); }
+  .usuario-fila .etiqueta { margin-left: 56px; }
+  .usuario-fila > .btn:first-of-type { margin-left: auto; }
+}

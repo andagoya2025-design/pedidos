@@ -350,7 +350,20 @@
     });
   }
 
+  /* Personal con sesión abierta en este teléfono: botón para regresar a la app. */
+  function botonVolverApp() {
+    if (!MEM.leer('token')) return;
+    var a = document.createElement('a');
+    a.className = 'btn secundario chico';
+    a.href = './';
+    a.textContent = '← Volver a la app';
+    a.style.cssText = 'position:relative;z-index:1;margin-bottom:10px';
+    var portada = document.querySelector('.pedir-portada');
+    portada.insertBefore(a, portada.firstChild);
+  }
+
   document.addEventListener('DOMContentLoaded', function () {
+    botonVolverApp();
     $('#btn-ver-pedido').addEventListener('click', pintarResumen);
     iniciar();
   });

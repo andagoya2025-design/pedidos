@@ -202,15 +202,22 @@
       '<div class="acciones" style="margin:0 0 12px"><button class="btn" id="btn-nuevo-usuario" type="button">＋ Nuevo usuario</button></div>' +
       '<p class="subtitulo">Activos: ' + conteo.dueno + ' dueño(s) · ' + conteo.cajero + ' cajero(s) · ' + conteo.motorizado + ' motorizado(s). Desactivar no borra el historial.</p>' +
       '<div class="lista">' + lista.map(function (u) {
-        return '<div class="item"><div class="avatar">' + UI.esc(UI.iniciales(u.nombre)) + '</div><div class="item-cuerpo">' +
+        return '<div class="item usuario-fila"><div class="avatar">' + UI.esc(UI.iniciales(u.nombre)) + '</div><div class="item-cuerpo">' +
           '<div class="item-titulo">' + UI.esc(u.nombre) + '</div>' +
           '<div class="item-sub">@' + UI.esc(u.usuario) + ' · ' + UI.esc(APP.nombreRol(u.rol)) + ' · ' + UI.esc(APP.nombreLocal(u.local_id)) + '</div>' +
           '<div class="item-sub">Último ingreso: ' + UI.esc(UI.fechaHora(u.ultimo_acceso)) + '</div></div>' +
           '<span class="etiqueta ' + (u.activo ? 'ok' : 'mal') + '">' + (u.activo ? 'Activo' : 'Inactivo') + '</span>' +
+          (u.activo ? '<button class="btn secundario chico" type="button" data-acceso="' + UI.esc(u.id) + '" aria-label="Enviar acceso por WhatsApp">📲</button>' : '') +
           '<button class="btn secundario chico" type="button" data-editar="' + UI.esc(u.id) + '">Editar</button></div>';
       }).join('') + '</div>';
 
     UI.$('#btn-nuevo-usuario').addEventListener('click', function () { editarUsuario(null); });
+    UI.$$('[data-acceso]', cuerpo()).forEach(function (b) {
+      b.addEventListener('click', function () {
+        var u = cache.usuarios.filter(function (x) { return x.id === b.getAttribute('data-acceso'); })[0];
+        if (u) ofrecerAcceso(u, '');
+      });
+    });
     UI.$$('[data-editar]', cuerpo()).forEach(function (b) {
       b.addEventListener('click', function () {
         editarUsuario(cache.usuarios.filter(function (u) { return u.id === b.getAttribute('data-editar'); })[0]);
@@ -245,7 +252,7 @@
       ].concat(nuevo ? [] : [{ texto: 'Restablecer clave', valor: 'clave', clase: 'borde' }]).concat([
         { texto: 'Guardar', valor: 'guardar', antes: function (v) {
           datos = UI.leerFormulario(UI.$('#form-usuario', v));
-          datos.usuario = datos.usuario.toLowerCase();
+          datos.usuario = datos.usuario.toLowerCase().replace(/\s+/g, ''); // «motorizado 1» -> «motorizado1»
           var malo = !datos.nombre ? 'Escriba el nombre.' : !/^[a-z0-9._-]{3,30}$/.test(datos.usuario) ? 'Usuario no válido: 3 a 30 letras o números, sin espacios.' :
             (datos.rol !== 'dueno' && !datos.local_id) ? 'Elija el local.' : (nuevo && (datos.clave || '').length < 6) ? 'La clave debe tener al menos 6 caracteres.' : '';
           if (malo) { UI.aviso(malo, 'error'); return false; }
@@ -261,9 +268,22 @@
       cache.usuarios = r.usuarios || [];
       UI.aviso(nuevo ? 'Usuario creado.' : 'Usuario guardado.', 'ok');
       pintarUsuarios(false);
+      if (nuevo && datos.activo !== false) ofrecerAcceso(datos, datos.clave);
     } catch (err) {
       UI.error('No se guardó el usuario', err.message);
     }
+  }
+
+  /* Enviar por WhatsApp el enlace de la app + usuario (+ clave si se acaba de poner). */
+  async function ofrecerAcceso(u, clave) {
+    var texto = UI.textoAcceso(u.nombre, u.usuario, clave, APP.nombreRol(u.rol));
+    var enviar = await UI.ventana({
+      icono: '📲', titulo: 'Acceso de ' + u.nombre,
+      texto: clave ? 'Mándale este mensaje para que entre desde su teléfono.' : 'Mándale el enlace y su usuario. La clave se la das tú (el sistema la guarda escondida y no puede mostrarla).',
+      html: '<pre style="white-space:pre-wrap;font:inherit;background:var(--superficie-2);border-radius:14px;padding:12px;margin:0 0 12px">' + UI.esc(texto) + '</pre>',
+      botones: [{ texto: 'Cerrar', valor: false, clase: 'secundario' }, { texto: '💬 Enviar por WhatsApp', valor: true }]
+    });
+    if (enviar) UI.compartirWhatsApp(texto);
   }
 
   async function restablecerClave(u) {
@@ -282,6 +302,7 @@
     try {
       await DATOS.pedir('usuarioClave', { id: u.id, clave: clave }, { guardar: true });
       UI.aviso('Clave restablecida.', 'ok');
+      ofrecerAcceso(u, clave);
     } catch (err) {
       UI.error('No se cambió la clave', err.message);
     }

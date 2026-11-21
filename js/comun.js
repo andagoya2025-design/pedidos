@@ -126,5 +126,23 @@
     }).then(function (ok) { return ok ? valor : null; });
   };
 
+  /* Enlace de la app para el personal (misma carpeta donde está index.html). */
+  UI.enlaceApp = function () {
+    return global.location.href.split('#')[0].split('?')[0].replace(/[^/]*$/, '');
+  };
+  /* Mensaje con el enlace y el usuario (la clave solo si se acaba de crear o cambiar). */
+  UI.textoAcceso = function (nombre, usuario, clave, rol) {
+    return 'Hola ' + String(nombre || '').split(' ')[0] + ', este es tu acceso al sistema' + (rol ? ' (' + rol + ')' : '') + ':\n\n' +
+      '1) Abre: ' + UI.enlaceApp() + '\n' +
+      '2) Instálalo en tu teléfono: iPhone (Safari) → Compartir → «Agregar a pantalla de inicio». Android (Chrome) → ⋮ → «Instalar app».\n' +
+      '3) Entra con:\n   Usuario: ' + usuario + '\n   Clave: ' + (clave || '(te la doy aparte)') + '\n\n' +
+      'Puedes cambiar tu clave en «Mi cuenta».';
+  };
+  /* WhatsApp al número dado o, si no hay número, para elegir el contacto. */
+  UI.compartirWhatsApp = function (texto, tel) {
+    var d = UI.digitos(tel);
+    global.open(d ? UI.enlaceWhatsApp(d, texto) : 'https://wa.me/?text=' + encodeURIComponent(texto), '_blank', 'noopener');
+  };
+
   UI.numero = function (v) { var n = Number(String(v).replace(',', '.')); return isFinite(n) ? n : NaN; };
 })(window);

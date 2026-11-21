@@ -384,7 +384,12 @@
     var c = r.config;
     var base = global.location.href.split('#')[0].replace(/index\.html$/, '').replace(/[^/]*$/, '') + 'pedir.html';
     var enlaces = [['Todos los locales', base]].concat(APP.locales.filter(function (l) { return l.activo; }).map(function (l) { return [l.nombre, base + '?local=' + encodeURIComponent(l.id)]; }));
+    var app = UI.enlaceApp();
     cuerpo().innerHTML =
+      '<div class="tarjeta" style="margin-bottom:14px"><h3 style="margin-top:0">👥 Enlace para tu personal (cajeros y motorizados)</h3>' +
+      '<p class="subtitulo">Es el MISMO enlace para todos. Cada persona entra con SU usuario y clave, y solo ve lo suyo. Los usuarios se crean en Configuración → Usuarios (botón 📲 para mandarle su acceso).</p>' +
+      '<div class="item"><div class="item-cuerpo"><div class="item-sub" style="overflow-wrap:anywhere">' + UI.esc(app) + '</div></div>' +
+      '<button class="btn secundario chico" type="button" id="copiar-app">Copiar</button></div></div>' +
       '<div class="tarjeta" style="margin-bottom:14px"><h3 style="margin-top:0">🔗 Enlace para que los clientes pidan</h3>' +
       '<p class="subtitulo">Póngalo en Instagram, Google Maps, la página web («Pedir aquí») o conviértalo en código QR para volantes y mesas.</p>' +
       '<div class="lista">' + enlaces.map(function (e, i) {
@@ -397,6 +402,10 @@
       '<div class="campo"><label for="aj-transf">Datos para transferencia</label><textarea class="entrada" id="aj-transf" name="datos_transferencia" maxlength="300" placeholder="Banco, tipo y número de cuenta, nombre, cédula">' + UI.esc(c.datos_transferencia) + '</textarea><span class="ayuda">Se muestran al cliente que elige transferencia.</span></div>' +
       '<div class="campo"><label for="aj-wa">WhatsApp del dueño (resumen del cierre de caja)</label><input class="entrada" id="aj-wa" name="whatsapp_dueno" inputmode="tel" value="' + UI.esc(c.whatsapp_dueno) + '" placeholder="0991234567"></div>' +
       '<button class="btn bloque" type="submit">Guardar ajustes</button></form>';
+    UI.$('#copiar-app').addEventListener('click', async function () {
+      try { await global.navigator.clipboard.writeText(app); UI.aviso('Enlace copiado.', 'ok'); }
+      catch (e) { UI.ventana({ icono: '🔗', titulo: 'Copie el enlace', html: '<input class="entrada" readonly value="' + UI.esc(app) + '" onfocus="this.select()">' }); }
+    });
     UI.$$('[data-copiar]', cuerpo()).forEach(function (b) {
       b.addEventListener('click', async function () {
         var url = enlaces[Number(b.getAttribute('data-copiar'))][1];

@@ -8,7 +8,7 @@
  * - Nunca guarda datos del negocio: los pedidos van siempre al servidor.
  * ============================================================
  */
-var VERSION = 'app-2.0.0';
+var VERSION = 'app-2.0.1';
 
 var ARCHIVOS = [
   './',

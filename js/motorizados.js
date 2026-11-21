@@ -48,16 +48,31 @@
         (m.ultimo_punto ? '<div class="item-sub">Último punto: ' + UI.esc(UI.fechaHora(m.ultimo_punto.fecha)) + '</div>' : '') + '</div></div>' +
         '<div class="acciones">' +
         '<button class="btn secundario chico" type="button" data-wa="' + UI.esc(m.id) + '">💬 WhatsApp</button>' +
+        (u ? '<button class="btn chico" type="button" data-acceso="' + UI.esc(m.id) + '">📲 Enviar acceso</button>' : '') +
         (m.ultimo_punto ? '<a class="btn secundario chico" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=' + m.ultimo_punto.lat + ',' + m.ultimo_punto.lng + '">🗺️ Último punto</a>' : '') +
         '<button class="btn borde chico" type="button" data-editar="' + UI.esc(m.id) + '">Editar</button></div></div>';
     }).join('') + '</div>' : UI.vacio('🛵', 'Aún no hay motorizados. Primero cree su usuario (Configuración → Usuarios, rol Motorizado) y luego su ficha aquí.');
     UI.$$('[data-editar]', c).forEach(function (b) { b.addEventListener('click', function () { editar(motos.filter(function (m) { return m.id === b.getAttribute('data-editar'); })[0]); }); });
+    UI.$$('[data-acceso]', c).forEach(function (b) {
+      b.addEventListener('click', function () {
+        var m = motos.filter(function (x) { return x.id === b.getAttribute('data-acceso'); })[0];
+        var u = usuarios.filter(function (x) { return x.id === m.usuario_id; })[0];
+        if (!u) return;
+        UI.ventana({
+          icono: '📲', titulo: 'Acceso de ' + m.nombre, texto: 'Se abre WhatsApp a su celular con el enlace y su usuario. Escribe tú la clave antes de enviar (el sistema la guarda escondida).',
+          html: '<pre style="white-space:pre-wrap;font:inherit;background:var(--superficie-2);border-radius:14px;padding:12px;margin:0 0 12px">' + UI.esc(UI.textoAcceso(m.nombre, u.usuario, '', 'motorizado')) + '</pre>',
+          botones: [{ texto: 'Cerrar', valor: false, clase: 'secundario' }, { texto: '💬 Enviar por WhatsApp', valor: true }]
+        }).then(function (ok) { if (ok) UI.compartirWhatsApp(UI.textoAcceso(m.nombre, u.usuario, '', 'motorizado'), m.celular); });
+      });
+    });
     UI.$$('[data-wa]', c).forEach(function (b) {
       b.addEventListener('click', function () { var m = motos.filter(function (x) { return x.id === b.getAttribute('data-wa'); })[0]; UI.abrirWhatsApp(m.celular, 'Hola ' + m.nombre.split(' ')[0] + ', '); });
     });
   }
 
   async function editar(m) {
+    // Lista de usuarios al día: si el usuario se creó recién, igual aparece aquí.
+    try { usuarios = ((await DATOS.pedir('usuariosListar', {})).usuarios || []).filter(function (u) { return u.rol === 'motorizado' && u.activo; }); } catch (e) { /* se usa la lista que ya había */ }
     var nuevo = !m;
     m = m || { id: '', nombre: '', cedula: '', celular: '', direccion: '', placa: '', foto_url: '', usuario_id: '', local_id: APP.local, activo: true };
     var libres = usuarios.filter(function (u) { return u.id === m.usuario_id || !motos.some(function (x) { return x.usuario_id === u.id; }); });
@@ -75,7 +90,7 @@
         '<div class="campo"><label for="mo-foto">Foto (enlace, opcional)</label><input class="entrada" id="mo-foto" name="foto_url" value="' + UI.esc(m.foto_url) + '" placeholder="https://…"></div>' +
         '<div class="campo"><label for="mo-usuario">Usuario para «Mis entregas»</label><select class="entrada" id="mo-usuario" name="usuario_id"><option value="">Sin usuario</option>' +
         libres.map(function (u) { return '<option value="' + UI.esc(u.id) + '"' + (u.id === m.usuario_id ? ' selected' : '') + '>@' + UI.esc(u.usuario) + ' · ' + UI.esc(u.nombre) + '</option>'; }).join('') +
-        '</select><span class="ayuda">El usuario se crea en Configuración → Usuarios con rol «Motorizado».</span></div>' +
+        '</select><span class="ayuda">' + (libres.length ? 'Sin esto, el motorizado ve «Su usuario aún no está unido a una ficha».' : '⚠️ No hay usuarios de rol «Motorizado» libres: créelo primero en Configuración → Usuarios.') + '</span></div>' +
         '<label class="interruptor"><input type="checkbox" name="activo"' + (m.activo ? ' checked' : '') + '> Activo</label></form>',
       botones: [{ texto: 'Cancelar', valor: false, clase: 'secundario' }, { texto: 'Guardar', valor: true, antes: function (v) {
         enviar = UI.leerFormulario(UI.$('#form-moto', v));
