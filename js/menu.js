@@ -23,6 +23,7 @@
   APP.vistas.menu = {
     titulo: 'Menú', icono: '🍔', orden: 20, roles: ['dueno', 'cajero'],
     pintar: function (cont) {
+      if ((APP.parametros || {}).p) pestana = APP.parametros.p; // 3.0: la guía abre la pestaña justa
       var mias = PESTANAS.filter(function (p) { return p[2].indexOf(APP.sesion.rol) >= 0; });
       if (!mias.some(function (p) { return p[0] === pestana; })) pestana = 'platos';
       datos = null;
@@ -82,7 +83,8 @@
     var d = await traer(forzar);
     var dueno = APP.sesion.rol === 'dueno';
     var cats = d.categorias;
-    var html = dueno ? '<div class="acciones" style="margin:0 0 12px"><button class="btn" type="button" id="btn-nuevo-plato">＋ Nuevo plato</button></div>' : '';
+    var html = dueno ? '<div class="acciones" style="margin:0 0 12px"><button class="btn" type="button" id="btn-nuevo-plato">＋ Nuevo plato</button>' +
+      '<button class="btn borde" type="button" id="btn-ejemplo">✨ Cargar menú de ejemplo</button></div>' : '';
     if (dueno && !cats.length) html += '<div class="banda">💡 <span>Primero cree una categoría (ej. «Pollos», «Combos», «Bebidas») en la pestaña Categorías.</span></div>';
     var sinCat = d.platos.filter(function (p) { return !cats.some(function (c) { return c.id === p.categoria_id; }); });
     var grupos = cats.map(function (c) { return [c.nombre, d.platos.filter(function (p) { return p.categoria_id === c.id; })]; });
@@ -91,7 +93,8 @@
     html += grupos.length ? grupos.map(function (g) {
       return '<h3 style="margin:18px 0 10px">' + UI.esc(g[0]) + '</h3><div class="lista">' + g[1].map(function (p) {
         return '<div class="item plato-admin">' + miniatura(p.foto_url) + '<div class="item-cuerpo"><div class="item-titulo">' + UI.esc(p.nombre) + '</div>' +
-          '<div class="item-sub">' + UI.dinero(p.precio) + ' · ' + UI.esc(nombreLocalCorto(p.local_id)) + (p.extras.length ? ' · ' + p.extras.length + ' extra(s)' : '') + (p.activo ? '' : ' · <b>oculto</b>') + '</div></div>' +
+          '<div class="item-sub">' + UI.dinero(p.precio) + ' · ' + UI.esc(nombreLocalCorto(p.local_id)) + (p.extras.length ? ' · ' + p.extras.length + ' extra(s)' : '') + (p.activo ? '' : ' · <b>oculto</b>') + (p.sugerido ? ' · 🥤 sugerido' : '') + '</div>' +
+          (p.etiquetas ? '<div class="chips" style="margin-top:4px">' + UI.chipsEtiquetas(p.etiquetas) + '</div>' : '') + '</div>' +
           '<label class="interruptor" style="min-height:40px;font-size:13px"><input type="checkbox" data-agotado="' + UI.esc(p.id) + '"' + (p.agotado ? ' checked' : '') + '> Agotado</label>' +
           (dueno ? '<button class="btn secundario chico" type="button" data-editar="' + UI.esc(p.id) + '">Editar</button>' : '') + '</div>';
       }).join('') + '</div>';
@@ -99,6 +102,20 @@
     cuerpo().innerHTML = html;
     var n = UI.$('#btn-nuevo-plato');
     if (n) n.addEventListener('click', function () { editarPlato(null); });
+    var ej = UI.$('#btn-ejemplo');
+    if (ej) ej.addEventListener('click', async function (e) {
+      var ok = await UI.confirmar('¿Cargar el menú de ejemplo?', 'Se agregan 4 categorías y 8 platos ecuatorianos (almuerzos, pollos, platos fuertes y bebidas) para todos los locales. No borra ni repite nada de lo que ya tiene; después puede editarlos o esconderlos.', 'Sí, cargar');
+      if (!ok) return;
+      UI.trabajando(e.currentTarget, async function () {
+        try {
+          datos = await DATOS.pedir('menuEjemplo', {}, { guardar: true });
+          if (APP.local !== 'TODOS') datos = await DATOS.pedir('menuListar', { local_id: APP.local });
+          var ex = datos.ejemplo || {};
+          UI.aviso(ex.creados ? 'Listo: ' + ex.creados + ' platos de ejemplo agregados.' : 'Los platos de ejemplo ya estaban.', 'ok');
+          pintarPlatos(false);
+        } catch (err) { UI.error('No se cargó el ejemplo', err.message); }
+      });
+    });
     UI.$$('[data-editar]', cuerpo()).forEach(function (b) {
       b.addEventListener('click', function () { editarPlato(d.platos.filter(function (p) { return p.id === b.getAttribute('data-editar'); })[0]); });
     });
@@ -128,7 +145,8 @@
     var d = datos;
     if (!d.categorias.length) return UI.error('Falta una categoría', 'Cree primero una categoría en la pestaña Categorías.');
     var nuevo = !p;
-    p = p || { id: '', nombre: '', categoria_id: d.categorias[0].id, local_id: APP.local, precio: '', descripcion: '', foto_url: '', extras: [], agotado: false, activo: true };
+    p = p || { id: '', nombre: '', categoria_id: d.categorias[0].id, local_id: APP.local, precio: '', descripcion: '', foto_url: '', extras: [], agotado: false, activo: true, etiquetas: '', sugerido: false };
+    var mias = String(p.etiquetas || '').split(',');
     var enviar = null;
     var accion = await UI.ventana({
       icono: '🍔', titulo: nuevo ? 'Nuevo plato' : 'Editar plato',
@@ -145,17 +163,22 @@
         '<div class="campo"><label for="pl-desc">Descripción</label><textarea class="entrada" id="pl-desc" name="descripcion" maxlength="300">' + UI.esc(p.descripcion) + '</textarea></div>' +
         '<div class="campo"><label>Extras para personalizar</label><div id="pl-extras">' + p.extras.map(filaExtra).join('') + '</div>' +
         '<button class="btn borde chico" type="button" id="pl-mas-extra">＋ Agregar extra</button><span class="ayuda">Ej. «Queso extra» 0.50 · «Sin cebolla» 0.00</span></div>' +
+        '<div class="campo"><label>Etiquetas (se ven en el menú)</label><div class="segmento" id="pl-etiquetas">' + Object.keys(UI.ETIQUETAS).map(function (k) {
+          return '<button type="button" data-et="' + k + '" class="' + (mias.indexOf(k) >= 0 ? 'activo' : '') + '">' + UI.ETIQUETAS[k] + '</button>';
+        }).join('') + '</div></div>' +
+        '<label class="interruptor"><input type="checkbox" name="sugerido"' + (p.sugerido ? ' checked' : '') + '> Sugerirlo al final («¿Le agregas una bebida?»)</label>' +
         '<label class="interruptor"><input type="checkbox" name="agotado"' + (p.agotado ? ' checked' : '') + '> Agotado hoy</label>' +
         '<label class="interruptor"><input type="checkbox" name="activo"' + (p.activo ? ' checked' : '') + '> Visible en el menú</label></form>',
       alAbrir: function (v) {
         UI.$('#pl-mas-extra', v).addEventListener('click', function () { UI.$('#pl-extras', v).insertAdjacentHTML('beforeend', filaExtra({ nombre: '', precio: '' })); });
         UI.$('#pl-extras', v).addEventListener('click', function (e) { var q = e.target.closest('[data-ex-quitar]'); if (q) q.parentNode.remove(); });
+        UI.$('#pl-etiquetas', v).addEventListener('click', function (e) { var b = e.target.closest('[data-et]'); if (b) b.classList.toggle('activo'); });
         UI.$('#pl-foto-archivo', v).addEventListener('change', async function (e) {
           var archivo = e.target.files[0];
           if (!archivo) return;
           var prev = UI.$('#pl-previa', v);
           try {
-            var base = await UI.leerFoto(archivo, 1000);
+            var base = await UI.leerFoto(archivo, 1000, { cuadrado: true }); // recorte parejo y liviana
             prev.src = base; prev.hidden = false;
             UI.aviso('Subiendo foto…', '');
             var r = await DATOS.pedir('fotoSubir', { foto: base }, { guardar: true });
@@ -169,6 +192,7 @@
         var f = UI.$('#form-plato', v);
         enviar = UI.leerFormulario(f);
         enviar.precio = UI.numero(enviar.precio);
+        enviar.etiquetas = UI.$$('#pl-etiquetas .activo', v).map(function (b) { return b.getAttribute('data-et'); }).join(',');
         enviar.extras = UI.$$('.extra-fila', v).map(function (fila) {
           return { nombre: UI.$('[data-ex-nombre]', fila).value.trim(), precio: UI.numero(UI.$('[data-ex-precio]', fila).value || 0) };
         }).filter(function (x) { return x.nombre; });
@@ -379,51 +403,154 @@
   }
 
   /* ---------------- Enlace para clientes y ajustes de pedidos ---------------- */
+  /* 3.0: enlace, compartir, códigos QR (local, mesa, origen) y ajustes de pedidos. */
   async function pintarEnlace() {
     var r = await DATOS.pedir('configObtener', {});
     var c = r.config;
-    var base = global.location.href.split('#')[0].replace(/index\.html$/, '').replace(/[^/]*$/, '') + 'pedir.html';
-    var enlaces = [['Todos los locales', base]].concat(APP.locales.filter(function (l) { return l.activo; }).map(function (l) { return [l.nombre, base + '?local=' + encodeURIComponent(l.id)]; }));
     var app = UI.enlaceApp();
+    var locales = APP.locales.filter(function (l) { return l.activo; });
+    var enlaces = [['Todos los locales', '', UI.enlacePedir({})]].concat(locales.map(function (l) { return [l.nombre, l.id, UI.enlacePedir({ local: l.id })]; }));
+    var mesas = Number(c.mesas) || 0;
+    var ORIGENES = [['volante', '📄 Volantes'], ['funda', '🛍️ Fundas y cajas'], ['instagram', '📸 Instagram'], ['mesa_mostrador', '🏪 Mostrador'], ['google', '🗺️ Google Maps'], ['web', '🌐 Página web']];
     cuerpo().innerHTML =
-      '<div class="tarjeta" style="margin-bottom:14px"><h3 style="margin-top:0">👥 Enlace para tu personal (cajeros y motorizados)</h3>' +
-      '<p class="subtitulo">Es el MISMO enlace para todos. Cada persona entra con SU usuario y clave, y solo ve lo suyo. Los usuarios se crean en Configuración → Usuarios (botón 📲 para mandarle su acceso).</p>' +
+      '<div class="tarjeta" style="margin-bottom:14px"><h3 style="margin-top:0">🔗 Enlace para que los clientes pidan</h3>' +
+      '<p class="subtitulo">Un toque y lo compartes por WhatsApp, Instagram o como código QR. El mensaje ya va escrito.</p>' +
+      '<div class="lista">' + enlaces.map(function (e, i) {
+        return '<div class="item enlace-item"><div class="avatar" aria-hidden="true">' + (i ? '📍' : '🌎') + '</div><div class="item-cuerpo"><div class="item-titulo">' + UI.esc(e[0]) + '</div><div class="item-sub" style="overflow-wrap:anywhere">' + UI.esc(e[2].replace(/^https:\/\//, '')) + '</div></div>' +
+          '<button class="btn chico" type="button" data-compartir="' + i + '">📤 Compartir</button><button class="btn borde chico" type="button" data-qr="' + i + '">📱 QR</button></div>';
+      }).join('') + '</div></div>' +
+      '<div class="tarjeta" style="margin-bottom:14px"><h3 style="margin-top:0">📊 QR para saber qué funciona</h3>' +
+      '<p class="subtitulo">Usa un QR distinto en cada lugar. En Reportes verás cuántos pedidos llegaron por cada uno.</p>' +
+      '<div class="campo"><label for="qr-local">Local</label><select class="entrada" id="qr-local">' + locales.map(function (l) { return '<option value="' + UI.esc(l.id) + '">' + UI.esc(l.nombre) + '</option>'; }).join('') + '</select></div>' +
+      '<div class="qr-lista">' + ORIGENES.map(function (o) { return '<button class="btn secundario" type="button" data-origen="' + o[0] + '">' + o[1] + '</button>'; }).join('') + '</div></div>' +
+      '<div class="tarjeta" style="margin-bottom:14px"><h3 style="margin-top:0">🍽️ QR de mesas</h3>' +
+      (mesas ? '<p class="subtitulo">El cliente escanea en su mesa, pide desde su celular y el pedido llega al panel con el número de mesa.</p><div class="qr-lista">' +
+        Array.apply(null, { length: Math.min(mesas, 60) }).map(function (_, i) { return '<button class="btn secundario" type="button" data-mesa="' + (i + 1) + '">Mesa ' + (i + 1) + '</button>'; }).join('') + '</div>'
+        : '<p class="subtitulo">Para pedidos en mesa, escribe abajo cuántas mesas tienes y guarda.</p>') + '</div>' +
+      '<div class="tarjeta" style="margin-bottom:14px"><h3 style="margin-top:0">👥 Enlace para tu personal</h3>' +
+      '<p class="subtitulo">El MISMO enlace para todos: cada persona entra con su usuario y solo ve lo suyo.</p>' +
       '<div class="item"><div class="item-cuerpo"><div class="item-sub" style="overflow-wrap:anywhere">' + UI.esc(app) + '</div></div>' +
       '<button class="btn secundario chico" type="button" id="copiar-app">Copiar</button></div></div>' +
-      '<div class="tarjeta" style="margin-bottom:14px"><h3 style="margin-top:0">🔗 Enlace para que los clientes pidan</h3>' +
-      '<p class="subtitulo">Póngalo en Instagram, Google Maps, la página web («Pedir aquí») o conviértalo en código QR para volantes y mesas.</p>' +
-      '<div class="lista">' + enlaces.map(function (e, i) {
-        return '<div class="item"><div class="item-cuerpo"><div class="item-titulo">' + UI.esc(e[0]) + '</div><div class="item-sub" style="overflow-wrap:anywhere">' + UI.esc(e[1]) + '</div></div>' +
-          '<button class="btn secundario chico" type="button" data-copiar="' + i + '">Copiar</button><a class="btn borde chico" href="' + UI.esc(e[1]) + '" target="_blank" rel="noopener">Abrir</a></div>';
-      }).join('') + '</div></div>' +
       '<form class="tarjeta" id="form-ajustes" autocomplete="off"><h3 style="margin-top:0">⚙️ Ajustes de pedidos</h3>' +
-      '<div class="fila-campos"><div class="campo"><label for="aj-prep">Minutos de preparación</label><input class="entrada" id="aj-prep" name="minutos_preparacion" inputmode="numeric" value="' + UI.esc(c.minutos_preparacion) + '"><span class="ayuda">Se suma al tiempo de la zona para la hora estimada.</span></div>' +
-      '<div class="campo"><label for="aj-atraso">Atrasado después de (min)</label><input class="entrada" id="aj-atraso" name="minutos_atraso" inputmode="numeric" value="' + UI.esc(c.minutos_atraso) + '"><span class="ayuda">El pedido se pinta en rojo en el panel.</span></div></div>' +
-      '<div class="campo"><label for="aj-transf">Datos para transferencia</label><textarea class="entrada" id="aj-transf" name="datos_transferencia" maxlength="300" placeholder="Banco, tipo y número de cuenta, nombre, cédula">' + UI.esc(c.datos_transferencia) + '</textarea><span class="ayuda">Se muestran al cliente que elige transferencia.</span></div>' +
+      '<h4>⏰ Horario de atención</h4>' +
+      '<div class="fila-campos"><div class="campo"><label for="aj-ap">Abre</label><input class="entrada" id="aj-ap" name="horario_apertura" type="time" value="' + UI.esc(c.horario_apertura) + '"></div>' +
+      '<div class="campo"><label for="aj-ci">Cierra</label><input class="entrada" id="aj-ci" name="horario_cierre" type="time" value="' + UI.esc(c.horario_cierre) + '"></div></div>' +
+      '<div class="campo"><label>Días que NO atiende</label><div class="segmento" id="aj-dias">' + ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'].map(function (n, i) {
+        return '<button type="button" data-dia="' + (i + 1) + '" class="' + (String(c.dias_cerrado || '').split(',').indexOf(String(i + 1)) >= 0 ? 'activo' : '') + '">' + n + '</button>';
+      }).join('') + '</div><span class="ayuda">Vacío = atiende siempre. Fuera de horario, el cliente puede programar su pedido.</span></div>' +
+      '<h4>⏱️ Tiempos</h4>' +
+      '<div class="fila-campos"><div class="campo"><label for="aj-prep">Minutos de preparación</label><input class="entrada" id="aj-prep" name="minutos_preparacion" inputmode="numeric" value="' + UI.esc(c.minutos_preparacion) + '"></div>' +
+      '<div class="campo"><label for="aj-atraso">Atrasado después de (min)</label><input class="entrada" id="aj-atraso" name="minutos_atraso" inputmode="numeric" value="' + UI.esc(c.minutos_atraso) + '"></div>' +
+      '<div class="campo"><label for="aj-mesas">Mesas con QR</label><input class="entrada" id="aj-mesas" name="mesas" inputmode="numeric" value="' + UI.esc(c.mesas || '0') + '"><span class="ayuda">0 = no se pide en mesa.</span></div></div>' +
+      '<h4>💳 Pagos</h4>' +
+      '<div class="campo"><label for="aj-transf">Datos para transferencia</label><textarea class="entrada" id="aj-transf" name="datos_transferencia" maxlength="300" placeholder="Banco, tipo y número de cuenta, nombre, cédula">' + UI.esc(c.datos_transferencia) + '</textarea></div>' +
+      '<div class="campo"><label>QR de Deuna del negocio</label><div class="item" style="padding:8px"><div class="miniatura" id="aj-deuna-prev">' + (c.deuna_qr_url ? '<img src="' + UI.esc(c.deuna_qr_url) + '" alt="" referrerpolicy="no-referrer">' : '📲') + '</div>' +
+      '<div class="item-cuerpo"><input class="entrada" id="aj-deuna-archivo" type="file" accept="image/*"><span class="ayuda">Foto o captura del QR de tu app Deuna Negocios. Sin QR, Deuna no aparece al cliente.</span></div></div>' +
+      '<input type="hidden" name="deuna_qr_url" id="aj-deuna" value="' + UI.esc(c.deuna_qr_url || '') + '"></div>' +
+      '<label class="interruptor"><input type="checkbox" id="aj-verificar"' + (c.verificar_antes_salir !== 'NO' ? ' checked' : '') + '> Transferencia y Deuna: no despachar hasta verificar el pago</label>' +
+      '<label class="interruptor"><input type="checkbox" id="aj-propinas"' + (c.propinas !== 'NO' ? ' checked' : '') + '> El cliente puede dejar propina al motorizado</label>' +
+      '<h4>🎁 Tarjeta de sellos</h4>' +
+      '<div class="fila-campos"><div class="campo"><label for="aj-sellos">Pedidos para el premio</label><input class="entrada" id="aj-sellos" name="fidelidad_sellos" inputmode="numeric" value="' + UI.esc(c.fidelidad_sellos || '0') + '"><span class="ayuda">0 = apagado. Ej. 8.</span></div>' +
+      '<div class="campo"><label for="aj-premio">Descuento del premio (%)</label><input class="entrada" id="aj-premio" name="fidelidad_descuento" inputmode="numeric" value="' + UI.esc(c.fidelidad_descuento || '50') + '"><span class="ayuda">Sobre el plato más caro del pedido.</span></div></div>' +
+      '<h4>📲 Avisos</h4>' +
       '<div class="campo"><label for="aj-wa">WhatsApp del dueño (resumen del cierre de caja)</label><input class="entrada" id="aj-wa" name="whatsapp_dueno" inputmode="tel" value="' + UI.esc(c.whatsapp_dueno) + '" placeholder="0991234567"></div>' +
       '<button class="btn bloque" type="submit">Guardar ajustes</button></form>';
-    UI.$('#copiar-app').addEventListener('click', async function () {
-      try { await global.navigator.clipboard.writeText(app); UI.aviso('Enlace copiado.', 'ok'); }
-      catch (e) { UI.ventana({ icono: '🔗', titulo: 'Copie el enlace', html: '<input class="entrada" readonly value="' + UI.esc(app) + '" onfocus="this.select()">' }); }
+    var nombre = c.negocio_nombre;
+    UI.$('#copiar-app').addEventListener('click', function () { UI.copiar(app); });
+    UI.$$('[data-compartir]', cuerpo()).forEach(function (b) {
+      b.addEventListener('click', function () { var e = enlaces[Number(b.getAttribute('data-compartir'))]; UI.compartirEnlace({ nombre: nombre, subtitulo: e[1] ? e[0] : '', enlace: e[2], logo: c.logo_url }); });
     });
-    UI.$$('[data-copiar]', cuerpo()).forEach(function (b) {
-      b.addEventListener('click', async function () {
-        var url = enlaces[Number(b.getAttribute('data-copiar'))][1];
-        try { await global.navigator.clipboard.writeText(url); UI.aviso('Enlace copiado.', 'ok'); }
-        catch (e) { UI.ventana({ icono: '🔗', titulo: 'Copie el enlace', html: '<input class="entrada" readonly value="' + UI.esc(url) + '" onfocus="this.select()">' }); }
+    UI.$$('[data-qr]', cuerpo()).forEach(function (b) {
+      b.addEventListener('click', function () { var e = enlaces[Number(b.getAttribute('data-qr'))]; UI.hojaQR({ titulo: 'QR · ' + e[0], nombre: nombre, subtitulo: e[1] ? e[0] : '', enlace: e[2], logo: c.logo_url }); });
+    });
+    UI.$$('[data-origen]', cuerpo()).forEach(function (b) {
+      b.addEventListener('click', function () {
+        var l = UI.$('#qr-local').value, o = b.getAttribute('data-origen');
+        UI.hojaQR({ titulo: 'QR · ' + b.textContent, nombre: nombre, subtitulo: APP.nombreLocal(l), enlace: UI.enlacePedir({ local: l, origen: o }), logo: c.logo_url });
       });
+    });
+    UI.$$('[data-mesa]', cuerpo()).forEach(function (b) {
+      b.addEventListener('click', function () {
+        var l = UI.$('#qr-local').value, m = b.getAttribute('data-mesa');
+        UI.hojaQR({ titulo: 'QR · Mesa ' + m, nombre: nombre, subtitulo: 'Mesa ' + m, llamado: 'Escanea y pide desde tu mesa', enlace: UI.enlacePedir({ local: l, mesa: m, origen: 'mesa' }), logo: c.logo_url });
+      });
+    });
+    UI.$$('[data-dia]', cuerpo()).forEach(function (b) { b.addEventListener('click', function () { b.classList.toggle('activo'); }); });
+    UI.$('#aj-deuna-archivo').addEventListener('change', async function (e) {
+      var archivo = e.target.files[0]; if (!archivo) return;
+      try {
+        var base64 = await UI.leerFoto(archivo, 900);
+        UI.aviso('Subiendo el QR…', '');
+        var s = await DATOS.pedir('fotoSubir', { foto: base64 }, { guardar: true });
+        UI.$('#aj-deuna').value = s.url;
+        UI.$('#aj-deuna-prev').innerHTML = '<img src="' + UI.esc(base64) + '" alt="">';
+        UI.aviso('QR listo. Toque «Guardar ajustes».', 'ok');
+      } catch (err) { UI.error('No se subió el QR', err.message); }
     });
     UI.$('#form-ajustes').addEventListener('submit', function (e) {
       e.preventDefault();
       var f = e.target, boton = f.querySelector('button[type=submit]'), d = UI.leerFormulario(f);
+      delete d['']; ['aj-deuna-archivo'].forEach(function (k) { delete d[k]; });
+      Object.keys(d).forEach(function (k) { if (typeof d[k] === 'boolean') delete d[k]; });
       if (!(UI.numero(d.minutos_preparacion) >= 0) || !(UI.numero(d.minutos_atraso) > 0)) return UI.aviso('Revise los minutos.', 'error');
+      if ((d.horario_apertura && !d.horario_cierre) || (!d.horario_apertura && d.horario_cierre)) return UI.aviso('Escriba la hora en que abre Y la hora en que cierra (o deje las dos vacías).', 'error');
       if (d.whatsapp_dueno) d.whatsapp_dueno = d.whatsapp_dueno.replace(/[^\d+]/g, '');
+      d.dias_cerrado = UI.$$('[data-dia].activo', f).map(function (x) { return x.getAttribute('data-dia'); }).join(',');
+      d.verificar_antes_salir = UI.$('#aj-verificar').checked ? 'SI' : 'NO';
+      d.propinas = UI.$('#aj-propinas').checked ? 'SI' : 'NO';
+      d.mesas = String(Math.max(0, Math.floor(UI.numero(d.mesas) || 0)));
+      d.fidelidad_sellos = String(Math.max(0, Math.floor(UI.numero(d.fidelidad_sellos) || 0)));
       UI.trabajando(boton, async function () {
         try {
           var res = await DATOS.pedir('configGuardar', { config: d }, { guardar: true });
           UI.aviso(res.escritas ? 'Ajustes guardados.' : 'No había cambios.', 'ok');
+          if (res.escritas) pintarEnlace();
         } catch (err) { UI.error('No se guardó', err.message); }
       });
     });
   }
+})(window);
+
+/* ============================================================
+ * 3.0 — GUÍA DE PRIMEROS PASOS (Inicio del dueño). Se calcula con
+ * los datos reales y se esconde sola al completar todo.
+ * ============================================================ */
+(function (global) {
+  'use strict';
+  var UI = global.UI, DATOS = global.DATOS, APP = global.APP, MEM = global.APP_MEMORIA;
+  APP.guiaInicio = async function (cont) {
+    if (!cont || MEM.leer('guia_oculta')) return;
+    var r;
+    try { r = await Promise.all([DATOS.pedir('configObtener', {}), DATOS.pedir('menuListar', { local_id: 'TODOS' }), DATOS.pedir('motorizadosListar', { local_id: 'TODOS' })]); }
+    catch (e) { return; }
+    if (!cont.isConnected) return;
+    var c = r[0].config, m = r[1];
+    var pasos = [
+      ['🏷️', 'Nombre y logo del negocio', c.negocio_nombre && c.negocio_nombre !== 'Mi Restaurante' && !!c.logo_url, 'config'],
+      ['🍔', 'Menú con platos y fotos', (m.platos || []).length > 0, 'menu?p=platos'],
+      ['🛵', 'Zonas y costo de envío', (m.zonas || []).length > 0, 'menu?p=zonas'],
+      ['💳', 'Datos de transferencia o QR de Deuna', !!(c.datos_transferencia || c.deuna_qr_url), 'menu?p=enlace'],
+      ['⏰', 'Horario de atención', !!(c.horario_apertura && c.horario_cierre), 'menu?p=enlace'],
+      ['🏍️', 'Tu primer motorizado', (r[2].motorizados || []).length > 0, 'motorizados'],
+      ['📤', 'Compartir el enlace con tus clientes', !!MEM.leer('compartio_enlace'), 'compartir']
+    ];
+    var hechos = pasos.filter(function (p) { return p[2]; }).length;
+    if (hechos === pasos.length) { cont.innerHTML = ''; return; }
+    cont.innerHTML = '<div class="tarjeta" style="margin-top:14px"><div style="display:flex;align-items:center;gap:10px"><h3 style="margin:0;flex:1">🚀 Deja tu negocio listo</h3><button class="btn secundario chico" type="button" id="guia-ocultar">Ocultar</button></div>' +
+      '<div class="progreso" aria-label="' + hechos + ' de ' + pasos.length + '"><span style="width:' + Math.round(hechos / pasos.length * 100) + '%"></span></div>' +
+      '<div class="guia">' + pasos.map(function (p, i) {
+        return '<button class="guia-paso' + (p[2] ? ' hecho' : '') + '" type="button" data-guia="' + i + '"><span class="check">' + (p[2] ? '✓' : i + 1) + '</span><span style="flex:1">' + p[0] + ' ' + UI.esc(p[1]) + '</span><span aria-hidden="true">›</span></button>';
+      }).join('') + '</div></div>';
+    UI.$('#guia-ocultar').addEventListener('click', function () { MEM.guardar('guia_oculta', true); cont.innerHTML = ''; });
+    UI.$$('[data-guia]', cont).forEach(function (b) {
+      b.addEventListener('click', function () {
+        var destino = pasos[Number(b.getAttribute('data-guia'))][3];
+        if (destino === 'compartir') {
+          MEM.guardar('compartio_enlace', true);
+          return UI.compartirEnlace({ nombre: c.negocio_nombre, enlace: UI.enlacePedir({}), logo: c.logo_url });
+        }
+        APP.ir(destino);
+      });
+    });
+  };
 })(window);

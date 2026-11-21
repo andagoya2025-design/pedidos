@@ -18,8 +18,8 @@
  * ============================================================
  */
 
-var APP_VERSION = '2.0.0';
-var APP_VERSION_NUM = 20000; // 2.0.0 -> 20000 (la pantalla compara con su mínimo)
+var APP_VERSION = '3.0.0';
+var APP_VERSION_NUM = 30000; // 3.0.0 -> 30000 (la pantalla compara con su mínimo)
 var SESION_SEGUNDOS = 21600;  // 6 h; se renueva con cada uso
 var ROLES = ['dueno', 'cajero', 'motorizado'];
 
@@ -32,11 +32,14 @@ var HOJAS = {
   configuracion: [['clave', 't'], ['valor', 't'], ['actualizado', 'd'], ['actualizado_por', 't']],
   locales: [['id', 't'], ['nombre', 't'], ['direccion', 't'], ['telefono', 't'], ['activo', 'b'], ['creado', 'd'], ['creado_por', 't']],
   categorias: [['id', 't'], ['local_id', 't'], ['nombre', 't'], ['orden', 'n'], ['activo', 'b'], ['creado', 'd']],
-  platos: [['id', 't'], ['local_id', 't'], ['categoria_id', 't'], ['nombre', 't'], ['descripcion', 't'], ['precio', 'm'], ['foto_url', 't'], ['extras_json', 't'], ['agotado', 'b'], ['activo', 'b'], ['creado', 'd']],
+  platos: [['id', 't'], ['local_id', 't'], ['categoria_id', 't'], ['nombre', 't'], ['descripcion', 't'], ['precio', 'm'], ['foto_url', 't'], ['extras_json', 't'], ['agotado', 'b'], ['activo', 'b'], ['creado', 'd'],
+    /* 3.0 */ ['etiquetas', 't'], ['sugerido', 'b']],
   pedidos: [['id', 't'], ['numero', 't'], ['op_id', 't'], ['local_id', 't'], ['dia_trabajo', 'f'], ['cliente_id', 't'], ['cliente_nombre', 't'], ['telefono', 't'], ['direccion', 't'], ['referencia', 't'], ['lat', 'n'], ['lng', 'n'], ['zona_id', 't'], ['forma_pago', 't'], ['subtotal', 'm'], ['envio', 'm'], ['descuento', 'm'], ['total', 'm'], ['cupon', 't'], ['estado', 't'], ['motorizado_id', 't'], ['creado', 'd'], ['preparando', 'd'], ['en_camino', 'd'], ['entregado', 'd'], ['anulado', 'd'], ['motivo_anulacion', 't'], ['usuario', 't'],
-    /* fase 2-7 (agregadas al final) */ ['hora_estimada', 'd'], ['ubicacion_enlace', 't'], ['notas', 't'], ['sali_lat', 'n'], ['sali_lng', 'n'], ['entrega_lat', 'n'], ['entrega_lng', 'n'], ['foto_entrega', 't'], ['pago_verificado', 'b'], ['liquidacion_id', 't'], ['inventario_descontado', 'b']],
+    /* fase 2-7 (agregadas al final) */ ['hora_estimada', 'd'], ['ubicacion_enlace', 't'], ['notas', 't'], ['sali_lat', 'n'], ['sali_lng', 'n'], ['entrega_lat', 'n'], ['entrega_lng', 'n'], ['foto_entrega', 't'], ['pago_verificado', 'b'], ['liquidacion_id', 't'], ['inventario_descontado', 'b'],
+    /* 3.0 (agregadas al final) */ ['tipo_entrega', 't'], ['mesa', 't'], ['hora_llegada', 'd'], ['origen', 't'], ['propina', 'm'], ['base_iva', 'm'], ['iva', 'm'], ['ubicacion_fuente', 't'], ['cliente_nuevo', 'b'], ['calificacion', 'n'], ['comentario', 't'], ['premio', 'm'], ['disp_id', 't']],
   pedido_detalle: [['id', 't'], ['pedido_id', 't'], ['plato_id', 't'], ['nombre', 't'], ['precio', 'm'], ['cantidad', 'n'], ['extras', 't'], ['total_linea', 'm']],
-  clientes: [['id', 't'], ['telefono', 't'], ['nombre', 't'], ['direccion', 't'], ['referencia', 't'], ['lat', 'n'], ['lng', 'n'], ['pedidos', 'n'], ['total_gastado', 'm'], ['ultimo_pedido', 'd'], ['creado', 'd']],
+  clientes: [['id', 't'], ['telefono', 't'], ['nombre', 't'], ['direccion', 't'], ['referencia', 't'], ['lat', 'n'], ['lng', 'n'], ['pedidos', 'n'], ['total_gastado', 'm'], ['ultimo_pedido', 'd'], ['creado', 'd'],
+    /* 3.0 */ ['entregados', 'n'], ['sellos', 'n']],
   motorizados: [['id', 't'], ['nombre', 't'], ['cedula', 't'], ['celular', 't'], ['direccion', 't'], ['placa', 't'], ['foto_url', 't'], ['usuario_id', 't'], ['activo', 'b'], ['creado', 'd'],
     /* fase 4 */ ['local_id', 't']],
   insumos: [['id', 't'], ['local_id', 't'], ['nombre', 't'], ['unidad', 't'], ['stock', 'n'], ['minimo', 'n'], ['activo', 'b'], ['creado', 'd']],
@@ -72,11 +75,23 @@ var CONFIG_DEFECTO = {
   minutos_preparacion: '20',
   minutos_atraso: '45',
   datos_transferencia: '',
-  whatsapp_dueno: ''
+  whatsapp_dueno: '',
+  /* 3.0 */
+  horario_apertura: '',      // ej. 11:00 (vacío = siempre abierto)
+  horario_cierre: '',        // ej. 22:30
+  dias_cerrado: '',          // ej. 1 (lunes); varios separados por coma; 7 = domingo
+  deuna_qr_url: '',          // imagen del QR de Deuna del negocio
+  fidelidad_sellos: '0',     // 0 = apagado; ej. 8 = cada 8 pedidos entregados
+  fidelidad_descuento: '50', // % de descuento del premio sobre el plato más caro
+  propinas: 'SI',
+  envio_para: 'local',       // local | motorizado (a quién le queda el envío)
+  verificar_antes_salir: 'SI',
+  mesas: '0'                 // cuántas mesas con QR (0 = no se come en el local)
 };
 
 /* Campos de configuración que puede ver cualquiera (sin sesión). */
-var CONFIG_PUBLICA = ['negocio_nombre', 'logo_url', 'color_primario', 'color_acento', 'whatsapp', 'pais_codigo', 'ciudad', 'moneda', 'zona_horaria', 'mensaje_bienvenida'];
+var CONFIG_PUBLICA = ['negocio_nombre', 'logo_url', 'color_primario', 'color_acento', 'whatsapp', 'pais_codigo', 'ciudad', 'moneda', 'zona_horaria', 'mensaje_bienvenida',
+  /* 3.0 */ 'horario_apertura', 'horario_cierre', 'dias_cerrado', 'deuna_qr_url', 'fidelidad_sellos', 'fidelidad_descuento', 'propinas', 'mesas', 'verificar_antes_salir', 'precios_incluyen_iva'];
 
 /* Acciones: quién puede usarlas. 'publica' = sin sesión. */
 var ACCIONES = {
@@ -130,7 +145,15 @@ var ACCIONES = {
   cajaMovimiento:     { tipo: 'sesion',  roles: ['dueno', 'cajero'], fn: accionCajaMovimiento_ },
   cajaFondoMotorizado:{ tipo: 'sesion',  roles: ['dueno', 'cajero'], fn: accionCajaFondoMotorizado_ },
   cajaLiquidar:       { tipo: 'sesion',  roles: ['dueno', 'cajero'], fn: accionCajaLiquidar_ },
-  cajaCerrar:         { tipo: 'sesion',  roles: ['dueno', 'cajero'], fn: accionCajaCerrar_ }
+  cajaCerrar:         { tipo: 'sesion',  roles: ['dueno', 'cajero'], fn: accionCajaCerrar_ },
+  /* ---- 3.0 (sección 12) ---- */
+  pedidoCalificar:    { tipo: 'publica', fn: accionPedidoCalificar_ },
+  ubicacionResolver:  { tipo: 'publica', fn: accionUbicacionResolver_ },
+  pedidosNuevos:      { tipo: 'sesion',  roles: ['dueno', 'cajero'], fn: accionPedidosNuevos_ },
+  pedidoBuscar:       { tipo: 'sesion',  roles: ['dueno', 'cajero'], fn: accionPedidoBuscar_ },
+  menuEjemplo:        { tipo: 'dueno',   fn: accionMenuEjemplo_ },
+  motorizadoCrearTodo:{ tipo: 'dueno',   fn: accionMotorizadoCrearTodo_ },
+  exportar:           { tipo: 'dueno',   fn: accionExportar_ }
 };
 
 /* ============================================================
@@ -258,7 +281,7 @@ function accionInstalar_(data, ctx) {
     agregarFilas_('locales', filasLocales);
 
     var sal = Utilities.getUuid();
-    agregarFilas_('usuarios', [[nuevoId_('USR'), usuario, nombrePersona, 'dueno', 'TODOS', hashClave_(clave, sal), sal, true, ahora, '']]);
+    agregarFilas_('usuarios', [[nuevoId_('USR'), usuario, nombrePersona, 'dueno', 'TODOS', hashClave2_(clave, sal), sal, true, ahora, '']]);
 
     PropertiesService.getScriptProperties().setProperty('INSTALADO', 'SI');
     SpreadsheetApp.flush();
@@ -415,6 +438,16 @@ function accionConfigGuardar_(data, ctx) {
     if (k === 'precios_incluyen_iva' && ['SI', 'NO'].indexOf(v) < 0) throw fallo_('Valor no válido.');
     if (k === 'zona_horaria') { try { Utilities.formatDate(new Date(), v, 'HH:mm'); } catch (ez) { throw fallo_('Zona horaria no válida (ej. America/Guayaquil).'); } }
     if (k === 'negocio_nombre' && !v) throw fallo_('El nombre del negocio no puede quedar vacío.');
+    /* 3.0 */
+    if ((k === 'horario_apertura' || k === 'horario_cierre') && v && !/^([01]\d|2[0-3]):[0-5]\d$/.test(v)) throw fallo_('Hora no válida (ej. 11:00).');
+    if (k === 'dias_cerrado' && v && !/^[1-7](,[1-7])*$/.test(v.replace(/\s/g, ''))) throw fallo_('Días cerrados no válidos.');
+    if (k === 'dias_cerrado') v = v.replace(/\s/g, '');
+    if (k === 'fidelidad_sellos' && !(/^\d{1,2}$/.test(v))) throw fallo_('Sellos no válidos (0 a 99).');
+    if (k === 'fidelidad_descuento' && !(Number(v) >= 1 && Number(v) <= 100)) throw fallo_('Descuento del premio no válido (1 a 100).');
+    if (k === 'mesas' && !(/^\d{1,3}$/.test(v))) throw fallo_('Número de mesas no válido.');
+    if ((k === 'propinas' || k === 'verificar_antes_salir') && ['SI', 'NO'].indexOf(v) < 0) throw fallo_('Valor no válido.');
+    if (k === 'envio_para' && ['local', 'motorizado'].indexOf(v) < 0) throw fallo_('Valor no válido.');
+    if (k === 'deuna_qr_url' || k === 'logo_url') v = enlaceImagen_(v);
     limpio[k] = v;
   });
 
@@ -459,19 +492,28 @@ function accionLogin_(data, ctx) {
   if (!usuario || !clave) throw fallo_('Escriba su usuario y su clave.');
 
   var cache = CacheService.getScriptCache();
-  var claveIntentos = 'INTENTOS_' + usuario;
+  // 3.0: el bloqueo es por usuario Y por teléfono: un extraño no puede dejar fuera al dueño.
+  var disp = limpiarTexto_(data.disp_id, 60).replace(/[^A-Za-z0-9_-]/g, '') || 'sin-id';
+  var claveIntentos = 'INTENTOS_' + usuario + '_' + disp;
+  var claveGlobal = 'INTENTOSG_' + usuario;
   var intentos = Number(cache.get(claveIntentos) || 0);
-  if (intentos >= 5) throw fallo_('Demasiados intentos. Espere 10 minutos.', 'BLOQUEADO');
+  if (intentos >= 5) throw fallo_('Demasiados intentos desde este teléfono. Espere 10 minutos.', 'BLOQUEADO');
+  if (Number(cache.get(claveGlobal) || 0) >= 30) throw fallo_('Demasiados intentos con este usuario. Espere 10 minutos.', 'BLOQUEADO');
 
   var u = null;
   leerTabla_('usuarios').some(function (r) { if (normalizarUsuario_(r.usuario) === usuario) { u = r; return true; } return false; });
-  if (!u || hashClave_(clave, String(u.sal)) !== String(u.hash)) {
+  if (!u || !claveCorrecta_(clave, u)) {
     cache.put(claveIntentos, String(intentos + 1), 600);
+    cache.put(claveGlobal, String(Number(cache.get(claveGlobal) || 0) + 1), 600);
     bitacora_({ usuario: usuario, rol: '', local_id: '' }, 'SEGURIDAD', 'LOGIN_FALLIDO', '', ctx.dispositivo);
     throw fallo_('Usuario o clave incorrectos.', 'CREDENCIALES');
   }
   if (u.activo !== true) throw fallo_('Este usuario está desactivado. Consulte con el dueño.', 'DESACTIVADO');
   cache.remove(claveIntentos);
+  if (String(u.hash).indexOf('v2$') !== 0) {
+    // Se refuerza la clave guardada sin pedirle una nueva a la persona.
+    try { actualizarCampos_('usuarios', u._fila, u, { hash: hashClave2_(clave, String(u.sal)) }); } catch (eh) { console.error('reforzar clave: ' + eh); }
+  }
 
   var ses = { usuario_id: String(u.id), usuario: String(u.usuario), nombre: String(u.nombre), rol: String(u.rol), local_id: String(u.local_id || ''), creada: Date.now() };
   var token = Utilities.getUuid() + Utilities.getUuid().replace(/-/g, '');
@@ -610,7 +652,7 @@ function accionUsuarioGuardar_(data, ctx) {
       var clave = String(data.clave || '');
       validarClave_(clave);
       var sal = Utilities.getUuid();
-      agregarFilas_('usuarios', [[nuevoId_('USR'), usuario, nombre, rol, localId, hashClave_(clave, sal), sal, activo, new Date(), '']]);
+      agregarFilas_('usuarios', [[nuevoId_('USR'), usuario, nombre, rol, localId, hashClave2_(clave, sal), sal, activo, new Date(), '']]);
       bitacora_(ctx.sesion, 'USUARIOS', 'CREAR', usuario + ' (' + rol + ')', ctx.dispositivo);
     }
   } finally {
@@ -631,7 +673,7 @@ function accionMiClave_(data, ctx) {
   var nueva = String(data.nueva || '');
   validarClave_(nueva);
   var u = leerTabla_('usuarios').filter(function (r) { return String(r.id) === ctx.sesion.usuario_id; })[0];
-  if (!u || hashClave_(actual, String(u.sal)) !== String(u.hash)) throw fallo_('La clave actual no es correcta.');
+  if (!u || !claveCorrecta_(actual, u)) throw fallo_('La clave actual no es correcta.');
   return cambiarClave_(ctx.sesion.usuario_id, nueva, ctx, 'CAMBIAR_MI_CLAVE');
 }
 
@@ -642,7 +684,7 @@ function cambiarClave_(id, clave, ctx, accion) {
     var u = leerTabla_('usuarios').filter(function (r) { return String(r.id) === id; })[0];
     if (!u) throw fallo_('Ese usuario ya no existe.', 'NO_EXISTE');
     var sal = Utilities.getUuid();
-    actualizarCampos_('usuarios', u._fila, u, { hash: hashClave_(clave, sal), sal: sal });
+    actualizarCampos_('usuarios', u._fila, u, { hash: hashClave2_(clave, sal), sal: sal });
     if (accion === 'RESTABLECER_CLAVE') revocarSesiones_(id);
     bitacora_(ctx.sesion, 'USUARIOS', accion, String(u.usuario), ctx.dispositivo);
   } finally {
@@ -770,7 +812,9 @@ function diaTrabajo_(fecha, cfg) {
  * ============================================================ */
 
 var ESTADOS = ['Recibido', 'Preparando', 'En camino', 'Entregado', 'Anulado'];
-var FORMAS_PAGO = ['efectivo', 'transferencia'];
+var FORMAS_PAGO = ['efectivo', 'transferencia', 'deuna'];
+var TIPOS_ENTREGA = ['domicilio', 'retiro', 'mesa'];
+function esDigital_(forma) { return String(forma) === 'transferencia' || String(forma) === 'deuna'; }
 
 /* ---------- 11.1 Ayudas de esta sección ---------- */
 
@@ -853,7 +897,8 @@ function platoPublico_(p) {
   return {
     id: String(p.id), local_id: String(p.local_id), categoria_id: String(p.categoria_id), nombre: String(p.nombre),
     descripcion: String(p.descripcion), precio: redondear_(p.precio), foto_url: String(p.foto_url),
-    extras: leerExtras_(p.extras_json), agotado: p.agotado === true, activo: p.activo === true
+    extras: leerExtras_(p.extras_json), agotado: p.agotado === true, activo: p.activo === true,
+    etiquetas: String(p.etiquetas || ''), sugerido: p.sugerido === true
   };
 }
 
@@ -885,7 +930,7 @@ function accionMenuPublico_() {
   if (!estaInstalado_()) throw fallo_('El sistema aún no está instalado.', 'NO_INSTALADO');
   var cache = CacheService.getScriptCache();
   var guardado = cache.get('MENU_PUBLICO');
-  if (guardado) return { ok: true, data: JSON.parse(guardado) };
+  if (guardado) { var g = JSON.parse(guardado); g.abierto = estaAbierto_(leerConfig_(), new Date()); return { ok: true, data: g }; }
   var cfg = leerConfig_();
   var pub = datosPublicos_();
   pub.datos_transferencia = cfg.datos_transferencia || '';
@@ -906,6 +951,7 @@ function accionMenuPublico_() {
   };
   var texto = JSON.stringify(data);
   if (texto.length < 90000) cache.put('MENU_PUBLICO', texto, 120);
+  data.abierto = estaAbierto_(cfg, new Date());
   return { ok: true, data: data };
 }
 
@@ -932,20 +978,51 @@ function accionPedidoCrear_(data, ctx) {
   var telefono = normalizarTelefono_(cli.telefono, cfg.pais_codigo);
   if (!telefono) throw fallo_('Escriba su número de celular.');
   var zonaId = limpiarTexto_(data.zona_id, 40);
-  var direccion = limpiarTexto_(cli.direccion, 200);
-  var referencia = limpiarTexto_(cli.referencia, 200);
-  var lat = cli.lat === '' || cli.lat == null ? '' : Number(cli.lat);
-  var lng = cli.lng === '' || cli.lng == null ? '' : Number(cli.lng);
+  // 3.0: tipo de entrega. Pedidos viejos (sin tipo): con zona = domicilio, sin zona = retiro.
+  var tipo = limpiarTexto_(data.tipo_entrega, 20) || (zonaId ? 'domicilio' : 'retiro');
+  if (TIPOS_ENTREGA.indexOf(tipo) < 0) throw fallo_('Elija cómo recibe su pedido.');
+  if (tipo !== 'domicilio') zonaId = '';
+  if (tipo === 'domicilio' && !zonaId) throw fallo_('Elija su zona de envío.');
+  var mesa = tipo === 'mesa' ? limpiarTexto_(data.mesa, 10) : '';
+  if (tipo === 'mesa') {
+    var nMesas = numero_(cfg.mesas);
+    if (!nMesas) throw fallo_('Este local no tiene pedidos en mesa.');
+    if (mesa && !(/^\d{1,3}$/.test(mesa) && Number(mesa) >= 1 && Number(mesa) <= nMesas)) throw fallo_('Número de mesa no válido.');
+  }
+  var direccion = tipo === 'domicilio' ? limpiarTexto_(cli.direccion, 200) : '';
+  var referencia = tipo === 'domicilio' ? limpiarTexto_(cli.referencia, 200) : '';
+  var lat = tipo !== 'domicilio' || cli.lat === '' || cli.lat == null ? '' : Number(cli.lat);
+  var lng = tipo !== 'domicilio' || cli.lng === '' || cli.lng == null ? '' : Number(cli.lng);
   if (lat !== '' && !(lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180)) { lat = ''; lng = ''; }
-  if (zonaId && !direccion && lat === '') throw fallo_('Escriba su dirección o use «Usar mi ubicación».');
+  var enlaceUbic = tipo === 'domicilio' ? limpiarTexto_(cli.ubicacion_enlace, 400) : '';
+  if (enlaceUbic && !/^https:\/\//.test(enlaceUbic)) enlaceUbic = '';
+  var fuente = lat !== '' ? (limpiarTexto_(cli.ubicacion_fuente, 20) === 'enlace' ? 'enlace' : 'gps') : (enlaceUbic ? 'enlace' : '');
+  if (tipo === 'domicilio' && !direccion && lat === '' && !enlaceUbic) throw fallo_('Escriba su dirección o use «Usar mi ubicación».');
   var forma = String(data.forma_pago || '');
   if (FORMAS_PAGO.indexOf(forma) < 0) throw fallo_('Elija la forma de pago.');
+  if (forma === 'deuna' && !cfg.deuna_qr_url) throw fallo_('Este negocio aún no recibe pagos con Deuna. Elija otra forma de pago.');
+  var propina = siNo_(cfg.propinas) && tipo === 'domicilio' ? redondear_(numero_(data.propina)) : 0;
+  if (!(propina >= 0 && propina <= 50)) throw fallo_('Propina no válida.');
   var items = Array.isArray(data.items) ? data.items.slice(0, 60) : [];
   if (!items.length) throw fallo_('Su pedido está vacío.');
+  var origen = limpiarTexto_(data.origen, 30).toLowerCase().replace(/[^a-z0-9_-]/g, '');
+  var dispId = limpiarTexto_(data.disp_id, 60).replace(/[^A-Za-z0-9_-]/g, '');
 
-  // Freno contra pedidos en cadena desde un mismo teléfono (sin sesión).
+  // Horario: si está cerrado, solo se acepta un pedido programado para cuando abra.
+  var ahora = new Date();
+  var llegada = '';
+  if (data.hora_llegada) {
+    llegada = horaDeHoy_(String(data.hora_llegada), cfg, ahora);
+    if (!llegada) throw fallo_('Hora no válida.');
+    if (llegada.getTime() < ahora.getTime() + 10 * 60000) throw fallo_('Elija una hora al menos 10 minutos más tarde.');
+  }
+  var abierto = estaAbierto_(cfg, llegada || ahora);
+  if (!abierto.abierto) throw fallo_(abierto.mensaje, 'CERRADO');
+
+  // Freno contra pedidos en cadena (sin sesión): por teléfono y por dispositivo.
   var cache = CacheService.getScriptCache();
   var claveFreno = 'FRENO_' + telefono;
+  var claveFrenoD = dispId ? 'FRENOD_' + dispId : '';
 
   var lock = candado_();
   var pedido, detalleFilas = [], creado = false;
@@ -954,6 +1031,7 @@ function accionPedidoCrear_(data, ctx) {
     var repetido = pedidos.filter(function (p) { return String(p.op_id) === opId; })[0];
     if (repetido) return { ok: true, data: { pedido: pedidoSalida_(repetido), repetido: true } };
     if (!ses && Number(cache.get(claveFreno) || 0) >= 6) throw fallo_('Recibimos varios pedidos seguidos de este número. Espere unos minutos o escríbanos por WhatsApp.', 'FRENO');
+    if (!ses && claveFrenoD && Number(cache.get(claveFrenoD) || 0) >= 8) throw fallo_('Recibimos varios pedidos seguidos desde este teléfono. Espere unos minutos o escríbanos por WhatsApp.', 'FRENO');
 
     var local = leerTabla_('locales').filter(function (l) { return String(l.id) === localId && l.activo === true; })[0];
     if (!local) throw fallo_('Elija un local disponible.');
@@ -961,7 +1039,7 @@ function accionPedidoCrear_(data, ctx) {
 
     var platos = {};
     leerTabla_('platos').forEach(function (p) { platos[String(p.id)] = p; });
-    var subtotal = 0;
+    var subtotal = 0, masCaro = 0;
     items.forEach(function (it) {
       var p = platos[String(it.plato_id)];
       var cant = Math.floor(numero_(it.cantidad));
@@ -974,6 +1052,7 @@ function accionPedidoCrear_(data, ctx) {
       var unitario = redondear_(numero_(p.precio) + extras.reduce(function (s, x) { return s + x.precio; }, 0));
       var totalLinea = redondear_(unitario * cant);
       subtotal = redondear_(subtotal + totalLinea);
+      masCaro = Math.max(masCaro, unitario);
       detalleFilas.push({ plato_id: String(p.id), nombre: String(p.nombre), precio: unitario, cantidad: cant, extras: extras.map(function (x) { return x.nombre; }).join(', '), total_linea: totalLinea });
     });
 
@@ -986,7 +1065,6 @@ function accionPedidoCrear_(data, ctx) {
     }
 
     var descuento = 0, cuponFila = null, codigo = limpiarTexto_(data.cupon, 30).toUpperCase();
-    var ahora = new Date();
     if (codigo) {
       cuponFila = leerTabla_('cupones').filter(function (c) { return claveComparar_(c.codigo) === claveComparar_(codigo); })[0];
       var hoy = Utilities.formatDate(ahora, zona_(cfg), 'yyyy-MM-dd');
@@ -996,48 +1074,72 @@ function accionPedidoCrear_(data, ctx) {
       descuento = String(cuponFila.tipo) === 'porcentaje' ? redondear_(subtotal * numero_(cuponFila.valor) / 100) : redondear_(cuponFila.valor);
       descuento = Math.min(descuento, subtotal);
     }
-    var total = redondear_(subtotal + envio - descuento);
+
+    // Cliente: uno por teléfono (no se repite).
+    var clientes = leerTabla_('clientes');
+    var cFila = clientes.filter(function (c) { return String(c.telefono) === telefono; })[0];
+
+    // Premio de fidelidad: con los sellos completos, descuento sobre el plato más caro.
+    var premio = 0, nSellos = numero_(cfg.fidelidad_sellos);
+    if (nSellos > 0 && cFila && numero_(cFila.sellos) >= nSellos && data.usar_premio !== false) {
+      premio = redondear_(Math.min(masCaro * numero_(cfg.fidelidad_descuento) / 100, subtotal - descuento));
+    }
+    var total = redondear_(subtotal + envio - descuento - premio + propina);
+    var pctIva = numero_(cfg.iva_porcentaje);
+    var gravado = redondear_(total - propina);
+    var baseIva = siNo_(cfg.precios_incluyen_iva) ? redondear_(gravado / (1 + pctIva / 100)) : gravado;
+    var iva = siNo_(cfg.precios_incluyen_iva) ? redondear_(gravado - baseIva) : redondear_(gravado * pctIva / 100);
+    if (!siNo_(cfg.precios_incluyen_iva)) total = redondear_(total + iva);
 
     // Número correlativo: el mayor que exista + 1 (bajo candado: nunca se repite).
     var mayor = 0;
     pedidos.forEach(function (p) { var m = /^PED-(\d+)$/.exec(String(p.numero)); if (m) mayor = Math.max(mayor, Number(m[1])); });
     var numero = 'PED-' + ('000' + (mayor + 1)).slice(-Math.max(4, String(mayor + 1).length));
     var id = nuevoId_('PED');
-    var horaEst = new Date(ahora.getTime() + (numero_(cfg.minutos_preparacion) + minutos) * 60000);
+    var base = llegada && llegada.getTime() > ahora.getTime() ? llegada : ahora;
+    var horaEst = llegada || new Date(base.getTime() + (numero_(cfg.minutos_preparacion) + minutos) * 60000);
 
-    // Cliente: uno por teléfono (no se repite).
-    var clientes = leerTabla_('clientes');
-    var cFila = clientes.filter(function (c) { return String(c.telefono) === telefono; })[0];
-    var clienteId;
+    var clienteId, nuevo = !cFila || numero_(cFila.entregados) + numero_(cFila.pedidos) === 0;
     if (cFila) {
       clienteId = String(cFila.id);
-      var cambiosCli = { nombre: nombre, pedidos: numero_(cFila.pedidos) + 1, total_gastado: redondear_(numero_(cFila.total_gastado) + total), ultimo_pedido: ahora };
-      if (direccion) { cambiosCli.direccion = direccion; cambiosCli.referencia = referencia; }
-      if (lat !== '') { cambiosCli.lat = lat; cambiosCli.lng = lng; }
+      // 3.0: si el nombre no coincide, NO se pisa la ficha (alguien pudo escribir un número ajeno).
+      var mismo = claveComparar_(cFila.nombre) === claveComparar_(nombre) || !String(cFila.nombre);
+      var cambiosCli = { pedidos: numero_(cFila.pedidos) + 1, ultimo_pedido: ahora };
+      if (mismo) {
+        cambiosCli.nombre = nombre;
+        if (direccion) { cambiosCli.direccion = direccion; cambiosCli.referencia = referencia; }
+        if (lat !== '') { cambiosCli.lat = lat; cambiosCli.lng = lng; }
+      }
+      if (premio) cambiosCli.sellos = Math.max(0, numero_(cFila.sellos) - nSellos);
       actualizarCampos_('clientes', cFila._fila, cFila, cambiosCli);
     } else {
       clienteId = nuevoId_('CLI');
-      agregarFilas_('clientes', [[clienteId, telefono, nombre, direccion, referencia, lat, lng, 1, total, ahora, ahora]]);
+      agregarFilas_('clientes', [[clienteId, telefono, nombre, direccion, referencia, lat, lng, 1, 0, ahora, ahora, 0, 0]]);
     }
 
     var fila = [id, numero, opId, localId, fechaDia_(diaTrabajo_(ahora, cfg), cfg), clienteId, nombre, telefono, direccion, referencia, lat, lng, zonaId, forma,
       subtotal, envio, descuento, total, codigo, 'Recibido', '', ahora, '', '', '', '', '', ses ? ses.usuario : 'cliente',
-      horaEst, '', limpiarTexto_(data.notas, 300), '', '', '', '', '', false, '', false];
+      horaEst, enlaceUbic, limpiarTexto_(data.notas, 300), '', '', '', '', '', false, '', false,
+      tipo, mesa, llegada || '', origen, propina, baseIva, iva, fuente, nuevo, '', '', premio, dispId];
     agregarFilas_('pedidos', [fila]);
     agregarFilas_('pedido_detalle', detalleFilas.map(function (d) { return [nuevoId_('DET'), id, d.plato_id, d.nombre, d.precio, d.cantidad, d.extras, d.total_linea]; }));
     if (cuponFila) actualizarCampos_('cupones', cuponFila._fila, cuponFila, { usos: numero_(cuponFila.usos) + 1 });
 
     var descontado = descontarInventario_(id, numero, localId, detalleFilas, 1, ses ? ses.usuario : 'cliente');
     if (descontado) {
-      var nuevo = leerTabla_('pedidos').filter(function (p) { return String(p.id) === id; })[0];
-      actualizarCampos_('pedidos', nuevo._fila, nuevo, { inventario_descontado: true });
+      var recien = leerTabla_('pedidos').filter(function (p) { return String(p.id) === id; })[0];
+      actualizarCampos_('pedidos', recien._fila, recien, { inventario_descontado: true });
     }
     pedido = leerTabla_('pedidos').filter(function (p) { return String(p.id) === id; })[0];
     creado = true;
   } finally {
     lock.releaseLock();
   }
-  if (creado && !ses) cache.put(claveFreno, String(Number(cache.get(claveFreno) || 0) + 1), 600);
+  if (creado && !ses) {
+    cache.put(claveFreno, String(Number(cache.get(claveFreno) || 0) + 1), 600);
+    if (claveFrenoD) cache.put(claveFrenoD, String(Number(cache.get(claveFrenoD) || 0) + 1), 600);
+  }
+  cache.put('ULTIMO_PEDIDO', String(Date.now()), 21600);
   bitacora_(ses || { usuario: 'cliente', rol: '', local_id: localId }, 'PEDIDOS', 'CREAR', pedido.numero + ' · ' + UI_dinero_(pedido.total), ctx.dispositivo);
   return { ok: true, data: { pedido: pedidoSalida_(pedido, detalleFilas), repetido: false } };
 }
@@ -1051,7 +1153,11 @@ function accionPedidoConsultar_(data) {
   var tel = normalizarTelefono_(data.telefono, leerConfig_().pais_codigo);
   var p = leerTabla_('pedidos').filter(function (x) { return String(x.numero) === numero && String(x.telefono) === tel; })[0];
   if (!p) throw fallo_('No encontramos ese pedido con ese número de celular.', 'NO_EXISTE');
-  return { ok: true, data: { numero: String(p.numero), estado: String(p.estado), creado: iso_(p.creado), preparando: iso_(p.preparando), en_camino: iso_(p.en_camino), entregado: iso_(p.entregado), hora_estimada: iso_(p.hora_estimada), total: redondear_(p.total) } };
+  var cfgC = leerConfig_();
+  var cli = leerTabla_('clientes').filter(function (c) { return String(c.id) === String(p.cliente_id); })[0];
+  return { ok: true, data: { numero: String(p.numero), estado: String(p.estado), creado: iso_(p.creado), preparando: iso_(p.preparando), en_camino: iso_(p.en_camino), entregado: iso_(p.entregado), hora_estimada: iso_(p.hora_estimada), total: redondear_(p.total),
+    tipo_entrega: tipoEntrega_(p), mesa: String(p.mesa || ''), calificacion: numero_(p.calificacion) || '', motivo_anulacion: String(p.estado) === 'Anulado' ? String(p.motivo_anulacion) : '',
+    sellos: cli ? numero_(cli.sellos) : 0, sellos_meta: numero_(cfgC.fidelidad_sellos) } };
 }
 
 /* ---------- 11.3 Menú (administración) ---------- */
@@ -1112,7 +1218,8 @@ function accionPlatoGuardar_(data, ctx) {
   }).filter(function (x) { return x.nombre; });
   var cambios = {
     nombre: nombre, local_id: localId, categoria_id: catId, descripcion: limpiarTexto_(data.descripcion, 300), precio: redondear_(precio),
-    foto_url: enlaceImagen_(data.foto_url), extras_json: JSON.stringify(extras), agotado: data.agotado === true, activo: data.activo !== false
+    foto_url: enlaceImagen_(data.foto_url), extras_json: JSON.stringify(extras), agotado: data.agotado === true, activo: data.activo !== false,
+    etiquetas: limpiarEtiquetas_(data.etiquetas), sugerido: data.sugerido === true
   };
   var lock = candado_();
   try {
@@ -1126,7 +1233,7 @@ function accionPlatoGuardar_(data, ctx) {
       if (!actual) throw fallo_('Ese plato ya no existe. Toque Actualizar.', 'NO_EXISTE');
       if (actualizarCampos_('platos', actual._fila, actual, cambios)) bitacora_(ctx.sesion, 'MENU', 'EDITAR_PLATO', nombre, ctx.dispositivo);
     } else {
-      agregarFilas_('platos', [[nuevoId_('PLA'), localId, catId, nombre, cambios.descripcion, cambios.precio, cambios.foto_url, cambios.extras_json, cambios.agotado, cambios.activo, new Date()]]);
+      agregarFilas_('platos', [[nuevoId_('PLA'), localId, catId, nombre, cambios.descripcion, cambios.precio, cambios.foto_url, cambios.extras_json, cambios.agotado, cambios.activo, new Date(), cambios.etiquetas, cambios.sugerido]]);
       bitacora_(ctx.sesion, 'MENU', 'CREAR_PLATO', nombre, ctx.dispositivo);
     }
     limpiarMenuCache_();
@@ -1377,9 +1484,11 @@ function accionPedidoEstado_(data, ctx) {
     if (!(permitidos[String(p.estado)] || []).some(function (x) { return x === a; })) throw fallo_('No se puede pasar de «' + p.estado + '» a «' + a + '».');
     if (a === 'En camino' && !p.motorizado_id) throw fallo_('Asigne un motorizado antes de despachar.');
     if (a === 'Entregado' && String(p.estado) === 'Preparando' && (p.zona_id || p.motorizado_id)) throw fallo_('Este pedido es a domicilio: primero debe salir «En camino».');
+    if (a === 'En camino' || (a === 'Entregado' && String(p.estado) === 'Preparando')) exigirPagoVerificado_(p);
     var cambios = { estado: a };
     cambios[{ 'Preparando': 'preparando', 'En camino': 'en_camino', 'Entregado': 'entregado' }[a]] = new Date();
     actualizarCampos_('pedidos', p._fila, p, cambios);
+    if (a === 'Entregado') sumarEntregaCliente_(p, 1);
     p = buscarPedido_(data.id, ctx);
   } finally { lock.releaseLock(); }
   bitacora_(ctx.sesion, 'PEDIDOS', 'ESTADO', p.numero + ' → ' + a, ctx.dispositivo);
@@ -1415,9 +1524,12 @@ function accionPedidoAnular_(data, ctx) {
     if (String(p.estado) === 'Anulado') throw fallo_('Este pedido ya estaba anulado.');
     if (String(p.estado) === 'Entregado' && ctx.sesion.rol !== 'dueno') throw fallo_('Un pedido entregado solo lo anula el dueño.', 'PERMISO');
     if (p.liquidacion_id) throw fallo_('El efectivo de este pedido ya se liquidó en caja: no se puede anular.');
+    var eraEntregado = String(p.estado) === 'Entregado';
     actualizarCampos_('pedidos', p._fila, p, { estado: 'Anulado', anulado: new Date(), motivo_anulacion: motivo });
     var c = leerTabla_('clientes').filter(function (x) { return String(x.id) === String(p.cliente_id); })[0];
-    if (c) actualizarCampos_('clientes', c._fila, c, { pedidos: Math.max(0, numero_(c.pedidos) - 1), total_gastado: Math.max(0, redondear_(numero_(c.total_gastado) - numero_(p.total))) });
+    if (c) actualizarCampos_('clientes', c._fila, c, { pedidos: Math.max(0, numero_(c.pedidos) - 1) });
+    if (eraEntregado) sumarEntregaCliente_(p, -1);
+    if (numero_(p.premio) > 0 && c) { var cc = leerTabla_('clientes').filter(function (x) { return String(x.id) === String(p.cliente_id); })[0]; actualizarCampos_('clientes', cc._fila, cc, { sellos: numero_(cc.sellos) + numero_(leerConfig_().fidelidad_sellos) }); }
     if (p.cupon) {
       var cu = leerTabla_('cupones').filter(function (x) { return claveComparar_(x.codigo) === claveComparar_(p.cupon); })[0];
       if (cu) actualizarCampos_('cupones', cu._fila, cu, { usos: Math.max(0, numero_(cu.usos) - 1) });
@@ -1440,7 +1552,10 @@ function accionPedidoUbicacion_(data, ctx) {
   var p;
   try {
     p = buscarPedido_(data.id, ctx);
-    actualizarCampos_('pedidos', p._fila, p, { ubicacion_enlace: enlace });
+    var punto = enlace ? coordenadasDeEnlace_(enlace) : null;
+    var cambiosU = { ubicacion_enlace: enlace, ubicacion_fuente: enlace ? 'whatsapp' : (p.lat !== '' ? 'gps' : '') };
+    if (punto) { cambiosU.lat = punto.lat; cambiosU.lng = punto.lng; }
+    actualizarCampos_('pedidos', p._fila, p, cambiosU);
     p = buscarPedido_(data.id, ctx);
   } finally { lock.releaseLock(); }
   bitacora_(ctx.sesion, 'PEDIDOS', 'UBICACION', p.numero, ctx.dispositivo);
@@ -1452,7 +1567,7 @@ function accionPedidoPagoVerificar_(data, ctx) {
   var p;
   try {
     p = buscarPedido_(data.id, ctx);
-    if (String(p.forma_pago) !== 'transferencia') throw fallo_('Este pedido no es por transferencia.');
+    if (!esDigital_(p.forma_pago)) throw fallo_('Este pedido no es por transferencia ni Deuna.');
     actualizarCampos_('pedidos', p._fila, p, { pago_verificado: data.verificado !== false });
     p = buscarPedido_(data.id, ctx);
   } finally { lock.releaseLock(); }
@@ -1547,7 +1662,7 @@ function deudaMotorizado_(motoId, cajasAbiertas, pedidos) {
   var efectivo = 0, lista = [];
   pedidos.forEach(function (p) {
     if (String(p.motorizado_id) === motoId && String(p.estado) === 'Entregado' && String(p.forma_pago) === 'efectivo' && !p.liquidacion_id) {
-      efectivo += numero_(p.total);
+      efectivo += numero_(p.total) - numero_(p.propina); // la propina se la queda el motorizado
       lista.push(p);
     }
   });
@@ -1589,6 +1704,7 @@ function accionEntregaSali_(data, ctx) {
   try {
     p = pedidoDeMotorizado_(data, ctx);
     if (String(p.estado) !== 'Preparando' && String(p.estado) !== 'Recibido') throw fallo_('Este pedido está «' + p.estado + '». Toque Actualizar.', 'CAMBIO');
+    exigirPagoVerificado_(p);
     actualizarCampos_('pedidos', p._fila, p, { estado: 'En camino', en_camino: new Date(), sali_lat: coord_(data.lat, -90, 90), sali_lng: coord_(data.lng, -180, 180), preparando: p.preparando instanceof Date ? p.preparando : new Date() });
     p = buscarPedido_(data.id, null);
   } finally { lock.releaseLock(); }
@@ -1607,6 +1723,7 @@ function accionEntregaEntregado_(data, ctx) {
     var cambios = { estado: 'Entregado', entregado: new Date(), entrega_lat: coord_(data.lat, -90, 90), entrega_lng: coord_(data.lng, -180, 180) };
     if (foto) cambios.foto_entrega = foto;
     actualizarCampos_('pedidos', p._fila, p, cambios);
+    sumarEntregaCliente_(p, 1);
     p = buscarPedido_(data.id, null);
   } finally { lock.releaseLock(); }
   bitacora_(ctx.sesion, 'ENTREGAS', 'ENTREGADO', String(p.numero), ctx.dispositivo);
@@ -1615,7 +1732,7 @@ function accionEntregaEntregado_(data, ctx) {
 
 /* ---------- 11.7 Reportes (dueño) — todo se calcula de los detalles ---------- */
 
-function accionReportes_(data, ctx) {
+function accionReportesBase_(data, ctx) {
   var cfg = leerConfig_();
   var zona = zona_(cfg);
   var hasta = /^\d{4}-\d{2}-\d{2}$/.test(String(data.hasta || '')) ? String(data.hasta) : diaTrabajo_(new Date(), cfg);
@@ -1643,7 +1760,7 @@ function accionReportes_(data, ctx) {
   validos.forEach(function (p) {
     var t = numero_(p.total);
     totales.pedidos++; totales.ventas += t; totales.envio += numero_(p.envio); totales.descuento += numero_(p.descuento);
-    totales[String(p.forma_pago) === 'transferencia' ? 'transferencia' : 'efectivo'] += t;
+    totales[esDigital_(p.forma_pago) ? 'transferencia' : 'efectivo'] += t;
     var l = String(p.local_id);
     porLocal[l] = porLocal[l] || { local_id: l, nombre: nombresLocal[l] || l, pedidos: 0, total: 0 };
     porLocal[l].pedidos++; porLocal[l].total += t;
@@ -1837,9 +1954,9 @@ function resumenCaja_(caja, cfg) {
   pedidos.forEach(function (p) {
     if (ymd_(p.dia_trabajo, cfg) !== dia || String(p.estado) === 'Anulado') return;
     r.pedidos++; r.ventas += numero_(p.total);
-    if (String(p.forma_pago) === 'transferencia') {
+    if (esDigital_(p.forma_pago)) {
       if (p.pago_verificado === true) r.transferencias += numero_(p.total); else r.transferencias_pendientes += numero_(p.total);
-      transf.push({ id: String(p.id), numero: String(p.numero), cliente: String(p.cliente_nombre), total: redondear_(p.total), verificado: p.pago_verificado === true, estado: String(p.estado) });
+      transf.push({ id: String(p.id), numero: String(p.numero), cliente: String(p.cliente_nombre), total: redondear_(p.total), verificado: p.pago_verificado === true, estado: String(p.estado), forma: String(p.forma_pago) });
     } else if (String(p.estado) === 'Entregado' && !p.motorizado_id) {
       r.efectivo_local += numero_(p.total); // retiro en el local, pagado en caja
     }
@@ -1965,6 +2082,8 @@ function accionCajaCerrar_(data, ctx) {
     if (!c) throw fallo_('No hay caja abierta en este local.', 'SIN_CAJA');
     res = resumenCaja_(c, cfg);
     if (res.pendientes.length) throw fallo_('Falta liquidar: ' + res.pendientes.map(function (p) { return p.nombre + ' (' + p.total.toFixed(2) + ')'; }).join(', ') + '.', 'PENDIENTE');
+    var avisos = avisosCierre_(c, cfg, res);
+    if (avisos.length && data.confirmar !== true) throw fallo_(avisos.join(' '), 'CONFIRMAR');
     var dif = redondear_(contado - res.resumen.esperado);
     actualizarCampos_('caja', c._fila, c, { cierre: new Date(), esperado: res.resumen.esperado, contado: contado, diferencia: dif, cerrada_por: ctx.sesion.usuario, estado: 'cerrada' });
     res.resumen.contado = redondear_(contado);
@@ -1983,4 +2102,299 @@ function accionCajaCerrar_(data, ctx) {
   var out = accionCajaEstado_({ local_id: local }, ctx);
   out.data.cierre = { resumen: r, texto: texto, whatsapp_dueno: cfg.whatsapp_dueno || cfg.whatsapp || '' };
   return out;
+}
+
+/* ============================================================
+ * 12. VERSIÓN 3.0 — tipos de entrega, IVA, propina, fidelidad,
+ * horario, Deuna, verificación de pagos, ubicación pegada,
+ * aviso de pedidos nuevos, menú de ejemplo, exportar y seguridad.
+ * Todo lo nuevo está aquí; lo de antes solo se tocó lo mínimo.
+ * ============================================================ */
+
+/* ---------- 12.1 Claves más fuertes (1.000 vueltas) ---------- */
+function hashClave2_(clave, sal) {
+  var h = sal + '|' + clave;
+  for (var i = 0; i < 1000; i++) {
+    var bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, h + '|' + i, Utilities.Charset.UTF_8);
+    h = bytes.map(function (b) { return ('0' + (b & 0xFF).toString(16)).slice(-2); }).join('');
+  }
+  return 'v2$' + h;
+}
+
+/* Acepta la clave guardada nueva (v2$) o la de antes. */
+function claveCorrecta_(clave, u) {
+  var guardado = String(u.hash || '');
+  if (guardado.indexOf('v2$') === 0) return hashClave2_(clave, String(u.sal)) === guardado;
+  return hashClave_(clave, String(u.sal)) === guardado;
+}
+
+/* ---------- 12.2 Ayudas ---------- */
+var ETIQUETAS = ['mas_vendido', 'nuevo', 'picante', 'vegetariano', 'para_compartir', 'promo'];
+function limpiarEtiquetas_(v) {
+  var lista = Array.isArray(v) ? v : String(v || '').split(',');
+  return lista.map(function (x) { return String(x).trim(); }).filter(function (x, i, a) { return ETIQUETAS.indexOf(x) >= 0 && a.indexOf(x) === i; }).join(',');
+}
+
+function tipoEntrega_(p) { return String(p.tipo_entrega || '') || (p.zona_id ? 'domicilio' : 'retiro'); }
+
+/* "13:30" -> fecha de hoy a esa hora, en la zona del negocio. */
+function horaDeHoy_(hhmm, cfg, ahora) {
+  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(hhmm)) return null;
+  var dia = Utilities.formatDate(ahora, zona_(cfg), 'yyyy-MM-dd');
+  return Utilities.parseDate(dia + ' ' + hhmm, zona_(cfg), 'yyyy-MM-dd HH:mm');
+}
+
+/* ¿Atiende a esa hora? Sin horario configurado = siempre abierto. Admite cierre después de medianoche. */
+function estaAbierto_(cfg, fecha) {
+  var zona = zona_(cfg);
+  var dia = Number(Utilities.formatDate(fecha, zona, 'u')); // 1 = lunes … 7 = domingo
+  var cerrados = String(cfg.dias_cerrado || '').split(',').map(function (x) { return Number(String(x).trim()); });
+  var ap = String(cfg.horario_apertura || ''), ci = String(cfg.horario_cierre || '');
+  var texto = ap && ci ? 'Atendemos de ' + ap + ' a ' + ci + '.' : '';
+  if (cerrados.indexOf(dia) >= 0) return { abierto: false, mensaje: 'Hoy no atendemos. ' + texto + ' Puede escribirnos por WhatsApp.' };
+  if (!/^\d{2}:\d{2}$/.test(ap) || !/^\d{2}:\d{2}$/.test(ci)) return { abierto: true };
+  var hm = Utilities.formatDate(fecha, zona, 'HH:mm');
+  var ok = ap <= ci ? (hm >= ap && hm < ci) : (hm >= ap || hm < ci);
+  return ok ? { abierto: true } : { abierto: false, mensaje: 'En este momento estamos cerrados. ' + texto + ' Puede programar su pedido para cuando abramos.' };
+}
+
+/* 3.0: transferencia o Deuna sin verificar no sale ni se entrega. */
+function exigirPagoVerificado_(p) {
+  if (!siNo_(leerConfig_().verificar_antes_salir)) return;
+  if (esDigital_(p.forma_pago) && p.pago_verificado !== true) {
+    throw fallo_('Primero verifique el pago en la app del banco' + (String(p.forma_pago) === 'deuna' ? ' o de Deuna' : '') + ' y toque «Marcar pago verificado».', 'PAGO_SIN_VERIFICAR');
+  }
+}
+
+/* Lo gastado y los sellos se cuentan cuando el pedido se ENTREGA (no al crearlo). */
+function sumarEntregaCliente_(p, signo) {
+  var c = leerTabla_('clientes').filter(function (x) { return String(x.id) === String(p.cliente_id); })[0];
+  if (!c) return;
+  var cambios = {
+    entregados: Math.max(0, numero_(c.entregados) + signo),
+    total_gastado: Math.max(0, redondear_(numero_(c.total_gastado) + signo * numero_(p.total)))
+  };
+  if (numero_(leerConfig_().fidelidad_sellos) > 0) cambios.sellos = Math.max(0, numero_(c.sellos) + signo);
+  actualizarCampos_('clientes', c._fila, c, cambios);
+}
+
+/* Saca el punto de un enlace de Google Maps / Apple Maps / Waze. Sigue enlaces cortos (hasta 3 saltos). */
+function coordenadasDeEnlace_(url) {
+  function leer(u) {
+    var t = decodeURIComponent(String(u));
+    var m = /!3d(-?\d{1,2}\.\d+)!4d(-?\d{1,3}\.\d+)/.exec(t) || /@(-?\d{1,2}\.\d+),(-?\d{1,3}\.\d+)/.exec(t) ||
+      /[?&](?:q|ll|query|destination|daddr|sll)=(-?\d{1,2}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)/.exec(t) || /^(-?\d{1,2}\.\d{3,})\s*,\s*(-?\d{1,3}\.\d{3,})$/.exec(t.trim());
+    if (!m) return null;
+    var lat = Number(m[1]), lng = Number(m[2]);
+    return (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) ? { lat: Math.round(lat * 1e6) / 1e6, lng: Math.round(lng * 1e6) / 1e6 } : null;
+  }
+  var directo = leer(url);
+  if (directo) return directo;
+  if (!/^https:\/\/(maps\.app\.goo\.gl|goo\.gl|maps\.google\.|www\.google\.|google\.|maps\.apple\.com|waze\.com|ul\.waze\.com)/i.test(url)) return null;
+  var actual = url;
+  for (var i = 0; i < 3; i++) {
+    try {
+      var r = UrlFetchApp.fetch(actual, { followRedirects: false, muteHttpExceptions: true });
+      var h = r.getAllHeaders();
+      var sig = h.Location || h.location;
+      if (!sig) { return leer(r.getContentText().slice(0, 20000).match(/@-?\d{1,2}\.\d+,-?\d{1,3}\.\d+/) || ''); }
+      if (Array.isArray(sig)) sig = sig[0];
+      var p = leer(sig);
+      if (p) return p;
+      actual = sig;
+    } catch (e) { console.error('ubicación: ' + e); return null; }
+  }
+  return null;
+}
+
+/* ---------- 12.3 Acciones públicas nuevas ---------- */
+
+/* El cliente pegó un enlace de mapa: devuelve el punto para mostrarlo. */
+function accionUbicacionResolver_(data) {
+  var enlace = limpiarTexto_(data.enlace, 400);
+  var disp = limpiarTexto_(data.disp_id, 60).replace(/[^A-Za-z0-9_-]/g, '') || 'sin-id';
+  var cache = CacheService.getScriptCache(), k = 'UBIC_' + disp, n = Number(cache.get(k) || 0);
+  if (n >= 20) throw fallo_('Demasiados intentos. Espere unos minutos.', 'FRENO');
+  cache.put(k, String(n + 1), 600);
+  if (!/^https:\/\//.test(enlace) && !/^-?\d{1,2}\.\d+\s*,\s*-?\d{1,3}\.\d+$/.test(enlace)) throw fallo_('Pegue el enlace completo del mapa (empieza con https://).');
+  var p = coordenadasDeEnlace_(enlace);
+  return { ok: true, data: { punto: p } };
+}
+
+/* Calificación al recibir (1 a 5 estrellas), una sola vez, con número de pedido + celular. */
+function accionPedidoCalificar_(data) {
+  var numero = limpiarTexto_(data.numero, 20).toUpperCase();
+  var tel = normalizarTelefono_(data.telefono, leerConfig_().pais_codigo);
+  var estrellas = Math.round(numero_(data.estrellas));
+  if (!(estrellas >= 1 && estrellas <= 5)) throw fallo_('Elija de 1 a 5 estrellas.');
+  var lock = candado_(), p;
+  try {
+    p = leerTabla_('pedidos').filter(function (x) { return String(x.numero) === numero && String(x.telefono) === tel; })[0];
+    if (!p) throw fallo_('No encontramos ese pedido con ese número de celular.', 'NO_EXISTE');
+    if (String(p.estado) !== 'Entregado') throw fallo_('Podrá calificar cuando reciba su pedido.');
+    if (numero_(p.calificacion) > 0) throw fallo_('Este pedido ya fue calificado. ¡Gracias!', 'DUPLICADO');
+    actualizarCampos_('pedidos', p._fila, p, { calificacion: estrellas, comentario: limpiarTexto_(data.comentario, 300) });
+  } finally { lock.releaseLock(); }
+  bitacora_({ usuario: 'cliente', rol: '', local_id: String(p.local_id) }, 'PEDIDOS', 'CALIFICAR', numero + ' · ' + estrellas + '★', '');
+  return { ok: true, data: { calificacion: estrellas } };
+}
+
+/* ---------- 12.4 Panel: aviso de pedidos nuevos (liviano: no lee la hoja) ---------- */
+function accionPedidosNuevos_() {
+  return { ok: true, data: { ultimo: Number(CacheService.getScriptCache().get('ULTIMO_PEDIDO') || 0) } };
+}
+
+/* Al escanear el QR del pedido: lo busca por número. */
+function accionPedidoBuscar_(data, ctx) {
+  var numero = limpiarTexto_(data.numero, 20).toUpperCase();
+  var p = leerTabla_('pedidos').filter(function (x) { return String(x.numero) === numero; })[0];
+  if (!p) throw fallo_('No existe el pedido ' + numero + '.', 'NO_EXISTE');
+  if (!puedeVerLocal_(ctx, p.local_id)) throw fallo_('Ese pedido es de otro local.', 'PERMISO');
+  var o = pedidoSalida_(p, detallePorPedido_([String(p.id)])[String(p.id)] || []);
+  var m = leerTabla_('motorizados').filter(function (x) { return String(x.id) === o.motorizado_id; })[0];
+  o.motorizado = m ? { nombre: String(m.nombre), celular: String(m.celular) } : null;
+  return { ok: true, data: { pedido: o } };
+}
+
+/* ---------- 12.5 Menú de ejemplo (botón del dueño) ---------- */
+function accionMenuEjemplo_(data, ctx) {
+  var log = [];
+  function cat(nombre, orden) {
+    try { accionCategoriaGuardar_({ nombre: nombre, local_id: 'TODOS', orden: orden }, ctx); } catch (e) { if (e.codigo !== 'DUPLICADO') throw e; }
+    var c = leerTabla_('categorias').filter(function (x) { return String(x.local_id) === 'TODOS' && claveComparar_(x.nombre) === claveComparar_(nombre); })[0];
+    return c ? String(c.id) : '';
+  }
+  var cAlm = cat('Almuerzos', 1), cPollo = cat('Pollos', 2), cFuerte = cat('Platos fuertes', 3), cBeb = cat('Bebidas', 4);
+  var platos = [
+    ['Almuerzo del día', cAlm, 3.50, 'Sopa del día, segundo con arroz, menestra, ensalada y jugo.', [{ nombre: 'Doble arroz', precio: 0.50 }, { nombre: 'Huevo frito', precio: 0.50 }], 'mas_vendido', false],
+    ['Seco de pollo', cAlm, 4.00, 'Pollo en salsa de naranjilla, arroz, maduro frito y aguacate.', [{ nombre: 'Aguacate extra', precio: 0.75 }], '', false],
+    ['1/4 pollo broaster con papas', cPollo, 4.50, 'Presa crocante, papas fritas y ensalada.', [{ nombre: 'Queso extra', precio: 0.50 }, { nombre: 'Sin ensalada', precio: 0 }], 'mas_vendido', false],
+    ['Combo familiar 8 presas', cPollo, 18.50, '8 presas, papas familiares y cola de 1 litro.', [], 'para_compartir,promo', false],
+    ['Encebollado', cFuerte, 4.50, 'Albacora, yuca y cebolla curtida. Con chifles o canguil.', [{ nombre: 'Chifles extra', precio: 0.50 }, { nombre: 'Sin cebolla', precio: 0 }], 'nuevo', false],
+    ['Churrasco', cFuerte, 6.50, 'Carne a la plancha, arroz, papas fritas, huevo, aguacate y ensalada.', [{ nombre: 'Huevo extra', precio: 0.50 }], '', false],
+    ['Jugo natural', cBeb, 1.50, 'Mora, naranjilla o maracuyá.', [], 'vegetariano', true],
+    ['Cola 500 ml', cBeb, 1.00, 'Bien fría.', [], '', true]
+  ];
+  var creados = 0;
+  platos.forEach(function (p) {
+    try {
+      accionPlatoGuardar_({ nombre: p[0], categoria_id: p[1], precio: p[2], descripcion: p[3], extras: p[4], etiquetas: p[5], sugerido: p[6], local_id: 'TODOS' }, ctx);
+      creados++;
+    } catch (e) { if (e.codigo !== 'DUPLICADO') throw e; log.push(p[0]); }
+  });
+  limpiarMenuCache_();
+  bitacora_(ctx.sesion, 'MENU', 'MENU_EJEMPLO', creados + ' platos', ctx.dispositivo);
+  var r = accionMenuListar_({ local_id: 'TODOS' }, ctx);
+  r.data.ejemplo = { creados: creados, ya_existian: log.length };
+  return r;
+}
+
+/* ---------- 12.6 Motorizado en un solo paso: usuario + ficha ---------- */
+function accionMotorizadoCrearTodo_(data, ctx) {
+  var cfg = leerConfig_();
+  var cedula = limpiarTexto_(data.cedula, 20).replace(/\s/g, '');
+  // Se revisa la ficha ANTES de crear el usuario, para no dejar usuarios sueltos.
+  if (!limpiarTexto_(data.nombre, 80)) throw fallo_('Escriba el nombre del motorizado.');
+  if (String(cfg.pais_codigo) === '593' && !cedulaEcuadorValida_(cedula)) throw fallo_('La cédula no es válida (revise los 10 dígitos).', 'CEDULA');
+  if (!normalizarTelefono_(data.celular, cfg.pais_codigo)) throw fallo_('Escriba el celular.');
+  var localUsuario = limpiarTexto_(data.local_id, 40);
+  if (!localUsuario || localUsuario === 'TODOS') {
+    var primero = leerTabla_('locales').filter(function (l) { return l.activo === true; })[0];
+    localUsuario = primero ? String(primero.id) : '';
+  }
+  if (leerTabla_('motorizados').some(function (m) { return String(m.cedula) === cedula; })) throw fallo_('Ya existe un motorizado con esa cédula.', 'DUPLICADO');
+  accionUsuarioGuardar_({ usuario: data.usuario, nombre: data.nombre, rol: 'motorizado', local_id: localUsuario, clave: data.clave, activo: true }, ctx);
+  var u = leerTabla_('usuarios').filter(function (x) { return normalizarUsuario_(x.usuario) === normalizarUsuario_(data.usuario); })[0];
+  var ficha = Object.assign({}, data, { id: '', usuario_id: u ? String(u.id) : '' });
+  try {
+    accionMotorizadoGuardar_(ficha, ctx);
+  } catch (e) {
+    if (u) actualizarCampos_('usuarios', u._fila, u, { activo: false }); // no queda un usuario suelto activo
+    throw e;
+  }
+  return accionMotorizadosListar_({ local_id: 'TODOS' }, ctx);
+}
+
+/* ---------- 12.7 Cierre de caja: avisos antes de cerrar ---------- */
+function avisosCierre_(caja, cfg, res) {
+  var local = String(caja.local_id), dia = ymd_(caja.dia_trabajo, cfg), avisos = [];
+  var enCamino = leerTabla_('pedidos').filter(function (p) {
+    return String(p.local_id) === local && String(p.estado) === 'En camino' && String(p.forma_pago) === 'efectivo';
+  });
+  if (enCamino.length) avisos.push('Hay ' + enCamino.length + ' pedido(s) en efectivo todavía en camino (' + enCamino.map(function (p) { return p.numero; }).join(', ') + '): ese dinero quedará para la caja de mañana.');
+  var sinVerificar = (res.transferencias || []).filter(function (t) { return !t.verificado && t.estado !== 'Anulado'; });
+  if (sinVerificar.length) avisos.push('Hay ' + sinVerificar.length + ' pago(s) digitales sin verificar (' + sinVerificar.map(function (t) { return t.numero; }).join(', ') + ').');
+  return avisos;
+}
+
+/* ---------- 12.8 Reportes con IVA, comida y envío por separado ---------- */
+function accionReportes_(data, ctx) {
+  var r = accionReportesBase_(data, ctx);
+  var d = r.data, cfg = leerConfig_();
+  var local = d.local;
+  var ex = { comida: 0, envio: 0, propinas: 0, premios: 0, base_iva: 0, iva: 0, deuna: 0, transferencia_banco: 0, calificaciones: 0, estrellas: 0, clientes_nuevos: 0 };
+  var porTipo = { domicilio: { pedidos: 0, total: 0 }, retiro: { pedidos: 0, total: 0 }, mesa: { pedidos: 0, total: 0 } };
+  var porOrigen = {}, comentarios = [];
+  leerTabla_('pedidos').forEach(function (p) {
+    var dia = ymd_(p.dia_trabajo, cfg);
+    if (dia < d.desde || dia > d.hasta || String(p.estado) === 'Anulado' || (local !== 'TODOS' && String(p.local_id) !== local)) return;
+    var t = numero_(p.total), prop = numero_(p.propina);
+    ex.envio += numero_(p.envio); ex.propinas += prop; ex.premios += numero_(p.premio);
+    ex.comida += numero_(p.subtotal) - numero_(p.descuento) - numero_(p.premio);
+    var pct = numero_(cfg.iva_porcentaje);
+    var base = p.base_iva === '' || p.base_iva == null ? redondear_((t - prop) / (1 + pct / 100)) : numero_(p.base_iva); // pedidos viejos: se calcula
+    ex.base_iva += base; ex.iva += (p.iva === '' || p.iva == null) ? (t - prop - base) : numero_(p.iva);
+    if (String(p.forma_pago) === 'deuna') ex.deuna += t;
+    if (String(p.forma_pago) === 'transferencia') ex.transferencia_banco += t;
+    var tipo = tipoEntrega_(p);
+    porTipo[tipo].pedidos++; porTipo[tipo].total += t;
+    var o = String(p.origen || '') || 'directo';
+    porOrigen[o] = porOrigen[o] || { origen: o, pedidos: 0, total: 0 };
+    porOrigen[o].pedidos++; porOrigen[o].total += t;
+    if (numero_(p.calificacion) > 0) {
+      ex.calificaciones++; ex.estrellas += numero_(p.calificacion);
+      if (String(p.comentario)) comentarios.push({ numero: String(p.numero), estrellas: numero_(p.calificacion), comentario: String(p.comentario), cliente: String(p.cliente_nombre) });
+    }
+    if (p.cliente_nuevo === true) ex.clientes_nuevos++;
+  });
+  Object.keys(ex).forEach(function (k) { ex[k] = redondear_(ex[k]); });
+  ex.estrellas_promedio = ex.calificaciones ? Math.round(ex.estrellas / ex.calificaciones * 10) / 10 : null;
+  ex.iva_porcentaje = numero_(cfg.iva_porcentaje);
+  d.extra = ex;
+  d.por_tipo = Object.keys(porTipo).map(function (k) { return { tipo: k, pedidos: porTipo[k].pedidos, total: redondear_(porTipo[k].total) }; });
+  d.por_origen = Object.keys(porOrigen).map(function (k) { var o = porOrigen[k]; o.total = redondear_(o.total); return o; }).sort(function (a, b) { return b.pedidos - a.pedidos; });
+  d.comentarios = comentarios.slice(-20).reverse();
+  return r;
+}
+
+/* ---------- 12.9 Exportar para el contador (la pantalla arma el archivo) ---------- */
+function accionExportar_(data, ctx) {
+  var cfg = leerConfig_();
+  var hasta = /^\d{4}-\d{2}-\d{2}$/.test(String(data.hasta || '')) ? String(data.hasta) : diaTrabajo_(new Date(), cfg);
+  var desde = /^\d{4}-\d{2}-\d{2}$/.test(String(data.desde || '')) ? String(data.desde) : hasta;
+  if (desde > hasta) throw fallo_('La fecha «desde» es posterior a «hasta».');
+  var local = localDeSesion_(ctx, data.local_id);
+  var nombres = {};
+  leerTabla_('locales').forEach(function (l) { nombres[String(l.id)] = String(l.nombre); });
+  var zona = zona_(cfg), pct = numero_(cfg.iva_porcentaje);
+  var filas = [['Día', 'Hora', 'Pedido', 'Local', 'Tipo', 'Cliente', 'Celular', 'Estado', 'Forma de pago', 'Pago verificado', 'Comida', 'Envío', 'Descuento', 'Premio', 'Propina', 'Base imponible', 'IVA ' + pct + '%', 'Total']];
+  leerTabla_('pedidos').forEach(function (p) {
+    var dia = ymd_(p.dia_trabajo, cfg);
+    if (dia < desde || dia > hasta || (local !== 'TODOS' && String(p.local_id) !== local)) return;
+    var t = numero_(p.total), prop = numero_(p.propina);
+    var base = p.base_iva === '' || p.base_iva == null ? redondear_((t - prop) / (1 + pct / 100)) : numero_(p.base_iva);
+    var iva = p.iva === '' || p.iva == null ? redondear_(t - prop - base) : numero_(p.iva);
+    filas.push([dia, p.creado instanceof Date ? Utilities.formatDate(p.creado, zona, 'HH:mm') : '', String(p.numero), nombres[String(p.local_id)] || '', tipoEntrega_(p),
+      String(p.cliente_nombre), String(p.telefono), String(p.estado), String(p.forma_pago), p.pago_verificado === true ? 'Sí' : (esDigital_(p.forma_pago) ? 'No' : ''),
+      redondear_(numero_(p.subtotal)), redondear_(numero_(p.envio)), redondear_(numero_(p.descuento)), redondear_(numero_(p.premio)), redondear_(prop), base, iva, redondear_(t)]);
+  });
+  bitacora_(ctx.sesion, 'REPORTES', 'EXPORTAR', desde + ' a ' + hasta + ' · ' + (filas.length - 1) + ' pedidos', ctx.dispositivo);
+  return { ok: true, data: { nombre: 'ventas_' + desde + '_a_' + hasta, filas: filas } };
+}
+
+/* Ejecutar UNA vez desde el editor después de pegar la versión 3.0:
+ * Google pide permiso para leer enlaces de mapas (UrlFetch). */
+function autorizarPermisos() {
+  UrlFetchApp.fetch('https://www.google.com/generate_204', { muteHttpExceptions: true });
+  console.log('Permisos listos.');
 }

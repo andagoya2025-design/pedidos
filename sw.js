@@ -8,7 +8,7 @@
  * - Nunca guarda datos del negocio: los pedidos van siempre al servidor.
  * ============================================================
  */
-var VERSION = 'app-2.0.1';
+var VERSION = 'app-3.0.0';
 
 var ARCHIVOS = [
   './',
@@ -25,6 +25,8 @@ var ARCHIVOS = [
   'js/configuracion.js',
   'js/instalar.js',
   'js/comun.js',
+  'js/mapa.js',
+  'js/qr.js',
   'js/pedir.js',
   'js/pedidos.js',
   'js/menu.js',

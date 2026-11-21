@@ -14,7 +14,7 @@
     titulo: 'Reportes', icono: '📊', orden: 60, roles: ['dueno'],
     pintar: function (cont) {
       rango = rango || { desde: '', hasta: '' };
-      cont.innerHTML = UI.encabezado('Reportes', APP.nombreLocal(APP.local)) +
+      cont.innerHTML = UI.encabezado('Reportes', APP.nombreLocal(APP.local), '<button class="btn borde chico" type="button" id="rp-exportar">⬇️ Excel</button>') +
         '<div class="filtros" id="rp-rapidos">' + [['hoy', 'Hoy'], ['ayer', 'Ayer'], ['7', '7 días'], ['30', '30 días'], ['mes', 'Este mes']].map(function (x) {
           return '<button class="pestana" type="button" data-r="' + x[0] + '" aria-selected="false">' + x[1] + '</button>';
         }).join('') + '</div>' +
@@ -31,6 +31,7 @@
       });
       UI.$$('#rp-form input', cont).forEach(function (i) { i.addEventListener('change', cargar); });
       UI.$('[data-actualizar]', cont).addEventListener('click', function (e) { UI.trabajando(e.currentTarget, cargar); });
+      UI.$('#rp-exportar', cont).addEventListener('click', function (e) { UI.trabajando(e.currentTarget, exportar); });
       cargar();
     }
   };
@@ -64,6 +65,26 @@
     }
   }
 
+  /* 3.0: archivo para el contador (se abre en Excel o Google Sheets). Separador «;» y coma decimal: Excel en español. */
+  async function exportar() {
+    try {
+      var r = await DATOS.pedir('exportar', { desde: UI.$('#rp-desde').value, hasta: UI.$('#rp-hasta').value, local_id: APP.local });
+      var csv = r.filas.map(function (f) {
+        return f.map(function (v) {
+          var t = typeof v === 'number' ? v.toFixed(2).replace('.', ',') : String(v == null ? '' : v);
+          if (/^[=+\-@]/.test(t)) t = "'" + t; // nunca fórmula
+          return /[";\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t;
+        }).join(';');
+      }).join('\r\n');
+      var blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' });
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(blob); a.download = r.nombre + '.csv';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function () { URL.revokeObjectURL(a.href); }, 4000);
+      UI.aviso('Archivo listo: ' + (r.filas.length - 1) + ' pedidos.', 'ok');
+    } catch (err) { UI.error('No se pudo exportar', err.message); }
+  }
+
   function barras(lista, etiqueta, valor, formato) {
     var max = Math.max.apply(null, lista.map(valor).concat([0])) || 1;
     return '<div class="barras">' + lista.map(function (x) {
@@ -74,6 +95,25 @@
   function cifra(rotulo, valor, clase) { return '<div class="cifra' + (clase ? ' ' + clase : '') + '"><div class="rotulo">' + UI.esc(rotulo) + '</div><div class="valor">' + valor + '</div></div>'; }
   function signo(n) { return '<span class="' + (n < 0 ? 'negativo' : n > 0 ? 'positivo' : '') + '">' + UI.esc(UI.dinero(n)) + '</span>'; }
 
+  /* 3.0: comida vs envío, IVA, propinas, tipo de entrega, origen y calificaciones. */
+  var NOMBRE_TIPO = { domicilio: '🛵 Domicilio', retiro: '🏪 Retiro', mesa: '🍽️ Mesa' };
+  function extraHtml(r) {
+    var x = r.extra;
+    if (!x) return '';
+    return '<div class="tarjeta" style="margin-top:14px"><h3 style="margin-top:0">🧮 Para el contador</h3><div class="cifras">' +
+      cifra('Comida (sin envío)', UI.esc(UI.dinero(x.comida))) + cifra('Envíos', UI.esc(UI.dinero(x.envio))) +
+      cifra('Base imponible', UI.esc(UI.dinero(x.base_iva))) + cifra('IVA ' + x.iva_porcentaje + '%', UI.esc(UI.dinero(x.iva))) +
+      cifra('Propinas (de los motorizados)', UI.esc(UI.dinero(x.propinas))) + cifra('Premios de sellos', UI.esc(UI.dinero(x.premios))) +
+      cifra('Deuna', UI.esc(UI.dinero(x.deuna))) + cifra('Clientes nuevos', x.clientes_nuevos) +
+      '</div><p class="ayuda" style="margin:8px 0 0">El botón «⬇️ Excel» descarga cada pedido con su base e IVA. La facturación electrónica del SRI se hace aparte.</p></div>' +
+      '<div class="rejilla" style="margin-top:14px">' +
+      '<div class="tarjeta"><h3 style="margin-top:0">Cómo reciben</h3>' + barras(r.por_tipo.filter(function (t) { return t.pedidos; }), function (t) { return NOMBRE_TIPO[t.tipo] || t.tipo; }, function (t) { return t.pedidos; }, function (t) { return t.pedidos + ' · ' + UI.dinero(t.total); }) + '</div>' +
+      '<div class="tarjeta"><h3 style="margin-top:0">De dónde llegan (QR y enlaces)</h3>' + (r.por_origen.length ? barras(r.por_origen, function (o) { return o.origen; }, function (o) { return o.pedidos; }, function (o) { return o.pedidos + ' · ' + UI.dinero(o.total); }) : '<p class="subtitulo">Sin datos.</p>') + '</div>' +
+      '<div class="tarjeta"><h3 style="margin-top:0">⭐ Calificaciones</h3>' + (x.calificaciones ? '<p style="font-size:28px;font-weight:800;margin:0">' + x.estrellas_promedio + ' <span style="color:#F5B400">★</span> <small class="subtitulo">(' + x.calificaciones + ')</small></p>' +
+        (r.comentarios.length ? '<div class="lista" style="margin-top:10px">' + r.comentarios.map(function (c) { return '<div class="item"><div class="item-cuerpo"><div class="item-titulo">' + '★'.repeat(c.estrellas) + ' · ' + UI.esc(c.cliente) + '</div><div class="item-sub">«' + UI.esc(c.comentario) + '» · ' + UI.esc(c.numero) + '</div></div></div>'; }).join('') + '</div>' : '')
+        : '<p class="subtitulo">Aún no hay calificaciones.</p>') + '</div></div>';
+  }
+
   function pintar(r) {
     var t = r.totales;
     var maxHora = Math.max.apply(null, r.horas.map(function (h) { return h.pedidos; }).concat([1]));
@@ -82,8 +122,8 @@
       '<div class="cifras">' +
       cifra('Ventas', UI.esc(UI.dinero(t.ventas)), 'destacada') + cifra('Pedidos', t.pedidos) + cifra('Ticket promedio', UI.esc(UI.dinero(t.ticket_promedio))) +
       cifra('Entrega promedio', t.minutos_entrega === null ? '—' : t.minutos_entrega + ' min') +
-      cifra('Efectivo', UI.esc(UI.dinero(t.efectivo))) + cifra('Transferencias', UI.esc(UI.dinero(t.transferencia))) + cifra('Envíos cobrados', UI.esc(UI.dinero(t.envio))) + cifra('Anulados', t.anulados) +
-      '</div>' +
+      cifra('Efectivo', UI.esc(UI.dinero(t.efectivo))) + cifra('Transferencias y Deuna', UI.esc(UI.dinero(t.transferencia))) + cifra('Envíos cobrados', UI.esc(UI.dinero(t.envio))) + cifra('Anulados', t.anulados) +
+      '</div>' + extraHtml(r) +
       (!hayDatos ? UI.vacio('📊', 'No hay ventas en estas fechas.') :
       '<div class="rejilla" style="margin-top:14px">' +
       (r.por_local.length > 1 || APP.local === 'TODOS' ? '<div class="tarjeta"><h3 style="margin-top:0">Ventas por local</h3>' + barras(r.por_local, function (x) { return x.nombre; }, function (x) { return x.total; }, function (x) { return UI.dinero(x.total) + ' · ' + x.pedidos; }) + '</div>' : '') +

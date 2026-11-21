@@ -16,11 +16,23 @@
     titulo: 'Pedidos', icono: '🧾', orden: 10, roles: ['dueno', 'cajero'],
     pintar: function (cont) {
       est = { datos: null, motos: [], cargadoEn: 0, verAnulados: false };
-      cont.innerHTML = UI.encabezado('Pedidos', APP.nombreLocal(APP.local), '<button class="btn chico" type="button" id="btn-nuevo-pedido">＋ Nuevo</button>') +
+      var sonido = global.APP_MEMORIA.leer('sonido_pedidos') !== false;
+      cont.innerHTML = UI.encabezado('Pedidos', APP.nombreLocal(APP.local),
+        '<button class="btn secundario chico sonido-btn" type="button" id="btn-sonido" aria-pressed="' + sonido + '" title="Sonido de pedido nuevo">' + (sonido ? '🔔' : '🔕') + '</button>' +
+        '<button class="btn secundario chico" type="button" id="btn-buscar-pedido" aria-label="Buscar pedido">🔎</button>' +
+        '<button class="btn chico" type="button" id="btn-nuevo-pedido">＋ Nuevo</button>') +
         '<div id="pd-cuerpo">' + UI.esqueleto(4) + '</div>';
       UI.$('[data-actualizar]', cont).addEventListener('click', function (e) { UI.trabajando(e.currentTarget, cargar); });
       UI.$('#btn-nuevo-pedido', cont).addEventListener('click', nuevoPedido);
-      cargar();
+      UI.$('#btn-buscar-pedido', cont).addEventListener('click', buscarPedido);
+      UI.$('#btn-sonido', cont).addEventListener('click', function (e) {
+        var b = e.currentTarget, on = b.getAttribute('aria-pressed') !== 'true';
+        b.setAttribute('aria-pressed', String(on)); b.textContent = on ? '🔔' : '🔕';
+        global.APP_MEMORIA.guardar('sonido_pedidos', on);
+        if (on) { UI.sonar(); UI.aviso('Sonará cuando entre un pedido nuevo.', 'ok'); }
+      });
+      cargar().then(function () { var ver = (APP.parametros || {}).ver; if (ver) { APP.parametros = {}; abrirPorNumero(ver); } });
+      vigilar();
     }
   };
 
@@ -76,20 +88,27 @@
     var tarde = atrasado(p);
     var principal = '';
     if (p.estado === 'Recibido') principal = '<button class="btn chico" type="button" data-accion="preparar" data-id="' + UI.esc(p.id) + '">👨‍🍳 Preparar</button>';
-    if (p.estado === 'Preparando') principal = p.zona_id
+    var dom = UI.tipoEntrega(p) === 'domicilio';
+    if (p.estado === 'Preparando') principal = dom
       ? (p.motorizado_id ? '<button class="btn chico" type="button" data-accion="despachar" data-id="' + UI.esc(p.id) + '">🛵 Despachar</button>' : '<button class="btn chico" type="button" data-accion="asignar" data-id="' + UI.esc(p.id) + '">🛵 Asignar motorizado</button>')
-      : '<button class="btn chico" type="button" data-accion="entregar" data-id="' + UI.esc(p.id) + '">✅ Entregado</button>';
+      : '<button class="btn chico" type="button" data-accion="entregar" data-id="' + UI.esc(p.id) + '">✅ ' + (UI.tipoEntrega(p) === 'mesa' ? 'Servido' : 'Entregado') + '</button>';
+    // 3.0: pago digital sin verificar → primero verificar (el servidor tampoco deja despachar).
+    if (UI.esDigital(p.forma_pago) && !p.pago_verificado && (p.estado === 'Preparando' || p.estado === 'Recibido') && verificarActivo()) {
+      principal = (p.estado === 'Recibido' ? principal : '') + '<button class="btn chico" type="button" data-accion="verificar" data-id="' + UI.esc(p.id) + '">🏦 Verificar pago</button>';
+    }
     if (p.estado === 'En camino') principal = '<button class="btn chico" type="button" data-accion="entregar" data-id="' + UI.esc(p.id) + '">✅ Entregado</button>';
     return '<article class="pedido' + (tarde ? ' atrasado' : '') + '">' +
       '<div class="pedido-top"><span class="pedido-num">' + UI.esc(p.numero) + '</span>' + (p.estado === 'Anulado' ? UI.chipEstado('Anulado') : '') +
       '<span class="reloj' + (tarde ? ' tarde' : '') + '">' + UI.esc(UI.hora(p.creado)) + (['Entregado', 'Anulado'].indexOf(p.estado) < 0 ? ' · ' + min + ' min' : '') + '</span>' +
       '<span class="pedido-total">' + UI.dinero(p.total) + '</span></div>' +
+      '<div class="pedido-chips">' + UI.etiquetaTipo(p) + (p.cliente_nuevo ? '<span class="chip-nuevo">✨ Cliente nuevo</span>' : '') + (p.origen ? '<span class="chip-tipo">📊 ' + UI.esc(p.origen) + '</span>' : '') + '</div>' +
       '<div class="pedido-linea"><b style="color:var(--texto)">' + UI.esc(p.cliente_nombre) + '</b> · ' + UI.esc(p.telefono) + '</div>' +
       (APP.local === 'TODOS' ? '<div class="pedido-linea">📍 ' + UI.esc(APP.nombreLocal(p.local_id)) + '</div>' : '') +
       '<ul class="pedido-items">' + (p.detalle || []).map(function (d) { return '<li><b>' + d.cantidad + '×</b> ' + UI.esc(d.nombre) + (d.extras ? ' <span class="pedido-linea">(' + UI.esc(d.extras) + ')</span>' : '') + '</li>'; }).join('') + '</ul>' +
       (p.notas ? '<div class="banda" style="margin:0;padding:8px 10px">📝 <span>' + UI.esc(p.notas) + '</span></div>' : '') +
-      '<div class="pedido-linea">' + (p.zona_id ? '🛵 ' + UI.esc(p.direccion || 'Ubicación por mapa') + (p.referencia ? ' · ' + UI.esc(p.referencia) : '') : '🏪 Retira en el local') + '</div>' +
-      '<div class="pedido-linea">' + (p.forma_pago === 'transferencia' ? '🏦 Transferencia ' + (p.pago_verificado ? '<span class="etiqueta ok">verificada</span>' : '<span class="etiqueta aviso">por verificar</span>') : '💵 Efectivo') +
+      (dom ? '<div class="pedido-linea">🛵 ' + UI.esc(p.direccion || 'Ubicación por mapa') + (p.referencia ? ' · ' + UI.esc(p.referencia) : '') + '<br><small>' + UI.fuenteUbicacion(p) + '</small></div>' : '') +
+      '<div class="pedido-linea">' + (UI.esDigital(p.forma_pago) ? UI.NOMBRE_PAGO[p.forma_pago] + ' ' + (p.pago_verificado ? '<span class="etiqueta ok">verificado</span>' : '<span class="etiqueta aviso">por verificar</span>') : '💵 Efectivo') +
+      (p.propina ? ' · 🙌 propina ' + UI.dinero(p.propina) : '') + (p.calificacion ? ' · ' + '★'.repeat(p.calificacion) : '') +
       (p.motorizado ? ' · 🛵 ' + UI.esc(p.motorizado.nombre) : '') + '</div>' +
       (p.estado === 'Anulado' ? '<div class="pedido-linea">Motivo: ' + UI.esc(p.motivo_anulacion) + '</div>' : '') +
       (p.estado !== 'Anulado' ? '<div class="pedido-acciones">' + principal + '<button class="btn secundario chico" type="button" data-accion="mas" data-id="' + UI.esc(p.id) + '">⋯ Más</button></div>' : '') +
@@ -121,8 +140,11 @@
 
   function mensajeCliente(p) {
     var neg = (APP.publico && APP.publico.negocio_nombre) || '';
+    var tipo = UI.tipoEntrega(p);
+    if (p.estado === 'Preparando' && tipo !== 'domicilio') return 'Hola ' + p.cliente_nombre + ', tu pedido ' + p.numero + ' ya se está preparando 👨‍🍳.' + (p.hora_estimada ? ' Estará listo a las ' + UI.hora(p.hora_estimada) + '.' : '');
+    if (p.estado === 'Entregado' && tipo !== 'domicilio') return '¡Gracias por tu compra, ' + p.cliente_nombre + '! ' + neg;
     var t = {
-      'Recibido': 'Hola ' + p.cliente_nombre + ', recibimos tu pedido ' + p.numero + ' en ' + neg + '. Total: ' + UI.dinero(p.total) + '. ¡Gracias!',
+      'Recibido': 'Hola ' + p.cliente_nombre + ', recibimos tu pedido ' + p.numero + ' en ' + neg + '. Total: ' + UI.dinero(p.total) + '. ¡Gracias!' + (UI.esDigital(p.forma_pago) && !p.pago_verificado ? ' Apenas confirmemos tu pago lo preparamos.' : ''),
       'Preparando': 'Hola ' + p.cliente_nombre + ', tu pedido ' + p.numero + ' ya se está preparando 👨‍🍳.' + (p.hora_estimada ? ' Hora estimada: ' + UI.hora(p.hora_estimada) + '.' : ''),
       'En camino': 'Hola ' + p.cliente_nombre + ', tu pedido ' + p.numero + ' va en camino 🛵' + (p.motorizado ? ' con ' + p.motorizado.nombre : '') + '. Total a pagar: ' + UI.dinero(p.total) + (p.forma_pago === 'efectivo' ? ' en efectivo.' : '.'),
       'Entregado': '¡Gracias por tu compra, ' + p.cliente_nombre + '! Esperamos que disfrutes tu pedido ' + p.numero + '. ' + neg
@@ -141,7 +163,70 @@
       return;
     }
     if (que === 'asignar') return asignar(boton, p);
+    if (que === 'verificar') return verificar(boton, p);
     if (que === 'mas') return mas(boton, p);
+  }
+
+  function verificarActivo() { return !APP.publico || APP.publico.verificar_antes_salir !== 'NO'; }
+
+  async function verificar(boton, p) {
+    var ok = await UI.ventana({
+      icono: p.forma_pago === 'deuna' ? '📲' : '🏦', titulo: 'Verificar pago de ' + p.numero,
+      texto: 'Abra la app de su banco' + (p.forma_pago === 'deuna' ? ' o Deuna Negocios' : '') + ' y confirme que llegaron ' + UI.dinero(p.total) + ' de ' + p.cliente_nombre + '. Una captura de pantalla NO es prueba: puede ser falsa.',
+      botones: [{ texto: 'Todavía no', valor: false, clase: 'secundario' }, { texto: '✅ Sí, el dinero llegó', valor: true }]
+    });
+    if (ok) return guardar(boton, 'pedidoPagoVerificar', { id: p.id, verificado: true }, 'Pago verificado. Ya puede despacharlo.');
+  }
+
+  /* ----- Pedido nuevo: consulta liviana cada 25 s (solo una marca de tiempo; no relee la hoja). ----- */
+  var vigia = null, ultimaMarca = 0;
+  function vigilar() {
+    if (vigia) clearTimeout(vigia);
+    vigia = setTimeout(async function revisar() {
+      if (APP.vistaActual !== 'pedidos' || !UI.$('#pd-cuerpo')) { vigia = null; return; } // se salió del panel: se detiene
+      if (!document.hidden) {
+        try {
+          var r = await DATOS.pedir('pedidosNuevos', {});
+          if (ultimaMarca && r.ultimo > ultimaMarca) {
+            if (global.APP_MEMORIA.leer('sonido_pedidos') !== false) UI.sonar();
+            UI.vibrar([60, 60, 60]);
+            UI.aviso('🛎️ ¡Pedido nuevo!', 'ok');
+            await cargar();
+            avisoTitulo(true);
+          }
+          ultimaMarca = r.ultimo || ultimaMarca;
+        } catch (e) { /* sin red: se intenta en la próxima vuelta */ }
+      }
+      vigia = setTimeout(revisar, 25000);
+    }, ultimaMarca ? 25000 : 1500);
+  }
+  function avisoTitulo(on) {
+    var t = document.title.replace(/^\(\d+\) /, '').replace(/^🛎️ /, '');
+    document.title = on ? '🛎️ ' + t : t;
+    if (on) document.addEventListener('visibilitychange', function q() { if (!document.hidden) { avisoTitulo(false); document.removeEventListener('visibilitychange', q); } });
+  }
+
+  /* ----- Buscar / escanear el QR del pedido ----- */
+  async function buscarPedido() {
+    var n = await UI.pedirDato({ icono: '🔎', titulo: 'Buscar pedido', etiqueta: 'Número de pedido', ph: 'PED-0005 o solo 5', modo: 'text', boton: 'Buscar',
+      texto: 'Si el cliente muestra el QR de su pedido, escanéelo con la cámara del teléfono: se abre aquí solo.',
+      validar: function (v) { return /^(ped-?)?\d{1,6}$/i.test(v.replace(/\s/g, '')) ? '' : 'Escriba el número, ej. PED-0005.'; } });
+    if (n === null) return;
+    var num = n.replace(/\s/g, '').toUpperCase().replace(/^PED-?/, '');
+    abrirPorNumero('PED-' + ('000' + num).slice(-Math.max(4, num.length)));
+  }
+  async function abrirPorNumero(numero) {
+    try {
+      var r = await DATOS.pedir('pedidoBuscar', { numero: numero });
+      var p = r.pedido;
+      var enLista = est.datos && buscar(p.id);
+      if (enLista) {
+        var art = UI.$('[data-id="' + p.id + '"]');
+        if (art) { art = art.closest('.pedido'); art.classList.add('resaltado'); art.scrollIntoView({ behavior: 'smooth', block: 'center' }); setTimeout(function () { art.classList.remove('resaltado'); }, 2600); }
+        return mas(null, enLista);
+      }
+      UI.ventana({ icono: '🧾', titulo: p.numero + ' · ' + p.cliente_nombre, html: '<div class="lista">' + tarjeta(p) + '</div>', botones: [{ texto: 'Cerrar', valor: true, clase: 'secundario' }] });
+    } catch (err) { UI.error('No se encontró', err.message); }
   }
 
   async function asignar(boton, p) {
@@ -163,11 +248,12 @@
   }
 
   async function mas(boton, p) {
+    var dom = UI.tipoEntrega(p) === 'domicilio';
     var opciones = [['avisar', '💬 Avisar al cliente por WhatsApp'], ['llamar', '📞 Llamar al cliente']];
-    if (p.zona_id) opciones.push(['mapa', '🗺️ Ver en el mapa'], ['ubicacion', '📍 Pegar ubicación de WhatsApp']);
-    if (p.zona_id && (p.estado === 'Recibido' || p.estado === 'Preparando')) opciones.push(['asignar', '🛵 ' + (p.motorizado_id ? 'Cambiar' : 'Asignar') + ' motorizado']);
+    if (dom) opciones.push(['mapa', '🗺️ Ver en el mapa · ' + UI.fuenteUbicacion(p).replace(/^\S+\s/, '')], ['pedir_ubic', '📍 Pedir ubicación por WhatsApp'], ['ubicacion', '📋 Pegar ubicación que mandó']);
+    if (dom && (p.estado === 'Recibido' || p.estado === 'Preparando')) opciones.push(['asignar', '🛵 ' + (p.motorizado_id ? 'Cambiar' : 'Asignar') + ' motorizado']);
     if (p.motorizado) opciones.push(['wa_moto', '💬 WhatsApp al motorizado']);
-    if (p.forma_pago === 'transferencia') opciones.push(['verificar', p.pago_verificado ? '↩️ Marcar transferencia sin verificar' : '🏦 Marcar transferencia verificada']);
+    if (UI.esDigital(p.forma_pago)) opciones.push(['verificar', p.pago_verificado ? '↩️ Marcar pago sin verificar' : '🏦 Marcar pago verificado']);
     if (p.estado !== 'Entregado' || APP.sesion.rol === 'dueno') opciones.push(['anular', '⛔ Anular pedido']);
     var op = await UI.ventana({
       icono: '🧾', titulo: p.numero + ' · ' + p.cliente_nombre, texto: 'Creado ' + UI.hora(p.creado) + (p.preparando ? ' · preparando ' + UI.hora(p.preparando) : '') + (p.en_camino ? ' · salió ' + UI.hora(p.en_camino) : '') + (p.entregado ? ' · entregado ' + UI.hora(p.entregado) : ''),
@@ -176,13 +262,15 @@
     if (!op) return;
     if (op === 'avisar') return UI.abrirWhatsApp(p.telefono, mensajeCliente(p));
     if (op === 'llamar') { global.location.href = 'tel:+' + UI.digitos(p.telefono); return; }
+    if (op === 'pedir_ubic') return UI.abrirWhatsApp(p.telefono, 'Hola ' + p.cliente_nombre + ', somos ' + ((APP.publico && APP.publico.negocio_nombre) || 'el local') + '. Para llevarte tu pedido ' + p.numero + ', ¿nos envías tu ubicación por aquí? 📍 (toca 📎 → Ubicación → Enviar tu ubicación actual). ¡Gracias!');
+    if (op === 'verificar' && !p.pago_verificado) return verificar(boton, p);
     if (op === 'mapa') { var u = UI.enlaceMapa(p); if (u) global.open(u, '_blank', 'noopener'); else UI.aviso('Este pedido no tiene dirección ni ubicación.', 'error'); return; }
     if (op === 'wa_moto') return UI.abrirWhatsApp(p.motorizado.celular, 'Pedido ' + p.numero + ' · ' + p.cliente_nombre + ' · ' + p.telefono + '\n' + (p.direccion || '') + (p.referencia ? ' (' + p.referencia + ')' : '') + '\nMapa: ' + UI.enlaceMapa(p) + '\nCobrar: ' + (p.forma_pago === 'efectivo' ? UI.dinero(p.total) : 'pagado por transferencia'));
     if (op === 'asignar') return asignar(boton, p);
     if (op === 'verificar') return guardar(boton, 'pedidoPagoVerificar', { id: p.id, verificado: !p.pago_verificado }, 'Listo.');
     if (op === 'ubicacion') {
-      var enlace = await UI.pedirDato({ icono: '📍', titulo: 'Ubicación de ' + p.numero, etiqueta: 'Enlace de ubicación', valor: p.ubicacion_enlace, ph: 'https://maps.app.goo.gl/…', ayuda: 'Pegue el enlace que el cliente mandó por WhatsApp.', validar: function (v) { return v && !/^https:\/\//.test(v) ? 'Pegue el enlace completo (empieza con https://).' : ''; } });
-      if (enlace !== null) guardar(boton, 'pedidoUbicacion', { id: p.id, enlace: enlace }, 'Ubicación guardada.');
+      var enlace = await UI.pedirDato({ icono: '📍', titulo: 'Ubicación de ' + p.numero, etiqueta: 'Enlace de ubicación', valor: p.ubicacion_enlace, ph: 'https://maps.app.goo.gl/…', ayuda: 'En WhatsApp: abra la ubicación que mandó el cliente → Compartir → Copiar enlace, y péguelo aquí. Reemplaza a la ubicación anterior.', max: 400, validar: function (v) { return v && !/^https:\/\//.test(v) ? 'Pegue el enlace completo (empieza con https://).' : ''; } });
+      if (enlace !== null) guardar(boton, 'pedidoUbicacion', { id: p.id, enlace: enlace }, 'Ubicación guardada: el motorizado usará esta.');
       return;
     }
     if (op === 'anular') {

@@ -90,7 +90,9 @@
       '<form id="form-negocio" class="rejilla" autocomplete="off">' +
       '<div class="tarjeta"><h3 style="margin-top:0">Marca</h3>' +
       campo('negocio_nombre', 'Nombre del negocio', c.negocio_nombre) +
-      campo('logo_url', 'Logo (enlace de la imagen)', c.logo_url, { ph: 'https://…', ayuda: 'Puede ser una imagen de Google Drive compartida o cualquier enlace público.' }) +
+      '<div class="campo"><label for="cf-logo-archivo">Logo</label><div class="item" style="padding:8px"><div class="miniatura" id="cf-logo-prev">' + (c.logo_url ? '<img src="' + UI.esc(c.logo_url) + '" alt="" referrerpolicy="no-referrer">' : '🏷️') + '</div>' +
+      '<div class="item-cuerpo"><input class="entrada" id="cf-logo-archivo" type="file" accept="image/*"><span class="ayuda">Desde el teléfono o la computadora. Sale en la app, en el menú de los clientes y en los códigos QR.</span></div></div></div>' +
+      campo('logo_url', 'O enlace del logo', c.logo_url, { ph: 'https://…', ayuda: 'Imagen de Google Drive compartida o cualquier enlace público.' }) +
       '<div class="fila-campos">' + campoColor('color_primario', 'Color principal', c.color_primario) + campoColor('color_acento', 'Color de acento', c.color_acento) + '</div>' +
       campo('mensaje_bienvenida', 'Mensaje para el cliente', c.mensaje_bienvenida) + '</div>' +
       '<div class="tarjeta"><h3 style="margin-top:0">Contacto y región</h3>' +
@@ -109,6 +111,17 @@
       '</form>';
 
     var f = UI.$('#form-negocio');
+    UI.$('#cf-logo-archivo', f).addEventListener('change', async function (e) {
+      var archivo = e.target.files[0]; if (!archivo) return;
+      try {
+        var base64 = await UI.leerFoto(archivo, 512, { cuadrado: true });
+        UI.$('#cf-logo-prev').innerHTML = '<img src="' + UI.esc(base64) + '" alt="">';
+        UI.aviso('Subiendo el logo…', '');
+        var s = await DATOS.pedir('fotoSubir', { foto: base64 }, { guardar: true });
+        UI.$('#cf-logo_url', f).value = s.url;
+        UI.aviso('Logo listo. Toque «Guardar cambios».', 'ok');
+      } catch (err) { UI.error('No se subió el logo', err.message); }
+    });
     UI.$$('input[type=color]', f).forEach(function (inp) {
       inp.addEventListener('input', function () {
         inp.nextElementSibling.textContent = inp.value;

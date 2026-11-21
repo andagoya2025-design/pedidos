@@ -18,7 +18,17 @@
       cont.innerHTML = UI.encabezado('Caja', APP.nombreLocal(APP.local)) + '<div id="cj-cuerpo">' + UI.esqueleto(3) + '</div>';
       UI.$('[data-actualizar]', cont).addEventListener('click', function (e) { UI.trabajando(e.currentTarget, cargar); });
       if (APP.local === 'TODOS') {
-        UI.$('#cj-cuerpo').innerHTML = '<div class="tarjeta" style="text-align:center"><div style="font-size:40px">💵</div><h3>Elija un local</h3><p class="subtitulo">La caja es de cada local. Elija uno arriba a la derecha.</p></div>';
+        // 3.0: botones grandes por local (antes: «elija arriba»).
+        var activos = APP.locales.filter(function (l) { return l.activo; });
+        UI.$('#cj-cuerpo').innerHTML = '<div class="tarjeta"><h3 style="margin-top:0">💵 ¿De qué local es la caja?</h3><p class="subtitulo">La caja se lleva por local. Toque uno:</p>' +
+          '<div class="tipos-entrega">' + activos.map(function (l) { return '<button class="tipo-op" type="button" data-cj-local="' + UI.esc(l.id) + '"><span class="tipo-ico">🏪</span><b>' + UI.esc(l.nombre) + '</b><small>' + UI.esc(l.direccion || 'Abrir caja') + '</small></button>'; }).join('') + '</div></div>';
+        UI.$$('[data-cj-local]').forEach(function (b) {
+          b.addEventListener('click', function () {
+            var sel = UI.$('#selector-local');
+            sel.value = b.getAttribute('data-cj-local');
+            sel.dispatchEvent(new Event('change'));
+          });
+        });
         return;
       }
       cargar();
@@ -75,10 +85,10 @@
         return '<div class="item" style="flex-wrap:wrap"><div class="item-cuerpo"><div class="item-titulo">' + UI.esc(p.nombre) + '</div><div class="item-sub">Fondo ' + d(p.fondo) + ' + cobrado ' + d(p.efectivo) + (p.pedidos.length ? ' · ' + UI.esc(p.pedidos.join(', ')) : '') + '</div></div>' +
           '<b style="font-size:18px">' + d(p.total) + '</b><button class="btn chico" type="button" data-liquidar="' + UI.esc(p.id) + '" style="flex-basis:100%">Recibir dinero</button></div>';
       }).join('') + '</div>' : '<p class="subtitulo" style="margin:0">Nadie tiene dinero pendiente. ✅</p>') + '</div>' +
-      '<div class="tarjeta"><h3 style="margin-top:0">🏦 Transferencias del día</h3>' + (est.transferencias.length ? '<div class="lista">' + est.transferencias.map(function (t) {
-        return '<div class="item"><div class="item-cuerpo"><div class="item-titulo">' + UI.esc(t.numero) + ' · ' + d(t.total) + '</div><div class="item-sub">' + UI.esc(t.cliente) + ' · ' + UI.esc(t.estado) + '</div></div>' +
+      '<div class="tarjeta"><h3 style="margin-top:0">🏦 Transferencias y Deuna del día</h3>' + (est.transferencias.length ? '<div class="lista">' + est.transferencias.map(function (t) {
+        return '<div class="item"><div class="item-cuerpo"><div class="item-titulo">' + UI.esc(t.numero) + ' · ' + d(t.total) + '</div><div class="item-sub">' + (t.forma === 'deuna' ? '📲 Deuna · ' : '🏦 ') + UI.esc(t.cliente) + ' · ' + UI.esc(t.estado) + '</div></div>' +
           (t.verificado ? '<span class="etiqueta ok">Verificada</span>' : '<button class="btn chico" type="button" data-verificar="' + UI.esc(t.id) + '">Verificar</button>') + '</div>';
-      }).join('') + '</div>' + (r.transferencias_pendientes ? '<p class="ayuda" style="margin:8px 0 0">Sin verificar: ' + d(r.transferencias_pendientes) + '</p>' : '') : '<p class="subtitulo" style="margin:0">Sin transferencias hoy.</p>') + '</div>' +
+      }).join('') + '</div>' + (r.transferencias_pendientes ? '<p class="ayuda" style="margin:8px 0 0">Sin verificar: ' + d(r.transferencias_pendientes) + '</p>' : '') : '<p class="subtitulo" style="margin:0">Sin pagos digitales hoy.</p>') + '</div>' +
       '</div>' +
       '<div class="tarjeta" style="margin-top:14px"><h3 style="margin-top:0">Movimientos</h3>' + (est.movimientos.length || est.liquidaciones.length ? '<div class="lista">' +
         est.liquidaciones.map(function (l) {
@@ -111,6 +121,16 @@
         pintar();
         return r;
       } catch (err) {
+        // 3.0: el cierre avisa antes (pedidos en camino, pagos sin verificar) y pide confirmar.
+        if (err.codigo === 'CONFIRMAR' && accionServidor === 'cajaCerrar') {
+          var seguir = await UI.confirmar('Antes de cerrar, revise', err.message, 'Cerrar de todos modos', true);
+          if (!seguir) return null;
+          datos.confirmar = true;
+          try {
+            var r2 = await DATOS.pedir(accionServidor, datos, { guardar: true });
+            est = r2; if (okTexto) UI.aviso(okTexto, 'ok'); pintar(); return r2;
+          } catch (err2) { UI.error('No se guardó', err2.message); return null; }
+        }
         UI.error('No se guardó', err.message);
         return null;
       }

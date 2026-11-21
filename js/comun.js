@@ -53,8 +53,13 @@
   };
 
   /* Google Maps: ruta al punto exacto o búsqueda por dirección. */
+  /* 3.0: manda la ÚLTIMA ubicación guardada. Si se pegó un enlace (cliente o WhatsApp)
+   * y el servidor no pudo sacar el punto, se usa el enlace tal cual. */
   UI.enlaceMapa = function (p) {
-    if (p.lat !== '' && p.lat != null && p.lng !== '' && p.lng != null) return 'https://www.google.com/maps/dir/?api=1&destination=' + p.lat + ',' + p.lng;
+    var hayPunto = p.lat !== '' && p.lat != null && p.lng !== '' && p.lng != null;
+    var fuente = String(p.ubicacion_fuente || '');
+    if (p.ubicacion_enlace && (fuente === 'whatsapp' || fuente === 'enlace') && !hayPunto) return p.ubicacion_enlace;
+    if (hayPunto) return 'https://www.google.com/maps/dir/?api=1&destination=' + p.lat + ',' + p.lng;
     if (p.ubicacion_enlace) return p.ubicacion_enlace;
     if (p.direccion) return 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(p.direccion);
     return '';
@@ -70,8 +75,51 @@
     });
   };
 
-  /* Foto del teléfono -> JPG liviano (máx. 1280 px) en base64. */
-  UI.leerFoto = function (archivo, max) {
+  /* De dónde salió la ubicación del pedido (se muestra en el panel). */
+  UI.fuenteUbicacion = function (p) {
+    var f = String(p.ubicacion_fuente || '');
+    if (f === 'whatsapp') return '📍 Enlace de WhatsApp';
+    if (f === 'enlace') return '📍 Enlace pegado por el cliente';
+    if (f === 'gps' || (p.lat !== '' && p.lat != null)) return '📍 GPS del cliente';
+    return p.direccion ? '📍 Solo dirección escrita' : '⚠️ Sin ubicación';
+  };
+
+  /* Tipo de entrega (pedidos viejos: con zona = domicilio). */
+  UI.tipoEntrega = function (p) { return p.tipo_entrega || (p.zona_id ? 'domicilio' : 'retiro'); };
+  UI.TIPOS = { domicilio: { icono: '🛵', nombre: 'Domicilio' }, retiro: { icono: '🏪', nombre: 'Retiro' }, mesa: { icono: '🍽️', nombre: 'Mesa' } };
+  UI.etiquetaTipo = function (p) {
+    var t = UI.tipoEntrega(p), d = UI.TIPOS[t] || UI.TIPOS.retiro;
+    return '<span class="chip-tipo tipo-' + t + '">' + d.icono + ' ' + (t === 'mesa' && p.mesa ? 'Mesa ' + UI.esc(p.mesa) : d.nombre) + '</span>' +
+      (p.hora_llegada ? '<span class="chip-tipo tipo-hora">⏰ ' + UI.esc(UI.hora(p.hora_llegada)) + '</span>' : '');
+  };
+  UI.NOMBRE_PAGO = { efectivo: '💵 Efectivo', transferencia: '🏦 Transferencia', deuna: '📲 Deuna' };
+  UI.esDigital = function (f) { return f === 'transferencia' || f === 'deuna'; };
+
+  /* Etiquetas de los platos. */
+  UI.ETIQUETAS = {
+    mas_vendido: '⭐ Más vendido', nuevo: '✨ Nuevo', picante: '🌶️ Picante', vegetariano: '🌱 Vegetariano', para_compartir: '👨‍👩‍👧 Para compartir', promo: '🏷️ Promo'
+  };
+  UI.chipsEtiquetas = function (txt) {
+    return String(txt || '').split(',').filter(function (k) { return UI.ETIQUETAS[k]; }).map(function (k) {
+      return '<span class="chip-etiqueta et-' + k + '">' + UI.ETIQUETAS[k] + '</span>';
+    }).join('');
+  };
+
+  /* Identificador anónimo de este teléfono (frenos contra abusos; no es dato personal). */
+  UI.dispId = function () {
+    var M = global.APP_MEMORIA, id = M && M.leer('disp_id');
+    if (!id) {
+      var a = new Uint8Array(10); (global.crypto || global.msCrypto).getRandomValues(a);
+      id = 'd' + Array.prototype.map.call(a, function (b) { return ('0' + b.toString(16)).slice(-2); }).join('');
+      if (M) M.guardar('disp_id', id);
+    }
+    return id;
+  };
+
+  /* Foto del teléfono -> JPG liviano (máx. 1280 px) en base64.
+   * 3.0: { cuadrado: true } recorta al centro (fotos de platos parejas). */
+  UI.leerFoto = function (archivo, max, op) {
+    op = op || {};
     max = max || 1280;
     return new Promise(function (resolver, rechazar) {
       if (!archivo) return resolver('');
@@ -82,10 +130,16 @@
         var img = new Image();
         img.onerror = function () { rechazar(new Error('No se pudo abrir la foto.')); };
         img.onload = function () {
-          var esc = Math.min(1, max / Math.max(img.width, img.height));
           var c = document.createElement('canvas');
-          c.width = Math.round(img.width * esc); c.height = Math.round(img.height * esc);
-          c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+          if (op.cuadrado) {
+            var lado = Math.min(img.width, img.height), dest = Math.min(max, lado);
+            c.width = dest; c.height = dest;
+            c.getContext('2d').drawImage(img, (img.width - lado) / 2, (img.height - lado) / 2, lado, lado, 0, 0, dest, dest);
+          } else {
+            var esc = Math.min(1, max / Math.max(img.width, img.height));
+            c.width = Math.round(img.width * esc); c.height = Math.round(img.height * esc);
+            c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+          }
           resolver(c.toDataURL('image/jpeg', 0.72));
         };
         img.src = lector.result;

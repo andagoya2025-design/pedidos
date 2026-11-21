@@ -38,10 +38,12 @@
       ].filter(function (m) { return m[3].indexOf(s.rol) >= 0; });
 
       var lic = APP.publico.licencia || {};
+      if (s.rol === 'dueno' && APP.guiaInicio) setTimeout(function () { APP.guiaInicio(UI.$('#guia-inicio')); }, 0);
       cont.innerHTML =
         (lic.estado === 'suspendida' ? '<div class="banda error">⛔ <span>La licencia está suspendida' + (lic.vencida ? ' (venció el ' + UI.esc(lic.vence) + ')' : '') + '. No se recibirán pedidos nuevos; sus datos están a salvo.</span></div>' : '') +
         '<div class="tarjeta bienvenida"><h2>Hola, ' + UI.esc(s.nombre.split(' ')[0]) + ' 👋</h2>' +
         '<p>' + UI.esc(APP.nombreRol(s.rol)) + ' · ' + UI.esc(APP.nombreLocal(APP.local)) + '</p></div>' +
+        (s.rol === 'dueno' ? '<div id="guia-inicio"></div>' : '') +
         '<h3 style="margin:22px 0 10px">Módulos</h3>' +
         '<div class="rejilla r3">' + modulos.map(function (m) {
           var lista = !!APP.vistas[m[4]];
@@ -143,7 +145,13 @@
     }).join('');
   }
 
+  APP.parametros = {};
   APP.ir = function (clave) {
+    // 3.0: «#pedidos?ver=PED-0005» (QR del pedido) → vista + parámetros.
+    var partes = String(clave || '').split('?');
+    clave = partes[0];
+    APP.parametros = {};
+    if (partes[1]) new URLSearchParams(partes[1]).forEach(function (v, k) { APP.parametros[k] = v; });
     var permitidas = vistasPermitidas();
     if (permitidas.indexOf(clave) < 0) clave = 'inicio';
     APP.vistaActual = clave;
@@ -173,6 +181,7 @@
     var f = ev.target, boton = f.querySelector('button[type=submit]');
     var datos = UI.leerFormulario(f);
     if (!datos.usuario || !datos.clave) return UI.aviso('Escriba su usuario y su clave.', 'error');
+    if (UI.dispId) datos.disp_id = UI.dispId(); // 3.0: el bloqueo por intentos es por teléfono
     await UI.trabajando(boton, async function () {
       try {
         var r = await DATOS.pedir('login', datos, { guardar: true });
