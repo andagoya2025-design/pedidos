@@ -13,7 +13,7 @@
   'use strict';
 
   /* ===== ÚNICA LÍNEA A CONFIGURAR EN CADA CLIENTE ===== */
-  var URL_SCRIPT = '';
+  var URL_SCRIPT = 'https://script.google.com/macros/s/AKfycbzI4P-BPCPBWjmITTQ9eVHcK26odpjLHYpCMNCRphleF6PFpPGu3sNbtL3dn0Uo-RM/exec';
   /* ===================================================== */
 
   function valida(url) {
