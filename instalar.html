@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#1F1B16">
+  <meta name="robots" content="noindex">
+  <title>Instalación del sistema</title>
+  <link rel="icon" href="iconos/icono-192.png" type="image/png">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <main class="ingreso">
+    <div class="ingreso-caja" style="max-width:560px">
+      <div class="marca-logo" aria-hidden="true">⚙️</div>
+      <h1>Instalación del sistema</h1>
+      <p class="subtitulo">Se hace una sola vez por negocio. Revisa cada paso y crea las hojas solas.</p>
+
+      <section class="tarjeta" style="margin-bottom:14px">
+        <h2 style="margin:0 0 4px;font-size:18px">Diagnóstico</h2>
+        <p class="subtitulo" style="text-align:left;margin-bottom:12px">Cada punto cambia de «pendiente» a «correcto».</p>
+        <div class="estado-lista" id="diagnostico"></div>
+        <div class="acciones"><button class="btn secundario" id="btn-verificar" type="button">↻ Verificar de nuevo</button></div>
+      </section>
+
+      <form class="tarjeta" id="form-instalar" autocomplete="off" hidden>
+        <h2 style="margin:0 0 12px;font-size:18px">Datos del negocio y del dueño</h2>
+        <div class="campo"><label for="in-negocio">Nombre del negocio</label><input class="entrada" id="in-negocio" name="negocio_nombre" maxlength="80" placeholder="Ej. Pollos El Norte"></div>
+        <div class="campo"><label for="in-nombre">Nombre del dueño</label><input class="entrada" id="in-nombre" name="nombre" maxlength="80"></div>
+        <div class="campo"><label for="in-usuario">Usuario del dueño</label><input class="entrada" id="in-usuario" name="usuario" autocapitalize="none" spellcheck="false" maxlength="30"><span class="ayuda">3 a 30 letras o números, sin espacios.</span></div>
+        <div class="fila-campos">
+          <div class="campo"><label for="in-clave">Clave</label><input class="entrada" id="in-clave" name="clave" type="password" autocomplete="new-password" minlength="6"></div>
+          <div class="campo"><label for="in-clave2">Repetir clave</label><input class="entrada" id="in-clave2" name="clave2" type="password" autocomplete="new-password" minlength="6"></div>
+        </div>
+        <p class="ayuda" style="margin-top:-4px">Se crearán 18 hojas con su formato, 5 locales (Local 1 a Local 5, se renombran después) y el usuario dueño. La licencia queda activa por 1 año.</p>
+        <button class="btn bloque" type="submit">Instalar ahora</button>
+      </form>
+    </div>
+  </main>
+  <script src="js/config.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/datos.js"></script>
+  <script src="js/instalar.js"></script>
+</body>
+</html>
