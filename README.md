@@ -7,24 +7,33 @@ Una copia por cliente: cada negocio tiene su propia hoja de Google y su propio s
 
 | Fase | Contenido | Estado |
 | --- | --- | --- |
-| 1 | Base instalable, instalador, ingreso por rol, locales, usuarios, configuración, licencia, bitácora | Lista para probar |
-| 2 | Menú, formulario de pedido con WhatsApp y ubicación, clientes | Pendiente |
-| 3 | Panel de pedidos | Pendiente |
-| 4 | Motorizados y «Mis entregas» | Pendiente |
-| 5–7 | Reportes, inventario, caja | Pendiente |
+| 1 | Base instalable, instalador, ingreso por rol, locales, usuarios, configuración, licencia, bitácora | Lista |
+| 2 | Menú (platos, fotos, extras, agotado, zonas, cupones), pedido del cliente con WhatsApp y ubicación, clientes | Lista (versión 2.0.0) |
+| 3 | Panel de pedidos por estados, atrasados en rojo, asignar motorizado, avisar al cliente, anular con motivo | Lista (versión 2.0.0) |
+| 4 | Motorizados (cédula validada) y «Mis entregas» (Salí / Entregado con hora, ubicación y foto) | Lista (versión 2.0.0) |
+| 5 | Reportes: ventas por local, platos, horas y días pico, tiempos, motorizados, diferencias de caja | Lista (versión 2.0.0) |
+| 6 | Inventario: compras, salidas, conteo, traspasos, mínimos; receta que descuenta al vender | Lista (versión 2.0.0) |
+| 7 | Caja por turno: fondo, salidas, liquidación del motorizado, transferencias, cierre y resumen por WhatsApp | Lista (versión 2.0.0) |
+
+**Enlace para que los clientes pidan:** `pedir.html` (o `pedir.html?local=ID` para un local fijo; el dueño lo copia en Menú → Enlace y ajustes).
 
 ## Archivos
 
 | Archivo | Para qué sirve |
 | --- | --- |
-| `index.html` | La aplicación |
+| `index.html` | La aplicación (dueño, cajero, motorizado) |
+| `pedir.html`, `js/pedir.js` | Pantalla pública para que el cliente haga su pedido |
 | `instalar.html`, `js/instalar.js` | Instalador con diagnóstico (se usa una vez por negocio) |
 | `js/config.js` | **Única línea a cambiar por cliente**: la dirección del script |
 | `js/datos.js` | Única puerta a la base de datos (cambiar aquí si se pasa a Firebase/Supabase) |
-| `js/ui.js` | Ventanas premium, avisos, formatos |
+| `js/ui.js`, `js/comun.js` | Ventanas premium, avisos, formatos, WhatsApp, mapa, fotos |
 | `js/app.js` | Arranque, ingreso, locales, navegación |
 | `js/configuracion.js` | Configuración del negocio |
-| `css/app.css` | Diseño (colores y medidas en un solo lugar) |
+| `js/pedidos.js` | Panel de pedidos |
+| `js/menu.js` | Menú, categorías, zonas, cupones, clientes, enlace y ajustes |
+| `js/motorizados.js` | Fichas de motorizados y «Mis entregas» |
+| `js/caja.js`, `js/inventario.js`, `js/reportes.js` | Caja, inventario y reportes |
+| `css/app.css`, `css/modulos.css` | Diseño (colores y medidas en un solo lugar) |
 | `sw.js` | Ayudante de la app: abre rápido y se actualiza solo (subir `VERSION` en cada cambio) |
 | `manifest.json`, `iconos/` | Instalación en el teléfono |
 | `servidor/Codigo.gs` | Script del servidor (se pega en la hoja del cliente) |

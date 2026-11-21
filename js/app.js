@@ -28,13 +28,13 @@
     pintar: function (cont) {
       var s = APP.sesion;
       var modulos = [
-        ['🧾', 'Pedidos', 'Recibir, preparar y despachar', ['dueno', 'cajero']],
-        ['🍔', 'Menú', 'Platos, precios, fotos y extras', ['dueno']],
-        ['🛵', 'Motorizados', 'Fichas, entregas y efectivo', ['dueno']],
-        ['📍', 'Mis entregas', 'Tus pedidos asignados', ['motorizado']],
-        ['💵', 'Caja', 'Apertura, cobros y cierre', ['dueno', 'cajero']],
-        ['📦', 'Inventario', 'Insumos, compras y mínimos', ['dueno', 'cajero']],
-        ['📊', 'Reportes', 'Ventas, platos y horas pico', ['dueno']]
+        ['🧾', 'Pedidos', 'Recibir, preparar y despachar', ['dueno', 'cajero'], 'pedidos'],
+        ['🍔', 'Menú', 'Platos, precios, fotos y extras', ['dueno', 'cajero'], 'menu'],
+        ['🛵', 'Motorizados', 'Fichas, entregas y efectivo', ['dueno'], 'motorizados'],
+        ['📍', 'Mis entregas', 'Tus pedidos asignados', ['motorizado'], 'entregas'],
+        ['💵', 'Caja', 'Apertura, cobros y cierre', ['dueno', 'cajero'], 'caja'],
+        ['📦', 'Inventario', 'Insumos, compras y mínimos', ['dueno', 'cajero'], 'inventario'],
+        ['📊', 'Reportes', 'Ventas, platos y horas pico', ['dueno'], 'reportes']
       ].filter(function (m) { return m[3].indexOf(s.rol) >= 0; });
 
       var lic = APP.publico.licencia || {};
@@ -44,10 +44,15 @@
         '<p>' + UI.esc(APP.nombreRol(s.rol)) + ' · ' + UI.esc(APP.nombreLocal(APP.local)) + '</p></div>' +
         '<h3 style="margin:22px 0 10px">Módulos</h3>' +
         '<div class="rejilla r3">' + modulos.map(function (m) {
-          return '<div class="tarjeta modulo"><div class="modulo-ico" aria-hidden="true">' + m[0] + '</div>' +
+          var lista = !!APP.vistas[m[4]];
+          return '<div class="tarjeta modulo' + (lista ? ' enlace' : '') + '"' + (lista ? ' role="button" tabindex="0" data-ir="' + m[4] + '"' : '') + '><div class="modulo-ico" aria-hidden="true">' + m[0] + '</div>' +
             '<div style="flex:1;min-width:0"><h3>' + UI.esc(m[1]) + '</h3><p>' + UI.esc(m[2]) + '</p></div>' +
-            '<span class="etiqueta">Próximamente</span></div>';
+            (lista ? '<span aria-hidden="true" style="font-size:22px;color:var(--texto-2)">›</span>' : '<span class="etiqueta">Próximamente</span>') + '</div>';
         }).join('') + '</div>';
+      UI.$$('[data-ir]', cont).forEach(function (el) {
+        el.addEventListener('click', function () { APP.ir(el.getAttribute('data-ir')); });
+        el.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); APP.ir(el.getAttribute('data-ir')); } });
+      });
     }
   };
 

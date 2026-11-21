@@ -8,20 +8,30 @@
  * - Nunca guarda datos del negocio: los pedidos van siempre al servidor.
  * ============================================================
  */
-var VERSION = 'app-1.0.1';
+var VERSION = 'app-2.0.0';
 
 var ARCHIVOS = [
   './',
   'index.html',
   'instalar.html',
+  'pedir.html',
   'manifest.json',
   'css/app.css',
+  'css/modulos.css',
   'js/config.js',
   'js/ui.js',
   'js/datos.js',
   'js/app.js',
   'js/configuracion.js',
   'js/instalar.js',
+  'js/comun.js',
+  'js/pedir.js',
+  'js/pedidos.js',
+  'js/menu.js',
+  'js/motorizados.js',
+  'js/caja.js',
+  'js/inventario.js',
+  'js/reportes.js',
   'iconos/icono-180.png',
   'iconos/icono-192.png',
   'iconos/icono-512.png',
