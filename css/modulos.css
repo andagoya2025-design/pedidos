@@ -503,3 +503,6 @@ details.otras-fechas summary::-webkit-details-marker { display: none; }
 details.otras-fechas summary span { font-weight: 600; color: var(--texto-2); }
 details.otras-fechas[open] summary { margin-bottom: 10px; }
 .enlace-botones .btn { white-space: nowrap; font-size: 13px; padding-left: 8px; padding-right: 8px; min-width: 0; }
+.enlace-botones .btn { padding-left: 10px; padding-right: 10px; }
+.enlace-item .enlace-botones .btn:first-child { flex: 1.45 1 0; }
+.enlace-item .enlace-botones .btn { padding-left: 6px; padding-right: 6px; gap: 4px; }

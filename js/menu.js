@@ -443,7 +443,7 @@
       '<div class="tarjeta" style="margin-bottom:14px"><h3 style="margin-top:0">🔗 Tu enlace para pedir</h3>' +
       '<p class="subtitulo">Es el mismo para todos tus clientes y abre tu menú. Compártelo por WhatsApp o Instagram, o imprime su QR para fundas, volantes y el mostrador.</p>' +
       '<div class="lista">' + enlaces.map(function (e, i) {
-        return '<div class="item enlace-item"><div class="avatar" aria-hidden="true">' + (i ? '📍' : '🌎') + '</div><div class="item-cuerpo"><div class="item-titulo">' + UI.esc(e[0]) + '</div><div class="item-sub" style="overflow-wrap:anywhere">' + UI.esc(e[2].replace(/^https:\/\//, '')) + '</div></div>' +
+        return '<div class="item enlace-item"><div class="avatar" aria-hidden="true">' + (i ? '📍' : '🌎') + '</div><div class="item-cuerpo"><div class="item-titulo">' + UI.esc(e[0]) + '</div><div class="item-sub">' + (i ? 'Abre directo el menú de este local' : 'El cliente elige el local') + '</div></div>' +
           '<div class="enlace-botones"><button class="btn chico" type="button" data-compartir="' + i + '">📤 Compartir</button><button class="btn borde chico" type="button" data-copiar="' + i + '">📋 Copiar</button><button class="btn borde chico" type="button" data-qr="' + i + '">📱 QR</button></div></div>';
       }).join('') + '</div></div>' +
       '<details class="tarjeta plegable" style="margin-bottom:14px"><summary><h3>📊 Medir de dónde llegan <small>(opcional)</small></h3></summary>' +
