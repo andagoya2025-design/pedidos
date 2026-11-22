@@ -65,10 +65,20 @@
       datos = await DATOS.pedir('informeMotorizados', { desde: UI.$('#im-desde').value, hasta: UI.$('#im-hasta').value, local_id: APP.local });
       rango = { desde: datos.desde, hasta: datos.hasta };
       if (UI.$('#im-desde')) { UI.$('#im-desde').value = datos.desde; UI.$('#im-hasta').value = datos.hasta; }
+      marcarPeriodo();
       pintar();
     } catch (err) {
       if (UI.$('#im-cuerpo')) UI.$('#im-cuerpo').innerHTML = '<div class="banda error">⚠️ <span>' + UI.esc(err.message) + '</span></div>';
     }
+  }
+
+  /* Marca el botón (Hoy, Ayer, 7 días…) que coincide con las fechas elegidas. */
+  function marcarPeriodo() {
+    var hoy = datos.hoy || UI.hoy();
+    UI.$$('#im-rapidos [data-r]').forEach(function (b) {
+      var r = rapido(b.getAttribute('data-r'), hoy);
+      b.setAttribute('aria-selected', String(r[0] === datos.desde && r[1] === datos.hasta));
+    });
   }
 
   function totales(l) {
@@ -83,7 +93,7 @@
     if (!l.length) { c.innerHTML = UI.vacio('🏍️', 'No hay entregas de motorizados en este período.'); return; }
     var t = totales(l), pago = t.gano + t.bono;
     c.innerHTML =
-      '<div class="resumen-mini">' +
+      '<div class="resumen-mini rk-resumen">' +
       '<div><b>' + t.entregas + '</b><span>entregas</span></div>' +
       '<div><b>' + UI.esc(UI.dinero(t.efectivo)) + '</b><span>efectivo cobrado</span></div>' +
       '<div class="' + (t.diferencia < 0 ? 'mal' : '') + '"><b>' + UI.esc(UI.dinero(t.diferencia)) + '</b><span>diferencia en caja</span></div>' +
@@ -92,25 +102,38 @@
         : '<div class="banda">🎯 <span>Puede poner una meta diaria y un bono en Menú → «🔗 Enlace y ajustes» → Motorizados y entrega.</span></div>') +
       '<h3 style="margin:14px 0 8px">🏆 Ranking</h3><div class="lista">' + l.map(function (m, i) {
         var s = SEMAFORO[m.semaforo] || SEMAFORO.verde, a = m.anterior || {};
-        return '<button class="tarjeta ranking item-boton" type="button" data-id="' + UI.esc(m.id) + '">' +
-          '<div class="ranking-pos">' + (i + 1) + '</div><div class="item-cuerpo">' +
-          '<div class="item-titulo">' + s.i + ' ' + UI.esc(m.nombre) + (m.placa ? ' <small>' + UI.esc(m.placa) + '</small>' : '') + '</div>' +
-          '<div class="ranking-datos">' +
-          '<span>📦 <b>' + m.entregas + '</b>' + flecha(m.entregas, a.entregas, true) + '</span>' +
-          '<span>⏱️ ' + v(m.minutos, ' min') + flecha(m.minutos, a.minutos, false) + '</span>' +
-          '<span>🎯 ' + v(m.puntualidad, '%') + '</span>' +
-          '<span>⭐ ' + v(m.estrellas) + flecha(m.estrellas, a.estrellas, true) + '</span>' +
-          '<span>💵 ' + UI.esc(UI.dinero(m.efectivo)) + '</span>' +
-          (m.diferencia ? '<span class="' + (m.diferencia < 0 ? 'mal' : '') + '">Δ ' + UI.esc(UI.dinero(m.diferencia)) + '</span>' : '') +
-          '<span>🕒 ' + v(m.horas, ' h') + '</span><span>🛣️ ~' + v(m.km, ' km') + '</span>' +
-          (m.gano !== null ? '<span>💰 ' + UI.esc(UI.dinero((m.gano || 0) + (m.bono || 0))) + '</span>' : '') +
-          (m.dias_meta !== null && m.dias_meta !== undefined ? '<span>🎯 meta ' + m.dias_meta + ' día(s)</span>' : '') +
-          '</div></div><span aria-hidden="true">›</span></button>';
+        var dato = function (etq, val, extra, clase) {
+          return '<div class="rk-dato' + (clase ? ' ' + clase : '') + '"><span>' + etq + '</span><b>' + val + (extra || '') + '</b></div>';
+        };
+        var celdas = [dato('Entregas', m.entregas, flecha(m.entregas, a.entregas, true))];
+        if (m.minutos !== null && m.minutos !== undefined && m.minutos !== '') celdas.push(dato('Tiempo promedio', m.minutos + ' min', flecha(m.minutos, a.minutos, false)));
+        if (m.puntualidad !== null && m.puntualidad !== undefined && m.puntualidad !== '') celdas.push(dato('Puntualidad', m.puntualidad + ' %'));
+        if (m.estrellas !== null && m.estrellas !== undefined && m.estrellas !== '') celdas.push(dato('Calificación', m.estrellas + ' ⭐', flecha(m.estrellas, a.estrellas, true)));
+        celdas.push(dato('Cobrado', UI.esc(UI.dinero(m.efectivo))));
+        if (m.diferencia) celdas.push(dato('Diferencia en caja', UI.esc(UI.dinero(m.diferencia)), '', m.diferencia < 0 ? 'mal' : ''));
+        if (m.horas) celdas.push(dato('Horas de turno', m.horas + ' h'));
+        if (m.km) celdas.push(dato('Recorrido', '~' + m.km + ' km'));
+        if (m.gano !== null && m.gano !== undefined) celdas.push(dato('A pagarle', UI.esc(UI.dinero((m.gano || 0) + (m.bono || 0)))));
+        if (m.dias_meta !== null && m.dias_meta !== undefined) celdas.push(dato('Días con meta', m.dias_meta));
+        return '<button class="tarjeta rk-tarjeta" type="button" data-id="' + UI.esc(m.id) + '">' +
+          '<div class="rk-cabeza"><div class="ranking-pos rk-' + UI.esc(m.semaforo || 'verde') + '">' + (i + 1) + '</div>' +
+          '<div class="item-cuerpo"><div class="item-titulo">' + UI.esc(m.nombre) + '</div>' +
+          '<div class="item-sub">' + (m.placa ? 'Placa ' + UI.esc(m.placa) + ' · ' : '') + s.i + ' ' + s.t + '</div></div>' +
+          '<span class="rk-flecha" aria-hidden="true">›</span></div>' +
+          '<div class="rk-datos">' + celdas.join('') + '</div></button>';
       }).join('') + '</div>' +
-      '<p class="ayuda">🟢 puntual y bien calificado · 🟡 revisar (puntualidad bajo 85 %, menos de 4,3 ⭐ o anulados en camino) · 🔴 atención (falta dinero en caja, 2 o más malas notas o puntualidad bajo 60 %). ▲▼ comparan con el período anterior (' + UI.esc(datos.anterior.desde) + ' a ' + UI.esc(datos.anterior.hasta) + '). Km aproximados según el GPS.</p>' +
+      '<p class="ayuda rk-ayuda">🟢 Bien · 🟡 Revisar · 🔴 Atención. <button class="enlace" type="button" id="im-colores">¿Qué significa?</button></p>' +
       '<button class="btn secundario bloque" type="button" id="im-wa">💬 Enviarme el resumen por WhatsApp</button>';
     UI.$$('[data-id]', c).forEach(function (b) { b.addEventListener('click', function () { detalle(b.getAttribute('data-id')); }); });
     UI.$('#im-wa', c).addEventListener('click', resumenWhatsApp);
+    UI.$('#im-colores', c).addEventListener('click', function () {
+      UI.ventana({ icono: '🚦', titulo: '¿Qué significan los colores?',
+        html: '<div class="lista rk-leyenda">' +
+          '<div class="item"><div class="item-cuerpo"><div class="item-titulo">🟢 Bien</div><div class="item-sub">Llega a tiempo y los clientes lo califican bien.</div></div></div>' +
+          '<div class="item"><div class="item-cuerpo"><div class="item-titulo">🟡 Revisar</div><div class="item-sub">Llega a tiempo menos del 85 % de las veces, tiene menos de 4,3 ⭐ o le anularon pedidos en camino.</div></div></div>' +
+          '<div class="item"><div class="item-cuerpo"><div class="item-titulo">🔴 Atención</div><div class="item-sub">Falta dinero en su caja, tiene 2 o más malas notas o llega a tiempo menos del 60 % de las veces.</div></div></div>' +
+          '</div><p class="ayuda">▲▼ comparan con el período anterior (' + UI.esc(datos.anterior.desde) + ' a ' + UI.esc(datos.anterior.hasta) + '). Los km son aproximados, según el GPS.</p>' });
+    });
   }
 
   async function detalle(id) {

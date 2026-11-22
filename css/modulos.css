@@ -423,3 +423,26 @@ img.ilustracion { width: 100%; height: 100%; object-fit: cover; }
 .privacidad h1 { margin: 14px 0 4px; }
 .privacidad h2 { font-size: 17px; margin: 16px 0 4px; }
 .privacidad .tarjeta { margin-top: 14px; display: block; }
+
+/* Informe de motorizados: ranking ordenado (3.1.1) */
+.rk-tarjeta { display: block; width: 100%; text-align: left; padding: 14px; }
+.rk-cabeza { display: flex; align-items: center; gap: 12px; }
+.rk-cabeza .item-titulo { font-size: 16px; }
+.rk-flecha { font-size: 22px; color: var(--texto-2); }
+.ranking-pos.rk-verde { background: #e3f4e8; color: #1e6b3a; }
+.ranking-pos.rk-amarillo { background: #fdf3d6; color: #7a5800; }
+.ranking-pos.rk-rojo { background: #fde4e4; color: #9b1c1c; }
+.rk-datos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+.rk-dato { background: var(--superficie-2); border-radius: var(--radio); padding: 8px 10px; min-width: 0; }
+.rk-dato span { display: block; font-size: 12px; color: var(--texto-2); line-height: 1.3; }
+.rk-dato b { display: block; font-size: 17px; line-height: 1.4; color: var(--texto); }
+.rk-dato.mal b { color: var(--error); }
+.rk-dato small { font-size: 12px; margin-left: 4px; }
+.rk-ayuda { margin: 12px 0; font-size: 13px; }
+button.enlace { background: none; border: 0; padding: 4px 2px; color: var(--primario); font: inherit; font-weight: 700; text-decoration: underline; cursor: pointer; }
+.rk-leyenda .item { min-height: 0; padding: 10px 0; }
+.rk-resumen { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.rk-leyenda .item { padding: 10px 12px; }
+.rk-leyenda + .ayuda { margin-top: 10px; }
+button.enlace { color: var(--texto); }
+#im-rapidos .pestana[aria-selected="true"] { background: var(--acento); border-color: var(--acento); color: #fff; }
