@@ -123,6 +123,7 @@
       var botones = op.botones || [{ texto: 'Entendido', valor: true }];
       velo.innerHTML =
         '<div class="ventana" role="dialog" aria-modal="true" aria-labelledby="vt-titulo">' +
+        (op.sinCerrar || (op.cerrable === false && !op.antesCerrar) ? '' : '<button type="button" class="ventana-x" data-x aria-label="Cerrar">✕</button>') + // 3.1.5: siempre hay cómo salir
         (op.icono ? '<div class="ventana-ico" aria-hidden="true">' + UI.esc(op.icono) + '</div>' : '') +
         '<h2 id="vt-titulo">' + UI.esc(op.titulo || '') + '</h2>' +
         (op.texto ? '<p>' + UI.esc(op.texto) + '</p>' : '') +
@@ -132,28 +133,43 @@
         }).join('') + '</div></div>';
 
       var anterior = document.activeElement;
+      /* 3.1.5: en ventanas de edición (con formulario y botón de guardar), salir sin guardar pide un segundo toque */
+      var editable = !op.antesCerrar && botones.some(function (b) { return b.antes; });
+      var sucio = false, avisado = false;
+      function puedeSalir() {
+        if (op.antesCerrar) return op.antesCerrar(velo) !== false;
+        if (editable && sucio && !avisado) { avisado = true; UI.aviso('Tiene cambios sin guardar. Toque «Guardar», o vuelva a tocar ✕ / «Cancelar» para salir sin guardar.', 'error'); return false; }
+        return true;
+      }
       function cerrar(valor) {
         document.removeEventListener('keydown', teclado);
         velo.remove();
         if (anterior && anterior.focus) anterior.focus();
         resolver(valor);
       }
-      function teclado(ev) { if (ev.key === 'Escape' && op.cerrable !== false) cerrar(null); }
+      function teclado(ev) { if (ev.key === 'Escape' && op.cerrable !== false && puedeSalir()) cerrar(null); }
 
       velo.addEventListener('click', function (ev) {
+        if (ev.target.closest('[data-x]')) { // 3.1.5: la ✕ avisa antes si hay cambios sin guardar
+          if (!puedeSalir()) return;
+          return cerrar(null);
+        }
         var b = ev.target.closest('[data-i]');
         if (b) {
           var def = botones[Number(b.getAttribute('data-i'))];
+          if (!def.antes && (def.valor === false || def.valor === null) && editable && !puedeSalir()) return; // «Cancelar»
           if (def.antes) {
             var r = def.antes(velo);
             if (r === false) return; // validación del formulario falló: la ventana sigue abierta
           }
           cerrar(def.valor);
-        } else if (ev.target === velo && op.cerrable !== false) {
-          cerrar(null);
+        } else if (ev.target === velo && op.cerrable !== false && !editable) {
+          cerrar(null); // 3.1.5: las ventanas de edición no se cierran por un toque accidental afuera
         }
       });
       document.addEventListener('keydown', teclado);
+      velo.addEventListener('input', function (ev) { if (ev.target.closest('input, select, textarea')) { sucio = true; avisado = false; } });
+      velo.addEventListener('change', function (ev) { if (ev.target.closest('input, select, textarea') && ev.target.type !== 'file') { sucio = true; avisado = false; } });
       document.body.appendChild(velo);
       var foco = velo.querySelector('input, select, textarea') || velo.querySelector('.btn');
       if (foco) setTimeout(function () { foco.focus(); }, 30);

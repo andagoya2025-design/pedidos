@@ -63,18 +63,23 @@
   /* 3.1.3: motorizado que ya existe → la foto queda guardada en su ficha al instante.
      Motorizado nuevo → la foto se sube y se guarda al tocar «Guardar» (se avisa). */
   var fotoCambio = false;
-  function conectarFoto(motoId, alCambiar) {
-    return function (v) {
+  function conectarFoto(motoId, alCambiar, estado) {
+    return function (v, cerrar) {
       UI.$('#mx-foto-archivo', v).addEventListener('change', async function (e) {
         var archivo = e.target.files[0]; if (!archivo) return;
         var est = UI.$('#mx-foto-estado', v);
         try {
           est.textContent = 'Subiendo foto…';
-          var base64 = await UI.leerFoto(archivo, 600, { cuadrado: true });
+          var base64 = await UI.leerFoto(archivo, 900); // 3.1.5: foto completa (sin recorte cuadrado)
           var r = motoId ? await DATOS.pedir('motorizadoFoto', { id: motoId, foto: base64 }, { guardar: true })
             : await DATOS.pedir('fotoSubir', { foto: base64, tipo: 'motorizado' }, { guardar: true });
           UI.$('#mx-foto', v).value = r.url;
-          if (motoId) { fotoCambio = true; est.innerHTML = '✅ <b>Foto guardada en la ficha.</b> Ya la ven los clientes.'; UI.aviso('Foto guardada.', 'ok'); }
+          if (motoId) {
+            fotoCambio = true; est.innerHTML = '✅ <b>Foto guardada en la ficha.</b> Ya la ven los clientes.'; UI.aviso('✅ Foto guardada en la ficha.', 'ok');
+            /* 3.1.5: guardado = se cierra la ventana (si no hay otros cambios pendientes de guardar) */
+            if (!(estado && estado.cambios) && cerrar) { setTimeout(function () { cerrar(false); }, 600); return; }
+            var bc = UI.$('.acciones [data-i="0"]', v); if (bc) bc.textContent = 'Cerrar';
+          }
           else { est.innerHTML = '✅ Foto lista. <b>Toque «Guardar» para terminar.</b>'; if (alCambiar) alCambiar(); }
         } catch (err) { est.innerHTML = '⚠️ <b>No se guardó la foto.</b> ' + UI.esc(err.message); UI.aviso('No se guardó la foto. Intente de nuevo.', 'error'); }
       });
@@ -157,7 +162,8 @@
         libres.map(function (u) { return '<option value="' + UI.esc(u.id) + '"' + (u.id === m.usuario_id ? ' selected' : '') + '>@' + UI.esc(u.usuario) + ' · ' + UI.esc(u.nombre) + '</option>'; }).join('') +
         '</select><span class="ayuda">' + (libres.length ? 'Sin esto, el motorizado ve «Su usuario aún no está unido a una ficha».' : '⚠️ No hay usuarios de rol «Motorizado» libres: créelo primero en Configuración → Usuarios.') + '</span></div>' +
         '<label class="interruptor"><input type="checkbox" name="activo"' + (m.activo ? ' checked' : '') + '> Activo</label></form>',
-      alAbrir: conectarFoto(m.id, function () { estado.cambios = true; estado.avisado = false; }),
+      alAbrir: conectarFoto(m.id, function () { estado.cambios = true; estado.avisado = false; }, estado),
+      antesCerrar: function () { return cancelarConAviso(estado).antes(); },
       botones: [cancelarConAviso(estado), { texto: 'Guardar', valor: true, antes: function (v) {
         enviar = limpiarExtra(UI.leerFormulario(UI.$('#form-moto', v)));
         var malo = !enviar.nombre ? 'Escriba el nombre.' : !enviar.cedula ? 'Escriba la cédula.' : UI.digitos(enviar.celular).length < 7 ? 'Escriba el celular.' : '';
@@ -183,6 +189,7 @@
     var enviar = null, estado = { cambios: false, avisado: false };
     var ok = await UI.ventana({
       icono: '🛵', titulo: 'Nuevo motorizado', texto: 'Ficha y acceso a la app en un solo paso.', cerrable: false,
+      antesCerrar: function () { return cancelarConAviso(estado).antes(); },
       html: '<form id="form-moto-nuevo" autocomplete="off">' +
         '<div class="campo"><label for="mn-nombre">Nombre completo</label><input class="entrada" id="mn-nombre" name="nombre" maxlength="80"></div>' +
         '<div class="fila-campos"><div class="campo"><label for="mn-cedula">Cédula</label><input class="entrada" id="mn-cedula" name="cedula" inputmode="numeric" maxlength="13"></div>' +

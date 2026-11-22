@@ -506,3 +506,9 @@ details.otras-fechas[open] summary { margin-bottom: 10px; }
 .enlace-botones .btn { padding-left: 10px; padding-right: 10px; }
 .enlace-item .enlace-botones .btn:first-child { flex: 1.45 1 0; }
 .enlace-item .enlace-botones .btn { padding-left: 6px; padding-right: 6px; gap: 4px; }
+/* 3.1.5: la vista previa de la foto de entrega se ve completa (sin recortar) */
+.foto-previa { object-fit: contain; max-height: 280px; background: var(--superficie-2); }
+/* 3.1.5: foto del motorizado completa; en el círculo se centra en la cara (parte de arriba) */
+.moto-foto { width: 72px; height: 72px; }
+.moto-foto img { object-position: center 22%; }
+.plato-admin .miniatura img { object-position: center 22%; }
