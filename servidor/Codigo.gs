@@ -18,8 +18,8 @@
  * ============================================================
  */
 
-var APP_VERSION = '3.1.0';
-var APP_VERSION_NUM = 30100; // 3.1.0 -> 30100 (la pantalla compara con su mínimo)
+var APP_VERSION = '3.1.2';
+var APP_VERSION_NUM = 30102; // 3.1.0 -> 30100 (la pantalla compara con su mínimo)
 var SESION_SEGUNDOS = 21600;  // 6 h; se renueva con cada uso
 var ROLES = ['dueno', 'cajero', 'motorizado'];
 
@@ -1158,7 +1158,7 @@ function accionPedidoCrear_(data, ctx) {
       subtotal, envio, descuento, total, codigo, 'Recibido', '', ahora, '', '', '', '', '', ses ? ses.usuario : 'cliente',
       horaEst, enlaceUbic, limpiarTexto_(data.notas, 300), '', '', '', '', '', false, '', false,
       tipo, mesa, llegada || '', origen, propina, baseIva, iva, fuente, nuevo, '', '', premio, dispId,
-      ses ? 'NO' : '', '']; // 3.1: pedido tomado por el personal (teléfono/mostrador): sin código, el cliente no tiene la pantalla
+      ses && data.canal !== 'cliente' ? 'NO' : '', '']; // 3.1: pedido tomado por el personal (teléfono/mostrador): sin código. 3.1.1: si se hizo desde la página del cliente, sí lleva código
     agregarFilas_('pedidos', [fila]);
     agregarFilas_('pedido_detalle', detalleFilas.map(function (d) { return [nuevoId_('DET'), id, d.plato_id, d.nombre, d.precio, d.cantidad, d.extras, d.total_linea]; }));
     if (cuponFila) actualizarCampos_('cupones', cuponFila._fila, cuponFila, { usos: numero_(cuponFila.usos) + 1 });
@@ -1192,6 +1192,12 @@ function accionPedidoConsultar_(data) {
   var p = leerTabla_('pedidos').filter(function (x) { return String(x.numero) === numero && String(x.telefono) === tel; })[0];
   if (!p) throw fallo_('No encontramos ese pedido con ese número de celular.', 'NO_EXISTE');
   var cfgC = leerConfig_();
+  /* 3.1.1: pedido que salió «En camino» antes de actualizar el script: se le crea su código ahora. */
+  if (String(p.estado) === 'En camino' && siNo_(cfgC.codigo_entrega) && !String(p.codigo_entrega || '')) {
+    var nuevoCod = nuevoCodigoEntrega_();
+    actualizarCampos_('pedidos', p._fila, p, { codigo_entrega: nuevoCod });
+    p.codigo_entrega = nuevoCod;
+  }
   var cli = leerTabla_('clientes').filter(function (c) { return String(c.id) === String(p.cliente_id); })[0];
   return { ok: true, data: { numero: String(p.numero), estado: String(p.estado), creado: iso_(p.creado), preparando: iso_(p.preparando), en_camino: iso_(p.en_camino), entregado: iso_(p.entregado), hora_estimada: iso_(p.hora_estimada), total: redondear_(p.total),
     tipo_entrega: tipoEntrega_(p), mesa: String(p.mesa || ''), calificacion: numero_(p.calificacion) || '', motivo_anulacion: String(p.estado) === 'Anulado' ? String(p.motivo_anulacion) : '',
@@ -1304,7 +1310,10 @@ function carpetaFotos_(nombre) {
   var clave = 'CARPETA_' + nombre;
   var id = props.getProperty(clave);
   if (id) { try { return DriveApp.getFolderById(id); } catch (e) { /* se borró: se crea otra */ } }
-  var carpeta = DriveApp.createFolder(nombre);
+  /* 3.1.2: las carpetas de fotos se crean junto a la hoja «Pedidos» (si no se puede, en Mi unidad). */
+  var padre = null;
+  try { var ps = DriveApp.getFileById(SpreadsheetApp.getActive().getId()).getParents(); if (ps.hasNext()) padre = ps.next(); } catch (e) { padre = null; }
+  var carpeta = padre ? padre.createFolder(nombre) : DriveApp.createFolder(nombre);
   props.setProperty(clave, carpeta.getId());
   return carpeta;
 }
@@ -1314,7 +1323,13 @@ function guardarFoto_(base64, nombreArchivo, carpeta, publica) {
   if (!m) throw fallo_('La foto no es válida (use JPG o PNG).');
   if (m[3].length > 2800000) throw fallo_('La foto es muy grande. Use una más liviana.');
   var blob = Utilities.newBlob(Utilities.base64Decode(m[3]), m[1], nombreArchivo + '.' + (m[2] === 'jpeg' ? 'jpg' : m[2]));
-  var f = carpetaFotos_(carpeta).createFile(blob);
+  var f;
+  try { f = carpetaFotos_(carpeta).createFile(blob); }
+  catch (e) { // 3.1.2: se muestra el motivo real que da Google (y queda en la bitácora)
+    var motivo = String(e && e.message || e).slice(0, 220);
+    bitacora_({ usuario: 'sistema', rol: '', local_id: '' }, 'FOTOS', 'ERROR_DRIVE', carpeta + ': ' + motivo, '');
+    throw fallo_('No se pudo guardar la foto. Intente más tarde.', 'FOTO'); // el motivo técnico queda solo en la bitácora
+  }
   if (publica) {
     try { f.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); } catch (e) { console.error('compartir foto: ' + e); }
     return 'https://drive.google.com/thumbnail?id=' + f.getId() + '&sz=w800';
@@ -1769,8 +1784,11 @@ function accionEntregaSali_(data, ctx) {
 }
 
 function accionEntregaEntregado_(data, ctx) {
-  var foto = '';
-  if (data.foto) foto = guardarFoto_(data.foto, 'entrega-' + limpiarTexto_(data.id, 40), 'Fotos de entregas', false);
+  var foto = '', avisoFoto = '';
+  if (data.foto) {
+    try { foto = guardarFoto_(data.foto, 'entrega-' + limpiarTexto_(data.id, 40), 'Fotos de entregas', false); }
+    catch (ef) { avisoFoto = ef.message; } // 3.1.2: la foto es opcional: el pedido igual se marca entregado
+  }
   var lock = candado_();
   var p;
   try {
@@ -1783,8 +1801,10 @@ function accionEntregaEntregado_(data, ctx) {
     sumarEntregaCliente_(p, 1);
     p = buscarPedido_(data.id, null);
   } finally { lock.releaseLock(); }
-  bitacora_(ctx.sesion, 'ENTREGAS', 'ENTREGADO', String(p.numero), ctx.dispositivo);
-  return accionMisEntregas_({}, ctx);
+  bitacora_(ctx.sesion, 'ENTREGAS', 'ENTREGADO', String(p.numero) + (avisoFoto ? ' (sin foto)' : ''), ctx.dispositivo);
+  var rEnt = accionMisEntregas_({}, ctx);
+  if (avisoFoto) rEnt.data.aviso_foto = avisoFoto;
+  return rEnt;
 }
 
 /* ---------- 11.7 Reportes (dueño) — todo se calcula de los detalles ---------- */
@@ -2455,6 +2475,12 @@ function accionExportar_(data, ctx) {
 function autorizarPermisos() {
   UrlFetchApp.fetch('https://www.google.com/generate_204', { muteHttpExceptions: true });
   instalarLimpiezaDiaria(); // 3.1: borra recorridos y fotos de entrega viejos cada madrugada
+  console.log('Cuenta que ejecuta: ' + Session.getEffectiveUser().getEmail());
+  /* 3.1.2: prueba real de Google Drive: crea las 3 carpetas de fotos y dice si funcionó */
+  ['Fotos de entregas', 'Fotos de motorizados', 'Fotos del menú'].forEach(function (n) {
+    try { console.log('✅ Carpeta lista: ' + n + ' → ' + carpetaFotos_(n).getUrl()); }
+    catch (e) { console.log('❌ NO SE PUDO CREAR «' + n + '»: ' + (e && e.message || e)); }
+  });
   console.log('Permisos listos.');
 }
 

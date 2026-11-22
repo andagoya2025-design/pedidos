@@ -281,7 +281,7 @@
     var digital = UI.esDigital(p.forma_pago);
     var bloqueadoPago = digital && !p.pago_verificado && (!global.APP.publico || global.APP.publico.verificar_antes_salir !== 'NO');
     var principal;
-    if (p.estado === 'En camino') principal = '<button class="btn entrega-principal" type="button" data-e="entregado" data-id="' + id + '">✅ Entregado</button>';
+    if (p.estado === 'En camino') principal = '<p class="ayuda" style="margin:10px 0 6px;text-align:center">Tócalo cuando el cliente ya tenga su pedido en la mano.</p><button class="btn entrega-principal" type="button" data-e="entregado" data-id="' + id + '">📦 Marcar como entregado</button>';
     else if (bloqueadoPago) principal = '<div class="esperando">⏳ Esperando que el local verifique el pago</div>';
     else if (p.estado === 'Recibido') principal = '<div class="esperando">🧾 La cocina aún no empieza</div><button class="btn borde bloque" type="button" data-e="sali" data-id="' + id + '" style="margin-top:8px">🛵 Ya lo tengo, salí</button>';
     else principal = '<div class="esperando">👨‍🍳 Cocina preparando…</div><button class="btn entrega-principal" type="button" data-e="sali" data-id="' + id + '">🛵 Ya lo tengo, salí</button>';

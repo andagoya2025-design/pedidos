@@ -71,10 +71,24 @@
   UI.ubicacion = function (espera) {
     return new Promise(function (resolver) {
       if (!global.navigator.geolocation) return resolver(null);
-      global.navigator.geolocation.getCurrentPosition(function (pos) {
-        resolver({ lat: Math.round(pos.coords.latitude * 1e6) / 1e6, lng: Math.round(pos.coords.longitude * 1e6) / 1e6, precision: Math.round(pos.coords.accuracy) });
-      }, function () { resolver(null); }, { enableHighAccuracy: true, timeout: espera || 12000, maximumAge: 30000 });
+      UI.errorUbicacion = '';
+      function bien(pos) { resolver({ lat: Math.round(pos.coords.latitude * 1e6) / 1e6, lng: Math.round(pos.coords.longitude * 1e6) / 1e6, precision: Math.round(pos.coords.accuracy) }); }
+      global.navigator.geolocation.getCurrentPosition(bien, function (e) {
+        if (e && e.code === 1) { UI.errorUbicacion = 'permiso'; return resolver(null); }
+        /* 3.1.1: dentro de casa el GPS exacto a veces no responde: se intenta con la ubicación aproximada (wifi). */
+        global.navigator.geolocation.getCurrentPosition(bien, function (e2) {
+          UI.errorUbicacion = e2 && e2.code === 1 ? 'permiso' : 'senal'; resolver(null);
+        }, { enableHighAccuracy: false, timeout: 15000, maximumAge: 120000 });
+      }, { enableHighAccuracy: true, timeout: espera || 12000, maximumAge: 30000 });
     });
+  };
+
+  /* 3.1.1: qué hacer cuando el teléfono no da la ubicación, según el teléfono y la causa. */
+  UI.ayudaUbicacion = function () {
+    var ios = /iPhone|iPad|iPod/.test(global.navigator.userAgent);
+    if (UI.errorUbicacion === 'senal') return 'Tu teléfono no encontró la señal del GPS. Acércate a una ventana e inténtalo otra vez, o usa «Pegar ubicación».';
+    if (ios) return '<b>En iPhone:</b><br>1) Ajustes → Privacidad y seguridad → <b>Localización</b>: activada.<br>2) Ahí mismo, baja a <b>Sitios web de Safari</b> → «Al usar la app».<br>3) Vuelve aquí y toca otra vez «Usar mi ubicación» → <b>Permitir</b>.<br>Si antes tocaste «No permitir»: en Safari toca <b>aA</b> (junto a la dirección) → Configuración del sitio web → Ubicación → Permitir.';
+    return '<b>En Android:</b><br>1) Baja la barra de arriba y enciende <b>Ubicación</b>.<br>2) En Chrome toca el <b>candado</b> junto a la dirección → Permisos → Ubicación → <b>Permitir</b>.<br>3) Vuelve a tocar «Usar mi ubicación».';
   };
 
   /* De dónde salió la ubicación del pedido (se muestra en el panel). */

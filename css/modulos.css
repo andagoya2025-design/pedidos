@@ -126,7 +126,8 @@
   box-shadow: var(--sombra); display: flex; flex-direction: column; min-width: 0;
 }
 .plato-foto { aspect-ratio: 16 / 10; background: linear-gradient(135deg, var(--acento-suave), var(--superficie-2)); display: grid; place-items: center; font-size: 54px; overflow: hidden; }
-.plato-foto img { width: 100%; height: 100%; object-fit: cover; }
+.plato-foto { position: relative; }
+.plato-foto img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; } /* 3.1.1: en iPhone la foto se corría hacia abajo */
 .plato-info { padding: 14px; display: grid; gap: 6px; flex: 1; }
 .plato-info h3 { margin: 0; font-size: 17px; }
 .plato-info p { margin: 0; color: var(--texto-2); font-size: 14px; }
@@ -211,13 +212,15 @@ button.plato-foto { border: 0; padding: 0; width: 100%; cursor: zoom-in; positio
 .barra-pedido .btn { justify-content: space-between; }
 .barra-total { font-weight: 800; }
 .plato-grande { aspect-ratio: 4 / 3; border-radius: 16px; overflow: hidden; background: linear-gradient(135deg, var(--acento-suave), var(--superficie-2)); display: grid; place-items: center; margin: 0 0 12px; }
-.plato-grande img { width: 100%; height: 100%; object-fit: cover; }
+.plato-grande { position: relative; }
+.plato-grande img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .cantidad-fila { display: flex; align-items: center; justify-content: space-between; margin-top: 12px; font-weight: 700; }
 .sugeridos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 4px 0 6px; }
 .sugerido { display: grid; gap: 4px; justify-items: center; text-align: center; padding: 10px; border: 1.5px solid var(--borde); border-radius: 16px; background: var(--superficie); cursor: pointer; font: inherit; color: inherit; min-height: 48px; }
 .sugerido.elegido { border-color: var(--exito); background: color-mix(in srgb, var(--exito) 10%, var(--superficie)); }
 .sug-foto { width: 72px; height: 72px; border-radius: 14px; overflow: hidden; display: grid; place-items: center; background: var(--superficie-2); }
-.sug-foto img { width: 100%; height: 100%; object-fit: cover; }
+.sug-foto { position: relative; flex: none; }
+.sug-foto img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .sug-foto.sin-foto::before { font-size: 34px; }
 .tipos-entrega { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 10px; }
 .tipo-op { display: grid; gap: 2px; justify-items: center; text-align: center; padding: 14px 8px; border: 2px solid var(--borde); border-radius: 18px; background: var(--superficie); cursor: pointer; font: inherit; color: inherit; min-height: 96px; transition: border-color .15s, transform .1s, background .15s; }
@@ -446,3 +449,9 @@ button.enlace { background: none; border: 0; padding: 4px 2px; color: var(--prim
 .rk-leyenda + .ayuda { margin-top: 10px; }
 button.enlace { color: var(--texto); }
 #im-rapidos .pestana[aria-selected="true"] { background: var(--acento); border-color: var(--acento); color: #fff; }
+.pasos-ayuda { margin: -4px 0 12px; font-size: 14px; color: var(--texto-2); }
+.pasos-ayuda b { color: var(--texto); }
+.error-campo { margin: 6px 0 0; color: var(--error); font-weight: 700; font-size: 14px; }
+#btn-ubic-wa { grid-column: 1 / -1; }
+@media (min-width: 560px) { .ubic-opciones { grid-template-columns: repeat(3, minmax(0, 1fr)); } #btn-ubic-wa { grid-column: auto; } }
+.hecho-final { display: inline-flex; align-items: center; padding: 6px 12px; border-radius: 999px; font-weight: 800; font-size: 14px; color: var(--exito); background: color-mix(in srgb, var(--exito) 12%, transparent); }

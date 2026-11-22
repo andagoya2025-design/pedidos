@@ -457,7 +457,7 @@
       '<div class="campo"><label>QR de Deuna del negocio</label><div class="item" style="padding:8px"><div class="miniatura" id="aj-deuna-prev">' + (c.deuna_qr_url ? '<img src="' + UI.esc(c.deuna_qr_url) + '" alt="" referrerpolicy="no-referrer">' : '📲') + '</div>' +
       '<div class="item-cuerpo"><input class="entrada" id="aj-deuna-archivo" type="file" accept="image/*"><span class="ayuda">Foto o captura del QR de tu app Deuna Negocios. Sin QR, Deuna no aparece al cliente.</span></div></div>' +
       '<input type="hidden" name="deuna_qr_url" id="aj-deuna" value="' + UI.esc(c.deuna_qr_url || '') + '"></div>' +
-      '<label class="interruptor"><input type="checkbox" id="aj-verificar"' + (c.verificar_antes_salir !== 'NO' ? ' checked' : '') + '> Transferencia y Deuna: no despachar hasta verificar el pago</label>' +
+      '<label class="interruptor"><input type="checkbox" id="aj-verificar"' + (c.verificar_antes_salir !== 'NO' ? ' checked' : '') + '> Transferencia y Deuna: no despachar hasta verificar el pago en el banco</label>' +
       '<label class="interruptor"><input type="checkbox" id="aj-propinas"' + (c.propinas !== 'NO' ? ' checked' : '') + '> El cliente puede dejar propina al motorizado</label>' +
       '<h4>🎁 Tarjeta de sellos</h4>' +
       '<div class="fila-campos"><div class="campo"><label for="aj-sellos">Pedidos para el premio</label><input class="entrada" id="aj-sellos" name="fidelidad_sellos" inputmode="numeric" value="' + UI.esc(c.fidelidad_sellos || '0') + '"><span class="ayuda">0 = apagado. Ej. 8.</span></div>' +

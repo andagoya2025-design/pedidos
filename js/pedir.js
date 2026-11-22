@@ -124,11 +124,12 @@
 
   /* ---------------- Pasos ---------------- */
   function pasos() {
-    var nombres = ['Platos', 'Entrega', 'Confirmar'];
+    var nombres = ['Tus platos', 'Tus datos', 'Enviar'];
+    var ayuda = ['Elige lo que quieres comer y toca «Agregar».', 'Dinos cómo lo recibes: a domicilio, retiro o mesa.', 'Elige cómo pagas y envía tu pedido.'];
     return '<ol class="pasos" aria-label="Pasos del pedido">' + nombres.map(function (n, i) {
       var k = i + 1;
       return '<li class="' + (k < paso ? 'hecho' : k === paso ? 'actual' : '') + '"' + (k === paso ? ' aria-current="step"' : '') + '><span>' + (k < paso ? '✓' : k) + '</span>' + n + '</li>';
-    }).join('') + '</ol>';
+    }).join('') + '</ol>' + (ayuda[paso - 1] ? '<p class="pasos-ayuda"><b>Paso ' + paso + ' de 3:</b> ' + ayuda[paso - 1] + '</p>' : '');
   }
   function irA(n) {
     paso = n;
@@ -402,11 +403,24 @@
       var malo = !c.nombre ? ['pe-nombre', 'Escribe tu nombre.'] :
         UI.digitos(c.telefono).length < 7 ? ['pe-tel', 'Escribe tu número de celular.'] :
         (entrega.tipo === 'domicilio' && !entrega.zona) ? ['op-zonas', 'Elige tu zona de envío.'] :
-        (entrega.tipo === 'domicilio' && !c.direccion && !ubic) ? ['pe-dir', 'Escribe tu dirección o marca tu ubicación.'] :
+        (entrega.tipo === 'domicilio' && !c.direccion && (!ubic || ubic.fuente === 'whatsapp')) ? ['pe-dir', ubic ? 'Escribe tu dirección (la ubicación la mandas luego por WhatsApp).' : 'Escribe tu dirección o marca tu ubicación.'] :
         (entrega.tipo === 'mesa' && !entrega.mesa) ? ['pe-mesa', 'Elige tu número de mesa.'] :
         (entrega.cuando === 'programar' && !entrega.hora) ? ['pe-hora', 'Elige la hora.'] : null;
       UI.$$('[aria-invalid]').forEach(function (x) { x.removeAttribute('aria-invalid'); });
-      if (malo) { var el = $('#' + malo[0]); if (el) { el.setAttribute('aria-invalid', 'true'); el.scrollIntoView({ block: 'center', behavior: 'smooth' }); if (el.focus) el.focus(); } return UI.aviso(malo[1], 'error'); }
+      UI.$$('.error-campo').forEach(function (x) { x.remove(); });
+      if (malo) {
+        /* 3.1.1: el aviso queda escrito junto al campo (en iPhone el teclado tapaba el mensaje)
+           y primero se baja al campo y recién después se abre el teclado. */
+        var el = $('#' + malo[0]);
+        if (el) {
+          el.setAttribute('aria-invalid', 'true');
+          var aviso = document.createElement('p'); aviso.className = 'error-campo'; aviso.setAttribute('role', 'alert'); aviso.textContent = '⚠️ ' + malo[1];
+          (el.closest('.campo') || el.parentNode).appendChild(aviso);
+          el.scrollIntoView({ block: 'center' });
+          if (el.focus && /^(INPUT|TEXTAREA)$/.test(el.tagName)) setTimeout(function () { el.focus({ preventScroll: true }); }, 350);
+        }
+        return UI.aviso(malo[1], 'error');
+      }
       irA(3);
     });
   }
@@ -427,12 +441,13 @@
       '<div class="tarjeta"><h3 style="margin-top:0">¿Dónde te lo llevamos?</h3>' +
       '<div class="ubic-opciones">' +
       '<button class="ubic-op" type="button" id="btn-gps"><span>📍</span><b>Usar mi ubicación</b><small>La más exacta</small></button>' +
-      '<button class="ubic-op" type="button" id="btn-pegar"><span>📋</span><b>Pegar ubicación</b><small>De Google Maps o Mapas</small></button>' +
+      '<button class="ubic-op" type="button" id="btn-pegar"><span>📋</span><b>Pegar ubicación</b><small>Copiada de Google Maps</small></button>' +
+      '<button class="ubic-op" type="button" id="btn-ubic-wa"><span>💬</span><b>Por WhatsApp</b><small>La mandas al terminar</small></button>' +
       '</div>' +
       '<div id="ubic-zona"></div>' +
       '<div class="campo" style="margin-top:14px"><label for="pe-dir">Dirección</label><input class="entrada" id="pe-dir" name="direccion" autocomplete="street-address" maxlength="200" placeholder="Calle principal y secundaria" value="' + UI.esc(cli.direccion || '') + '"></div>' +
       '<div class="campo" style="margin-bottom:0"><label for="pe-ref">Referencia</label><input class="entrada" id="pe-ref" name="referencia" maxlength="200" placeholder="Ej. casa azul, junto a la farmacia" value="' + UI.esc(cli.referencia || '') + '">' +
-      '<span class="ayuda">¿Prefieres mandarla por WhatsApp? Al final te damos un botón para enviarla al local.</span></div></div>';
+      '</div></div>';
   }
 
   /* ----- Ubicación: GPS con mapa, pegar enlace, quitar ----- */
@@ -443,25 +458,59 @@
         var estado = $('#ubic-zona');
         estado.innerHTML = '<p class="ayuda">Buscando tu ubicación… acepta el permiso si te lo pide.</p>';
         var pos = await UI.ubicacion();
-        if (!pos) { estado.innerHTML = '<div class="banda error" style="margin:10px 0 0">⚠️ <span>No pudimos tomar tu ubicación. Revisa que el GPS esté encendido y que el navegador tenga permiso, o usa «Pegar ubicación».</span></div>'; return; }
+        if (!pos) { estado.innerHTML = '<div class="banda error" style="margin:10px 0 0;text-align:left">⚠️ <span>No pudimos tomar tu ubicación.<br>' + UI.ayudaUbicacion() + '<br><br>Si no se puede, usa <b>«Pegar ubicación»</b> o <b>«Por WhatsApp»</b>, o escribe tu dirección.</span></div>'; return; }
         ubic = { lat: pos.lat, lng: pos.lng, precision: pos.precision, fuente: 'gps' };
         cambio(); mostrarMapa();
       });
     });
     $('#btn-pegar').addEventListener('click', pegarUbicacion);
-    if (ubic) mostrarMapa();
+    $('#btn-ubic-wa').addEventListener('click', function () {
+      ubic = { lat: '', lng: '', fuente: 'whatsapp', enlace: '' }; cambio();
+      if (mapa) { mapa.destruir(); mapa = null; }
+      $('#ubic-zona').innerHTML = '<div class="ubic-lista">💬 <span>Al enviar el pedido te sale el botón <b>«Enviar mi ubicación por WhatsApp»</b>. En el chat toca <b>📎 (o +) → Ubicación → Enviar mi ubicación actual</b>.</span><button class="btn secundario chico" type="button" id="btn-quitar">✕</button></div>';
+      $('#btn-quitar').addEventListener('click', quitarUbicacion);
+    });
+    if (ubic && ubic.fuente === 'whatsapp') $('#btn-ubic-wa').click();
+    else if (ubic) mostrarMapa();
   }
 
+  /* 3.1.1: saca el enlace o las coordenadas de cualquier texto copiado (Maps, WhatsApp, mensajes). */
+  function sacarEnlace(t) {
+    t = String(t || '');
+    var m = /https:\/\/[^\s"<>]+/.exec(t);
+    if (m) return m[0].replace(/[.,;)]+$/, '');
+    var c = /-?\d{1,2}\.\d{3,}\s*,\s*-?\d{1,3}\.\d{3,}/.exec(t);
+    return c ? c[0].replace(/\s/g, '') : '';
+  }
+  async function leerCopiado() { try { return sacarEnlace(await global.navigator.clipboard.readText()); } catch (e) { return ''; } }
+
   async function pegarUbicacion() {
-    var texto = '';
-    try { texto = await global.navigator.clipboard.readText(); } catch (e) { /* sin permiso: se pide en la ventana */ }
-    var enlace = await UI.pedirDato({
-      icono: '📋', titulo: 'Pegar ubicación', etiqueta: 'Enlace del mapa', valor: /^https:\/\//.test(texto) ? texto.trim() : '', ph: 'https://maps.app.goo.gl/…', max: 400,
-      texto: 'En Google Maps: toca tu casa → Compartir → Copiar. En iPhone (Mapas): mantén el dedo en el lugar → Compartir → Copiar. Luego pégalo aquí.',
-      boton: 'Usar esta ubicación',
-      validar: function (v) { return !v ? 'Pega el enlace.' : (!/^https:\/\//.test(v) && !/^-?\d+\.\d+\s*,\s*-?\d+\.\d+$/.test(v)) ? 'Pega el enlace completo (empieza con https://).' : ''; }
-    });
-    if (enlace === null) return;
+    /* Camino rápido: si ya copió el enlace, se usa con un solo toque. */
+    var enlace = await leerCopiado();
+    if (!enlace) {
+      var dato = '';
+      var ok = await UI.ventana({
+        icono: '📋', titulo: 'Pegar ubicación',
+        html: '<ol class="pasos-lista"><li>Abre <b>Google Maps</b> y toca el punto de tu casa.</li><li>Toca <b>Compartir</b> → <b>Copiar</b>.</li><li>Vuelve aquí y toca <b>📋 Pegar</b>.</li></ol>' +
+          '<button class="btn bloque" type="button" id="pu-pegar" style="margin-bottom:10px">📋 Pegar</button>' +
+          '<div class="campo"><label for="pu-dato">O pega aquí (mantén el dedo → Pegar)</label><input class="entrada" id="pu-dato" maxlength="400" placeholder="https://maps.app.goo.gl/…" autocomplete="off"></div>' +
+          '<button class="btn secundario chico" type="button" id="pu-maps">🗺️ Abrir Google Maps</button>',
+        alAbrir: function (v, cerrar) {
+          UI.$('#pu-pegar', v).addEventListener('click', async function () {
+            var e = await leerCopiado();
+            if (e) { dato = e; cerrar(true); } else UI.aviso('No hay un enlace copiado. Cópialo en Google Maps o pégalo abajo.', 'error');
+          });
+          UI.$('#pu-maps', v).addEventListener('click', function () { global.open('https://www.google.com/maps', '_blank', 'noopener'); });
+        },
+        botones: [{ texto: 'Cancelar', valor: false, clase: 'secundario' }, { texto: 'Usar esta ubicación', valor: true, antes: function (v) {
+          dato = sacarEnlace(UI.$('#pu-dato', v).value);
+          if (!dato) { UI.aviso('Pega el enlace completo (empieza con https://).', 'error'); return false; }
+          return true;
+        } }]
+      });
+      if (!ok || !dato) return;
+      enlace = dato;
+    }
     var estado = $('#ubic-zona');
     estado.innerHTML = '<p class="ayuda">Leyendo la ubicación…</p>';
     try {
@@ -584,7 +633,7 @@
     var datos = {
       op_id: codigoEnvio, local_id: localId, tipo_entrega: entrega.tipo, zona_id: dom ? entrega.zona : '', mesa: entrega.tipo === 'mesa' ? entrega.mesa : '',
       hora_llegada: entrega.cuando === 'programar' ? entrega.hora : '', forma_pago: pago.forma, propina: propina(), cupon: d.cupon, notas: d.notas,
-      origen: origen, disp_id: UI.dispId(), acepta_privacidad: true, acepta_promos: !!(promos && promos.checked),
+      origen: origen, canal: 'cliente', disp_id: UI.dispId(), acepta_privacidad: true, acepta_promos: !!(promos && promos.checked),
       items: items().map(function (it) { return { plato_id: it.plato.id, cantidad: it.cantidad, extras: it.extras }; }),
       cliente: { nombre: cli.nombre, telefono: cli.telefono, direccion: dom ? cli.direccion : '', referencia: dom ? cli.referencia : '',
         lat: dom && ubic && ubic.lat !== '' ? ubic.lat : '', lng: dom && ubic && ubic.lng !== '' ? ubic.lng : '',
@@ -596,6 +645,7 @@
         MEM.guardar('ultimo_pedido', { numero: r.pedido.numero, telefono: cli.telefono, local: localId, fecha: Date.now() });
         MEM.guardar('ultimo_carrito', { local: localId, items: datos.items });
         var detalle = items();
+        r.pedido.ubic_por_wa = !!(ubic && ubic.fuente === 'whatsapp'); // 3.1.1: solo entonces se pide la ubicación por WhatsApp
         carrito = {}; codigoEnvio = ''; ubic = null; pago.propina = 0;
         UI.vibrar([30, 40, 30]);
         pintarExito(r.pedido, detalle);
@@ -636,9 +686,11 @@
       '<div class="acciones" style="margin-top:16px">' +
       (UI.digitos(wa) ? '<button class="btn" type="button" id="btn-wa">💬 ' + (UI.esDigital(p.forma_pago) ? 'Enviar comprobante' : 'Avisar por WhatsApp') + '</button>' : '') +
       '<button class="btn borde" type="button" id="btn-seguir">🔎 Ver cómo va</button></div>' +
+      (UI.tipoEntrega(p) === 'domicilio' && p.ubic_por_wa && UI.digitos(wa) ? '<div class="banda" style="margin-top:12px;text-align:left">💬 <span>Falta tu ubicación. Toca el botón y en el chat elige <b>📎 (o +) → Ubicación → Enviar mi ubicación actual</b>.</span></div><button class="btn bloque" type="button" id="btn-wa-ubic">📍 Enviar mi ubicación por WhatsApp</button>' : '') +
       (UI.tipoEntrega(p) !== 'domicilio' ? '<div class="qr-pedido"><img src="' + UI.esc(qrPedido) + '" alt="" width="150" height="150"><small>Muestra este código al llegar y te lo entregamos más rápido.</small></div>' : '') +
       '<button class="btn secundario bloque" type="button" id="btn-nuevo" style="margin-top:12px">Hacer otro pedido</button></div>';
     var b = $('#btn-wa'); if (b) b.addEventListener('click', function () { UI.abrirWhatsApp(wa, textoWhatsApp(p)); });
+    var wu = $('#btn-wa-ubic'); if (wu) wu.addEventListener('click', function () { UI.abrirWhatsApp(wa, 'Hola, soy ' + p.cliente_nombre + '. Te envío mi ubicación para el pedido *' + p.numero + '* 👇'); });
     var gq = $('#btn-guardar-qr'); if (gq) gq.addEventListener('click', function () { UI.trabajando(gq, function () { return guardarQR(c.deuna_qr_url, p.numero); }); });
     $('#btn-nuevo').addEventListener('click', function () { irA(1); });
     $('#btn-seguir').addEventListener('click', function () { pintarSeguimiento(true); });
