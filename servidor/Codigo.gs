@@ -18,8 +18,8 @@
  * ============================================================
  */
 
-var APP_VERSION = '3.1.3';
-var APP_VERSION_NUM = 30103; // 3.1.0 -> 30100 (la pantalla compara con su mínimo)
+var APP_VERSION = '3.1.4';
+var APP_VERSION_NUM = 30104; // 3.1.0 -> 30100 (la pantalla compara con su mínimo)
 var SESION_SEGUNDOS = 21600;  // 6 h; se renueva con cada uso
 var ROLES = ['dueno', 'cajero', 'motorizado'];
 
@@ -190,7 +190,8 @@ var ACCIONES = {
   clienteAnonimizar:  { tipo: 'dueno',   fn: accionClienteAnonimizar_ },
   privacidadPublica:  { tipo: 'publica', fn: accionPrivacidadPublica_ },
   /* ---- 3.1.3 ---- */
-  fotoEntregaVer:     { tipo: 'sesion',  roles: ['dueno', 'cajero', 'motorizado'], fn: accionFotoEntregaVer_ }
+  fotoEntregaVer:     { tipo: 'sesion',  roles: ['dueno', 'cajero', 'motorizado'], fn: accionFotoEntregaVer_ },
+  motorizadoFoto:     { tipo: 'dueno',   fn: accionMotorizadoFoto_ }
 };
 
 /* ============================================================
@@ -2977,4 +2978,21 @@ function accionFotoEntregaVer_(data, ctx) {
   try { blob = DriveApp.getFileById(fid).getBlob(); }
   catch (e) { throw fallo_('No se pudo abrir la foto. Intente más tarde.', 'FOTO'); }
   return { ok: true, data: { numero: String(p.numero), entregado: iso_(p.entregado), imagen: 'data:' + blob.getContentType() + ';base64,' + Utilities.base64Encode(blob.getBytes()) } };
+}
+
+/* 3.1.3: la foto del motorizado queda guardada en su ficha en el mismo momento (sin depender de «Guardar»). */
+function accionMotorizadoFoto_(data, ctx) {
+  var id = limpiarTexto_(data.id, 40);
+  if (!id) throw fallo_('Primero guarde la ficha del motorizado.');
+  var url = guardarFoto_(data.foto, 'motorizado-' + Utilities.formatDate(new Date(), zona_(leerConfig_()), 'yyyyMMdd-HHmmss'), 'Fotos de motorizados', true);
+  var lock = candado_(), m;
+  try {
+    m = leerTabla_('motorizados').filter(function (x) { return String(x.id) === id; })[0];
+    if (!m) throw fallo_('Ese motorizado ya no existe. Toque Actualizar.', 'NO_EXISTE');
+    var antes = String(m.foto_url || '');
+    actualizarCampos_('motorizados', m._fila, m, { foto_url: url });
+    if (antes && antes !== url) botarFotoVieja_(antes, 'Fotos de motorizados');
+  } finally { lock.releaseLock(); }
+  bitacora_(ctx.sesion, 'MOTORIZADOS', 'FOTO', String(m.nombre), ctx.dispositivo);
+  return { ok: true, data: { url: url } };
 }
