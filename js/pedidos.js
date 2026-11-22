@@ -70,7 +70,7 @@
       '<div class="tablero">' + COLUMNAS.map(function (c) {
         var col = activos.filter(function (p) { return p.estado === c; });
         if (c === 'Entregado') col = col.filter(function (p) { return p.dia_trabajo === est.datos.hoy; });
-        if (c !== 'Entregado') col.sort(function (a, b) { return a.creado < b.creado ? -1 : 1; }); // el más antiguo arriba
+        col.sort(function (a, b) { return a.creado < b.creado ? 1 : -1; }); // 3.1.5: el más nuevo arriba (elegido por el dueño)
         return '<section class="columna" aria-label="' + UI.esc(c) + '"><div class="columna-cabeza">' + UI.chipEstado(c) + '<span class="cuenta">' + col.length + '</span></div>' +
           '<div class="lista">' + (col.length ? col.map(tarjeta).join('') : UI.vacio((UI.ESTADOS[c] || {}).icono || '•', c === 'Recibido' ? 'Aún no hay pedidos nuevos.' : 'Nada aquí por ahora.')) + '</div></section>';
       }).join('') + '</div>' +
@@ -94,9 +94,12 @@
       ? (p.motorizado_id ? '<button class="btn chico" type="button" data-accion="despachar" data-id="' + UI.esc(p.id) + '">🛵 Despachar</button>' : '<button class="btn chico" type="button" data-accion="asignar" data-id="' + UI.esc(p.id) + '">🛵 Asignar motorizado</button>')
       : '<button class="btn chico" type="button" data-accion="entregar" data-id="' + UI.esc(p.id) + '">' + (UI.tipoEntrega(p) === 'mesa' ? '🍽️ Marcar servido' : '📦 Marcar entregado') + '</button>';
     // 3.0: pago digital sin verificar → primero verificar (el servidor tampoco deja despachar).
-    if (UI.esDigital(p.forma_pago) && !p.pago_verificado && (p.estado === 'Preparando' || p.estado === 'Recibido') && verificarActivo()) {
-      principal = (p.estado === 'Recibido' ? principal : '') + '<button class="btn chico" type="button" data-accion="verificar" data-id="' + UI.esc(p.id) + '">🏦 Verificar pago</button>';
+    var sinPago = UI.esDigital(p.forma_pago) && !p.pago_verificado && (p.estado === 'Preparando' || p.estado === 'Recibido');
+    if (sinPago && (verificarActivo() || preparaTrasVerificar())) {
+      // 3.1.5: con «no preparar hasta verificar», en Recibido solo se puede verificar
+      principal = (p.estado === 'Recibido' && !preparaTrasVerificar() ? principal : '') + '<button class="btn chico" type="button" data-accion="verificar" data-id="' + UI.esc(p.id) + '">🏦 Verificar pago</button>';
     }
+    var espera = sinPago ? UI.minutosDesde(p.creado, ahoraServidor()) : 0, limitePago = Number(APP.publico && APP.publico.minutos_alerta_pago) || 30;
     if (p.estado === 'En camino') principal = '<button class="btn chico" type="button" data-accion="entregar" data-id="' + UI.esc(p.id) + '">📦 Marcar entregado</button>';
     // 3.1.1: ya entregado → sin botones de trabajo, solo la constancia (y «Más» para consultar).
     if (p.estado === 'Entregado') principal = '<span class="hecho-final">✔ Entregado' + (p.entregado ? ' a las ' + UI.esc(UI.hora(p.entregado)) : '') + '</span>';
@@ -113,6 +116,8 @@
       '<div class="pedido-linea">' + (UI.esDigital(p.forma_pago) ? UI.NOMBRE_PAGO[p.forma_pago] + ' ' + (p.pago_verificado ? '<span class="etiqueta ok">verificado</span>' : '<span class="etiqueta aviso">por verificar</span>') : '💵 Efectivo') +
       (p.propina ? ' · 🙌 propina ' + UI.dinero(p.propina) : '') + (p.calificacion ? ' · ' + '★'.repeat(p.calificacion) : '') +
       (p.motorizado ? ' · 🛵 ' + UI.esc(p.motorizado.nombre) : '') + '</div>' +
+      (p.cuenta_pago ? '<div class="pedido-linea">🏦 Dijo que pagó a: <b>' + UI.esc(p.cuenta_pago) + '</b></div>' : '') +
+      (sinPago && preparaTrasVerificar() ? '<div class="pago-bloqueo' + (espera >= limitePago ? ' tarde' : '') + '">⛔ <span><b>No preparar ni despachar: pago sin verificar.</b> Esperando ' + espera + ' min' + (espera >= limitePago ? ' · escríbale o llame al cliente' : '') + '.</span></div>' : '') +
       (p.estado === 'Anulado' ? '<div class="pedido-linea">Motivo: ' + UI.esc(p.motivo_anulacion) + '</div>' : '') +
       (p.estado !== 'Anulado' ? '<div class="pedido-acciones">' + principal + '<button class="btn secundario chico" type="button" data-accion="mas" data-id="' + UI.esc(p.id) + '">⋯ Más</button></div>' : '') +
       '</article>';
@@ -151,18 +156,19 @@
     var tipo = UI.tipoEntrega(p);
     var link = enlaceSeguimiento(p);
     var ver = '\n👉 Mira cómo va tu pedido: ' + link;
+    var misPed = p.cliente_clave ? '\n📋 Todos tus pedidos: ' + UI.enlaceApp() + 'pedir.html?c=' + p.cliente_clave : ''; // 3.1.5: enlace personal «Mis pedidos»
     var pagar = UI.esDigital(p.forma_pago) ? (p.pago_verificado ? 'pagado ✅' : 'por ' + (p.forma_pago === 'deuna' ? 'Deuna' : 'transferencia')) : 'en efectivo';
     if (p.estado === 'Preparando' && tipo !== 'domicilio') return 'Hola ' + p.cliente_nombre + ', tu pedido ' + p.numero + ' ya se está preparando 👨‍🍳.' + (p.hora_estimada ? ' Estará listo a las ' + UI.hora(p.hora_estimada) + '.' : '') + ver;
     if (p.estado === 'Entregado' && tipo !== 'domicilio') return '¡Gracias por tu compra, ' + p.cliente_nombre + '! ' + neg + '\n⭐ Califícanos aquí: ' + link;
     var t = {
-      'Recibido': 'Hola ' + p.cliente_nombre + ', recibimos tu pedido ' + p.numero + ' en ' + neg + '. Total: ' + UI.dinero(p.total) + '. ¡Gracias!' + (UI.esDigital(p.forma_pago) && !p.pago_verificado ? ' Apenas confirmemos tu pago lo preparamos.' : '') + ver,
+      'Recibido': 'Hola ' + p.cliente_nombre + ', recibimos tu pedido ' + p.numero + ' en ' + neg + '. Total: ' + UI.dinero(p.total) + '. ¡Gracias!' + (UI.esDigital(p.forma_pago) && !p.pago_verificado ? '\n🔒 Lo preparamos apenas confirmemos tu pago en nuestra cuenta (si pagaste desde otro banco puede tardar un poco).' : '') + ver + misPed,
       'Preparando': 'Hola ' + p.cliente_nombre + ', tu pedido ' + p.numero + ' ya se está preparando 👨‍🍳.' + (p.hora_estimada ? ' Hora estimada: ' + UI.hora(p.hora_estimada) + '.' : '') + ver,
       'En camino': 'Hola ' + p.cliente_nombre + ', tu pedido ' + p.numero + ' va en camino 🛵' +
         (p.motorizado ? '\nTe lo lleva: ' + String(p.motorizado.nombre).split(/\s+/).slice(0, 2).join(' ') + (p.motorizado.placa ? ' · Placa ' + p.motorizado.placa : '') : '') +
         '\nTotal: ' + UI.dinero(p.total) + ' ' + pagar + '.' +
         (APP.publico && APP.publico.codigo_entrega !== 'NO' && p.pide_codigo !== false ? '\n🔢 Al recibir, dale al motorizado tu código de 4 números (está en el enlace).' : '') +
         '\n👉 Mira a tu motorizado y tu código aquí: ' + link,
-      'Entregado': '¡Gracias por tu compra, ' + p.cliente_nombre + '! Esperamos que disfrutes tu pedido ' + p.numero + '. ' + neg + '\n⭐ Califícanos aquí: ' + link
+      'Entregado': '¡Gracias por tu compra, ' + p.cliente_nombre + '! Esperamos que disfrutes tu pedido ' + p.numero + '. ' + neg + '\n⭐ Califícanos aquí: ' + link + misPed
     };
     return t[p.estado] || '';
   }
@@ -182,6 +188,7 @@
     if (que === 'mas') return mas(boton, p);
   }
 
+  function preparaTrasVerificar() { return !APP.publico || APP.publico.verificar_antes_preparar !== 'NO'; } // 3.1.5
   function verificarActivo() { return !APP.publico || APP.publico.verificar_antes_salir !== 'NO'; }
 
   async function verificar(boton, p) {
@@ -190,7 +197,13 @@
       texto: 'Abra la app de su banco' + (p.forma_pago === 'deuna' ? ' o Deuna Negocios' : '') + ' y confirme que llegaron ' + UI.dinero(p.total) + ' de ' + p.cliente_nombre + '. Una captura de pantalla NO es prueba: puede ser falsa.',
       botones: [{ texto: 'Todavía no', valor: false, clase: 'secundario' }, { texto: '✅ Sí, el dinero llegó', valor: true }]
     });
-    if (ok) return guardar(boton, 'pedidoPagoVerificar', { id: p.id, verificado: true }, 'Pago verificado. Ya puede despacharlo.');
+    if (!ok) return;
+    var listo = await guardar(boton, 'pedidoPagoVerificar', { id: p.id, verificado: true }, 'Pago verificado. Ya puede prepararlo.');
+    if (listo && UI.digitos(p.telefono)) { // 3.1.5: avisar al cliente que su pago se confirmó en la cuenta
+      var av = await UI.confirmar('¿Avisar a ' + p.cliente_nombre + '?', 'Le mandamos por WhatsApp que su pago de ' + UI.dinero(p.total) + ' ya se confirmó en la cuenta, con su enlace de seguimiento.', '💬 Avisar al cliente');
+      if (av) UI.abrirWhatsApp(p.telefono, '✅ Hola ' + p.cliente_nombre + ', confirmamos tu pago de ' + UI.dinero(p.total) + ' en nuestra cuenta. Ya estamos preparando tu pedido ' + p.numero + ' 👨‍🍳\n👉 Míralo aquí: ' + enlaceSeguimiento(p));
+    }
+    return listo;
   }
 
   /* ----- 3.1: AVISO DE PEDIDO NUEVO (sonido + notificación del sistema) -----
@@ -327,6 +340,7 @@
     if (dom && (p.estado === 'Recibido' || p.estado === 'Preparando')) opciones.push(['asignar', '🛵 ' + (p.motorizado_id ? 'Cambiar' : 'Asignar') + ' motorizado']);
     if (p.motorizado && !cerrado) opciones.push(['wa_moto', '💬 WhatsApp al motorizado']);
     if (UI.esDigital(p.forma_pago) && !cerrado) opciones.push(['verificar', p.pago_verificado ? '↩️ Marcar pago sin verificar' : '🏦 Marcar pago verificado']);
+    if (UI.esDigital(p.forma_pago) && !p.pago_verificado && p.estado === 'Recibido') opciones.push(['anular_pago', '⛔ Anular: el pago no se acreditó']); // 3.1.5
     if (p.estado !== 'Entregado' || APP.sesion.rol === 'dueno') opciones.push(['anular', '⛔ Anular pedido']);
     var op = await UI.ventana({
       icono: '🧾', titulo: p.numero + ' · ' + p.cliente_nombre, texto: 'Creado ' + UI.hora(p.creado) + (p.preparando ? ' · preparando ' + UI.hora(p.preparando) : '') + (p.en_camino ? ' · salió ' + UI.hora(p.en_camino) : '') + (p.entregado ? ' · entregado ' + UI.hora(p.entregado) : ''),
@@ -347,6 +361,13 @@
     if (op === 'ubicacion') {
       var enlace = await UI.pedirDato({ icono: '📍', titulo: 'Ubicación de ' + p.numero, etiqueta: 'Enlace de ubicación', valor: p.ubicacion_enlace, ph: 'https://maps.app.goo.gl/…', ayuda: 'En WhatsApp: abra la ubicación que mandó el cliente → Compartir → Copiar enlace, y péguelo aquí. Reemplaza a la ubicación anterior.', max: 400, validar: function (v) { return v && !/^https:\/\//.test(v) ? 'Pegue el enlace completo (empieza con https://).' : ''; } });
       if (enlace !== null) guardar(boton, 'pedidoUbicacion', { id: p.id, enlace: enlace }, 'Ubicación guardada: el motorizado usará esta.');
+      return;
+    }
+    if (op === 'anular_pago') {
+      var okA = await UI.confirmar('¿Anular ' + p.numero + '?', 'El pago de ' + UI.dinero(p.total) + ' no se acreditó en la cuenta. El pedido queda anulado con ese motivo.', 'Sí, anular', true);
+      if (okA && await guardar(boton, 'pedidoAnular', { id: p.id, motivo: 'El pago no se acreditó en la cuenta del local.' }, p.numero + ' anulado.') && UI.digitos(p.telefono)) {
+        UI.abrirWhatsApp(p.telefono, 'Hola ' + p.cliente_nombre + ', no recibimos el pago de tu pedido ' + p.numero + ' (' + UI.dinero(p.total) + ') en nuestra cuenta, por eso lo anulamos. Si ya pagaste, respóndenos con el comprobante y lo revisamos. 🙏');
+      }
       return;
     }
     if (op === 'anular') {

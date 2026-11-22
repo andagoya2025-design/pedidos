@@ -18,8 +18,8 @@
  * ============================================================
  */
 
-var APP_VERSION = '3.1.4';
-var APP_VERSION_NUM = 30104; // 3.1.0 -> 30100 (la pantalla compara con su mínimo)
+var APP_VERSION = '3.1.5';
+var APP_VERSION_NUM = 30105; // 3.1.0 -> 30100 (la pantalla compara con su mínimo)
 var SESION_SEGUNDOS = 21600;  // 6 h; se renueva con cada uso
 var ROLES = ['dueno', 'cajero', 'motorizado'];
 
@@ -38,11 +38,13 @@ var HOJAS = {
     /* fase 2-7 (agregadas al final) */ ['hora_estimada', 'd'], ['ubicacion_enlace', 't'], ['notas', 't'], ['sali_lat', 'n'], ['sali_lng', 'n'], ['entrega_lat', 'n'], ['entrega_lng', 'n'], ['foto_entrega', 't'], ['pago_verificado', 'b'], ['liquidacion_id', 't'], ['inventario_descontado', 'b'],
     /* 3.0 (agregadas al final) */ ['tipo_entrega', 't'], ['mesa', 't'], ['hora_llegada', 'd'], ['origen', 't'], ['propina', 'm'], ['base_iva', 'm'], ['iva', 'm'], ['ubicacion_fuente', 't'], ['cliente_nuevo', 'b'], ['calificacion', 'n'], ['comentario', 't'], ['premio', 'm'], ['disp_id', 't'],
     /* 3.1 */ ['codigo_entrega', 't'], ['ultima_senal', 'd'],
-    /* 3.1.3 */ ['clave_seguimiento', 't']],
+    /* 3.1.3 */ ['clave_seguimiento', 't'],
+    /* 3.1.5 */ ['cuenta_pago', 't'], ['pago_verificado_fecha', 'd']],
   pedido_detalle: [['id', 't'], ['pedido_id', 't'], ['plato_id', 't'], ['nombre', 't'], ['precio', 'm'], ['cantidad', 'n'], ['extras', 't'], ['total_linea', 'm']],
   clientes: [['id', 't'], ['telefono', 't'], ['nombre', 't'], ['direccion', 't'], ['referencia', 't'], ['lat', 'n'], ['lng', 'n'], ['pedidos', 'n'], ['total_gastado', 'm'], ['ultimo_pedido', 'd'], ['creado', 'd'],
     /* 3.0 */ ['entregados', 'n'], ['sellos', 'n'],
-    /* 3.1 */ ['acepta_promos', 'b'], ['anonimizado', 'b']],
+    /* 3.1 */ ['acepta_promos', 'b'], ['anonimizado', 'b'],
+    /* 3.1.5 */ ['efectivo_ok', 'b'], ['clave_cliente', 't']],
   motorizados: [['id', 't'], ['nombre', 't'], ['cedula', 't'], ['celular', 't'], ['direccion', 't'], ['placa', 't'], ['foto_url', 't'], ['usuario_id', 't'], ['activo', 'b'], ['creado', 'd'],
     /* fase 4 */ ['local_id', 't'],
     /* 3.1 */ ['color_moto', 't'], ['modelo_moto', 't'], ['licencia_vence', 'f'], ['matricula_vence', 'f'], ['forma_pago', 't'], ['tarifa', 'm']],
@@ -111,13 +113,21 @@ var CONFIG_DEFECTO = {
   red_instagram: '',         // redes y página web del negocio (vacío = no se muestra)
   red_facebook: '',
   red_tiktok: '',
-  pagina_web: ''
+  pagina_web: '',
+  /* 3.1.5 */
+  cuentas_bancarias: '',       // JSON: [{banco, tipo, numero, titular, documento, correo, activa}] (hasta 6)
+  verificar_antes_preparar: 'SI', // SI = un pago digital sin verificar tampoco pasa a «Preparando»
+  minutos_alerta_pago: '30',   // aviso en el panel si el pago lleva más de N minutos sin verificar
+  dias_historial_cliente: '30', // días que el teléfono del cliente guarda su historial de pedidos
+  anos_limpieza_clientes: '2', // años sin pedir → se borran solos los datos personales del cliente (0 = nunca)
+  politicas_texto: ''          // «Cómo funciona tu pedido» (vacío = texto por defecto)
 };
 
 /* Campos de configuración que puede ver cualquiera (sin sesión). */
-var CONFIG_PUBLICA = ['negocio_nombre', 'logo_url', 'color_primario', 'color_acento', 'whatsapp', 'pais_codigo', 'ciudad', 'moneda', 'zona_horaria', 'mensaje_bienvenida',
+var CONFIG_PUBLICA = ['minutos_alerta_pago', 'anos_limpieza_clientes', 'negocio_nombre', 'logo_url', 'color_primario', 'color_acento', 'whatsapp', 'pais_codigo', 'ciudad', 'moneda', 'zona_horaria', 'mensaje_bienvenida',
   /* 3.0 */ 'horario_apertura', 'horario_cierre', 'dias_cerrado', 'deuna_qr_url', 'fidelidad_sellos', 'fidelidad_descuento', 'propinas', 'mesas', 'verificar_antes_salir', 'precios_incluyen_iva', 'codigo_entrega', 'privacidad_texto', 'formato_hora',
-  /* 3.1.3 */ 'efectivo_permitido', 'efectivo_maximo', 'red_instagram', 'red_facebook', 'red_tiktok', 'pagina_web'];
+  /* 3.1.3 */ 'efectivo_permitido', 'efectivo_maximo', 'red_instagram', 'red_facebook', 'red_tiktok', 'pagina_web',
+  /* 3.1.5 */ 'iva_porcentaje', 'cuentas_bancarias', 'verificar_antes_preparar', 'dias_historial_cliente', 'politicas_texto'];
 
 /* Acciones: quién puede usarlas. 'publica' = sin sesión. */
 var ACCIONES = {
@@ -191,7 +201,12 @@ var ACCIONES = {
   privacidadPublica:  { tipo: 'publica', fn: accionPrivacidadPublica_ },
   /* ---- 3.1.3 ---- */
   fotoEntregaVer:     { tipo: 'sesion',  roles: ['dueno', 'cajero', 'motorizado'], fn: accionFotoEntregaVer_ },
-  motorizadoFoto:     { tipo: 'dueno',   fn: accionMotorizadoFoto_ }
+  motorizadoFoto:     { tipo: 'dueno',   fn: accionMotorizadoFoto_ },
+  /* ---- 3.1.5 ---- */
+  pedidosSeguir:      { tipo: 'publica', fn: accionPedidosSeguir_ },
+  misPedidos:         { tipo: 'publica', fn: accionMisPedidos_ },
+  pagoOpciones:       { tipo: 'publica', fn: accionPagoOpciones_ },
+  clienteEfectivo:    { tipo: 'dueno',   fn: accionClienteEfectivo_ }
 };
 
 /* ============================================================
@@ -465,7 +480,7 @@ function accionConfigGuardar_(data, ctx) {
   var limpio = {};
   Object.keys(cambios).forEach(function (k) {
     if (permitidas.indexOf(k) < 0) return;
-    var v = limpiarTexto_(cambios[k], 300);
+    var v = LARGOS_[k] ? textoLargo_(cambios[k], LARGOS_[k]) : limpiarTexto_(cambios[k], 300); // 3.1.5: textos largos conservan los saltos de línea
     if ((k === 'color_primario' || k === 'color_acento') && !/^#[0-9A-Fa-f]{6}$/.test(v)) throw fallo_('Color no válido: use el selector de color.');
     if (k === 'whatsapp' && v) v = normalizarTelefono_(v, cambios.pais_codigo || leerConfig_().pais_codigo);
     if (k === 'pais_codigo' && !/^\d{1,3}$/.test(v)) throw fallo_('Código de país no válido (ej. 593).');
@@ -496,6 +511,12 @@ function accionConfigGuardar_(data, ctx) {
     if (k === 'efectivo_permitido' && ['SI', 'NO'].indexOf(v) < 0) throw fallo_('Valor no válido.');
     if (k === 'efectivo_maximo' && v !== '' && !(Number(v) > 0 && Number(v) <= 10000)) throw fallo_('Monto máximo de efectivo no válido.');
     if (['red_instagram', 'red_facebook', 'red_tiktok', 'pagina_web'].indexOf(k) >= 0) v = enlaceRed_(k, v);
+    /* 3.1.5 */
+    if (k === 'cuentas_bancarias') v = cuentasLimpias_(cambios[k]);
+    if (k === 'verificar_antes_preparar' && ['SI', 'NO'].indexOf(v) < 0) throw fallo_('Valor no válido.');
+    if (k === 'minutos_alerta_pago' && !(Number(v) >= 5 && Number(v) <= 1440)) throw fallo_('Minutos de aviso de pago no válidos (5 a 1440).');
+    if (k === 'dias_historial_cliente' && !(Number(v) >= 1 && Number(v) <= 365)) throw fallo_('Días de historial no válidos (1 a 365).');
+    if (k === 'anos_limpieza_clientes' && !(/^\d$/.test(v) && Number(v) <= 7)) throw fallo_('Años no válidos (0 a 7).');
     limpio[k] = v;
   });
 
@@ -1154,7 +1175,8 @@ function accionPedidoCrear_(data, ctx) {
     var iva = siNo_(cfg.precios_incluyen_iva) ? redondear_(gravado - baseIva) : redondear_(gravado * pctIva / 100);
     if (!siNo_(cfg.precios_incluyen_iva)) total = redondear_(total + iva);
     /* 3.1.3: efectivo solo si el dueño lo permite y hasta su monto máximo (el personal sí puede registrar efectivo) */
-    if (forma === 'efectivo' && (!ses || data.canal === 'cliente')) {
+    var efectivoCliente = !!(cFila && cFila.efectivo_ok === true); // 3.1.5: el dueño autorizó a este cliente a pagar en efectivo
+    if (forma === 'efectivo' && (!ses || data.canal === 'cliente') && !efectivoCliente) {
       if (String(cfg.efectivo_permitido) === 'NO') throw fallo_('Este local no recibe efectivo. Elige transferencia' + (cfg.deuna_qr_url ? ' o Deuna.' : '.'), 'EFECTIVO');
       var maxEf = numero_(cfg.efectivo_maximo);
       if (maxEf > 0 && total > maxEf) throw fallo_('En efectivo se aceptan pedidos de hasta ' + UI_dinero_(maxEf) + '. Elige transferencia' + (cfg.deuna_qr_url ? ' o Deuna.' : '.'), 'EFECTIVO');
@@ -1184,14 +1206,14 @@ function accionPedidoCrear_(data, ctx) {
       actualizarCampos_('clientes', cFila._fila, cFila, cambiosCli);
     } else {
       clienteId = nuevoId_('CLI');
-      agregarFilas_('clientes', [[clienteId, telefono, nombre, direccion, referencia, lat, lng, 1, 0, ahora, ahora, 0, 0, aceptaPromos, false]]);
+      agregarFilas_('clientes', [[clienteId, telefono, nombre, direccion, referencia, lat, lng, 1, 0, ahora, ahora, 0, 0, aceptaPromos, false, false, nuevaClaveSeguimiento_() + nuevaClaveSeguimiento_()]]);
     }
 
     var fila = [id, numero, opId, localId, fechaDia_(diaTrabajo_(ahora, cfg), cfg), clienteId, nombre, telefono, direccion, referencia, lat, lng, zonaId, forma,
       subtotal, envio, descuento, total, codigo, 'Recibido', '', ahora, '', '', '', '', '', ses ? ses.usuario : 'cliente',
       horaEst, enlaceUbic, limpiarTexto_(data.notas, 300), '', '', '', '', '', false, '', false,
       tipo, mesa, llegada || '', origen, propina, baseIva, iva, fuente, nuevo, '', '', premio, dispId,
-      ses && data.canal !== 'cliente' ? 'NO' : '', '', nuevaClaveSeguimiento_()]; // 3.1: pedido tomado por el personal (teléfono/mostrador): sin código. 3.1.1: si se hizo desde la página del cliente, sí lleva código
+      ses && data.canal !== 'cliente' ? 'NO' : '', '', nuevaClaveSeguimiento_(), esDigital_(forma) ? limpiarTexto_(data.cuenta_pago, 80) : '', '']; // 3.1: pedido tomado por el personal (teléfono/mostrador): sin código. 3.1.1: si se hizo desde la página del cliente, sí lleva código
     agregarFilas_('pedidos', [fila]);
     agregarFilas_('pedido_detalle', detalleFilas.map(function (d) { return [nuevoId_('DET'), id, d.plato_id, d.nombre, d.precio, d.cantidad, d.extras, d.total_linea]; }));
     if (cuponFila) actualizarCampos_('cupones', cuponFila._fila, cuponFila, { usos: numero_(cuponFila.usos) + 1 });
@@ -1241,7 +1263,9 @@ function accionPedidoConsultar_(data) {
     p.codigo_entrega = nuevoCod;
   }
   var cli = leerTabla_('clientes').filter(function (c) { return String(c.id) === String(p.cliente_id); })[0];
-  return { ok: true, data: { numero: String(p.numero), seguimiento: String(p.clave_seguimiento || '') ? String(p.numero) + '-' + String(p.clave_seguimiento) : '', estado: String(p.estado), creado: iso_(p.creado), preparando: iso_(p.preparando), en_camino: iso_(p.en_camino), entregado: iso_(p.entregado), hora_estimada: iso_(p.hora_estimada), total: redondear_(p.total),
+  return { ok: true, data: { numero: String(p.numero), seguimiento: String(p.clave_seguimiento || '') ? String(p.numero) + '-' + String(p.clave_seguimiento) : '', estado: String(p.estado), creado: iso_(p.creado),
+    forma_pago: String(p.forma_pago), pago_verificado: p.pago_verificado === true, cuenta_pago: String(p.cuenta_pago || ''), /* 3.1.5 */
+    preparando: iso_(p.preparando), en_camino: iso_(p.en_camino), entregado: iso_(p.entregado), hora_estimada: iso_(p.hora_estimada), total: redondear_(p.total),
     tipo_entrega: tipoEntrega_(p), mesa: String(p.mesa || ''), calificacion: numero_(p.calificacion) || '', motivo_anulacion: String(p.estado) === 'Anulado' ? String(p.motivo_anulacion) : '',
     sellos: cli ? numero_(cli.sellos) : 0, sellos_meta: numero_(cfgC.fidelidad_sellos),
     /* 3.1: tarjeta del motorizado y código de entrega — solo mientras va en camino */
@@ -1533,7 +1557,7 @@ function accionClientesListar_() {
   var lista = leerTabla_('clientes').map(function (c) {
     var ult = c.ultimo_pedido instanceof Date ? c.ultimo_pedido : null;
     return { id: String(c.id), telefono: String(c.telefono), nombre: String(c.nombre), direccion: String(c.direccion), pedidos: numero_(c.pedidos), total_gastado: redondear_(c.total_gastado), ultimo_pedido: iso_(ult), inactivo: !!ult && ult.getTime() < hace30,
-      acepta_promos: c.acepta_promos === true, anonimizado: c.anonimizado === true }; // 3.1
+      acepta_promos: c.acepta_promos === true, anonimizado: c.anonimizado === true, efectivo_ok: c.efectivo_ok === true }; // 3.1 · 3.1.5
   }).sort(function (a, b) { return b.total_gastado - a.total_gastado; });
   var corte = lista.length ? lista[Math.max(0, Math.ceil(lista.length * 0.1) - 1)].total_gastado : 0;
   lista.forEach(function (c) { c.vip = c.pedidos >= 5 || (c.total_gastado > 0 && c.total_gastado >= corte && lista.length >= 10); });
@@ -1565,11 +1589,21 @@ function accionPedidosListar_(data, ctx) {
   var det = detallePorPedido_(lista.map(function (p) { return String(p.id); }));
   var motos = {};
   leerTabla_('motorizados').forEach(function (m) { motos[String(m.id)] = motoCorto_(m); });
+  /* 3.1.5: clave del enlace «Mis pedidos» de cada cliente (para los mensajes de WhatsApp) */
+  var clis = {}, idsCli = {};
+  lista.forEach(function (p) { idsCli[String(p.cliente_id)] = true; });
+  var filasCli = leerTabla_('clientes').filter(function (c) { return idsCli[String(c.id)] && c.anonimizado !== true; });
+  if (filasCli.some(function (c) { return !String(c.clave_cliente || ''); })) {
+    var lockK = LockService.getScriptLock();
+    if (lockK.tryLock(5000)) { try { filasCli.forEach(function (c) { claveCliente_(c); }); } finally { lockK.releaseLock(); } }
+  }
+  filasCli.forEach(function (c) { clis[String(c.id)] = String(c.clave_cliente || ''); });
   return { ok: true, data: {
     dia: dia, hoy: hoy, ahora: new Date().toISOString(), minutos_atraso: numero_(cfg.minutos_atraso) || 45,
     pedidos: lista.map(function (p) {
       var o = pedidoSalida_(p, det[String(p.id)] || []);
       o.motorizado = motos[o.motorizado_id] || null;
+      o.cliente_clave = clis[String(p.cliente_id)] || ''; // 3.1.5
       return o;
     }).sort(function (a, b) { return a.creado < b.creado ? 1 : -1; })
   } };
@@ -1595,6 +1629,7 @@ function accionPedidoEstado_(data, ctx) {
     if (a === 'En camino' && !p.motorizado_id) throw fallo_('Asigne un motorizado antes de despachar.');
     if (a === 'Entregado' && String(p.estado) === 'Preparando' && (p.zona_id || p.motorizado_id)) throw fallo_('Este pedido es a domicilio: primero debe salir «En camino».');
     if (a === 'En camino' || (a === 'Entregado' && String(p.estado) === 'Preparando')) exigirPagoVerificado_(p);
+    if (a === 'Preparando' && siNo_(leerConfig_().verificar_antes_preparar)) exigirPagoVerificado_(p, true); // 3.1.5
     var cambios = { estado: a };
     if (a === 'En camino' && !String(p.codigo_entrega || '')) cambios.codigo_entrega = nuevoCodigoEntrega_();
     cambios[{ 'Preparando': 'preparando', 'En camino': 'en_camino', 'Entregado': 'entregado' }[a]] = new Date();
@@ -1680,7 +1715,7 @@ function accionPedidoPagoVerificar_(data, ctx) {
   try {
     p = buscarPedido_(data.id, ctx);
     if (!esDigital_(p.forma_pago)) throw fallo_('Este pedido no es por transferencia ni Deuna.');
-    actualizarCampos_('pedidos', p._fila, p, { pago_verificado: data.verificado !== false });
+    actualizarCampos_('pedidos', p._fila, p, { pago_verificado: data.verificado !== false, pago_verificado_fecha: data.verificado !== false ? new Date() : '' }); // 3.1.5
     p = buscarPedido_(data.id, ctx);
   } finally { lock.releaseLock(); }
   bitacora_(ctx.sesion, 'CAJA', data.verificado !== false ? 'TRANSFERENCIA_VERIFICADA' : 'TRANSFERENCIA_PENDIENTE', p.numero, ctx.dispositivo);
@@ -2295,8 +2330,8 @@ function estaAbierto_(cfg, fecha) {
 }
 
 /* 3.0: transferencia o Deuna sin verificar no sale ni se entrega. */
-function exigirPagoVerificado_(p) {
-  if (!siNo_(leerConfig_().verificar_antes_salir)) return;
+function exigirPagoVerificado_(p, preparar) {
+  if (!preparar && !siNo_(leerConfig_().verificar_antes_salir)) return;
   if (esDigital_(p.forma_pago) && p.pago_verificado !== true) {
     throw fallo_('Primero verifique el pago en la app del banco' + (String(p.forma_pago) === 'deuna' ? ' o de Deuna' : '') + ' y toque «Marcar pago verificado».', 'PAGO_SIN_VERIFICAR');
   }
@@ -2831,7 +2866,8 @@ function buscarPedidosTexto_(data, ctx) {
 /* ---------- 13.7 Privacidad (LOPDP) ---------- */
 function accionPrivacidadPublica_() {
   var cfg = leerConfig_();
-  return { ok: true, data: { negocio: String(cfg.negocio_nombre), whatsapp: String(cfg.whatsapp || ''), ciudad: String(cfg.ciudad || ''), texto: String(cfg.privacidad_texto || '') } };
+  return { ok: true, data: { negocio: String(cfg.negocio_nombre), whatsapp: String(cfg.whatsapp || ''), ciudad: String(cfg.ciudad || ''), texto: String(cfg.privacidad_texto || ''), politicas: String(cfg.politicas_texto || ''),
+    anos_clientes: String(cfg.anos_limpieza_clientes || '2'), dias_rastreo: String(cfg.dias_guardar_rastreo || '30'), dias_historial: String(cfg.dias_historial_cliente || '30') } };
 }
 
 /* El dueño borra los datos personales de un cliente (quedan los totales para la contabilidad). */
@@ -2883,6 +2919,8 @@ function limpiarDatosViejos() {
     });
     bitacora_({ usuario: 'sistema', rol: '', local_id: 'TODOS' }, 'PRIVACIDAD', 'LIMPIEZA', n + ' puntos de recorrido y ' + fotos + ' fotos de entrega (más de ' + dias + ' días)', '');
   } finally { lock.releaseLock(); }
+  var cli = limpiarClientesInactivos_(); // 3.1.5 (cada anonimización toma su propio candado)
+  if (cli) bitacora_({ usuario: 'sistema', rol: '', local_id: 'TODOS' }, 'PRIVACIDAD', 'LIMPIEZA_CLIENTES', cli + ' cliente(s) sin pedidos en ' + leerConfig_().anos_limpieza_clientes + ' año(s)', '');
 }
 
 function instalarLimpiezaDiaria() {
@@ -2995,4 +3033,119 @@ function accionMotorizadoFoto_(data, ctx) {
   } finally { lock.releaseLock(); }
   bitacora_(ctx.sesion, 'MOTORIZADOS', 'FOTO', String(m.nombre), ctx.dispositivo);
   return { ok: true, data: { url: url } };
+}
+
+/* ============================================================
+ * 3.1.5 — MIS PEDIDOS, CUENTAS BANCARIAS, EFECTIVO POR CLIENTE, LIMPIEZA
+ * ============================================================ */
+
+/* Textos largos de Ajustes: se conservan los saltos de línea. */
+var LARGOS_ = { datos_transferencia: 600, privacidad_texto: 1500, politicas_texto: 2000, cuentas_bancarias: 4000 };
+function textoLargo_(v, max) {
+  return String(v == null ? '' : v).replace(/\r\n?/g, '\n').replace(/[\u0000-\u0009\u000B-\u001F\u007F]/g, ' ').replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim().slice(0, max);
+}
+
+/* Cuentas bancarias del negocio (hasta 6), guardadas como JSON en la configuración. */
+function cuentasLimpias_(v) {
+  var lista;
+  try { lista = typeof v === 'string' ? (v ? JSON.parse(v) : []) : v; } catch (e) { throw fallo_('Cuentas bancarias no válidas.'); }
+  if (!Array.isArray(lista)) throw fallo_('Cuentas bancarias no válidas.');
+  if (lista.length > 6) throw fallo_('Máximo 6 cuentas bancarias.');
+  var limpias = lista.map(function (c, i) {
+    var o = {
+      banco: limpiarTexto_(c.banco, 60), tipo: String(c.tipo) === 'corriente' ? 'corriente' : 'ahorros',
+      numero: limpiarTexto_(c.numero, 30).replace(/[^\d\-]/g, ''), titular: limpiarTexto_(c.titular, 80),
+      documento: limpiarTexto_(c.documento, 13).replace(/\D/g, ''), correo: limpiarTexto_(c.correo, 80), activa: c.activa !== false
+    };
+    if (!o.banco) throw fallo_('Cuenta ' + (i + 1) + ': elija el banco.');
+    if (o.numero.replace(/\D/g, '').length < 5) throw fallo_('Cuenta ' + (i + 1) + ': escriba el número de cuenta.');
+    if (!o.titular) throw fallo_('Cuenta ' + (i + 1) + ': escriba el nombre del titular.');
+    if (o.documento && [10, 13].indexOf(o.documento.length) < 0) throw fallo_('Cuenta ' + (i + 1) + ': la cédula tiene 10 dígitos y el RUC 13.');
+    if (o.correo && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(o.correo)) throw fallo_('Cuenta ' + (i + 1) + ': correo no válido.');
+    return o;
+  });
+  return limpias.length ? JSON.stringify(limpias) : '';
+}
+
+/* Datos públicos y mínimos de un pedido para el seguimiento del cliente. */
+function pedidoPorClave_(s) {
+  var sg = /^(PED-\d{4,})-([a-z0-9]{6,12})$/i.exec(limpiarTexto_(s, 40));
+  if (!sg) return null;
+  return leerTabla_('pedidos').filter(function (x) { return String(x.numero) === sg[1].toUpperCase() && String(x.clave_seguimiento || '') === sg[2].toLowerCase(); })[0] || null;
+}
+
+/* Seguimiento de varios pedidos del mismo teléfono en una sola consulta (máx. 10). */
+function accionPedidosSeguir_(data) {
+  if (!estaInstalado_()) throw fallo_('El sistema aún no está instalado.', 'NO_INSTALADO');
+  var claves = (Array.isArray(data.s) ? data.s : []).slice(0, 10);
+  var lista = [];
+  claves.forEach(function (k) {
+    try { var r = accionPedidoConsultar_({ s: k }); if (r.ok) lista.push(r.data); } catch (e) { lista.push({ seguimiento: String(k), no_existe: true }); }
+  });
+  return { ok: true, data: { pedidos: lista } };
+}
+
+/* Enlace personal «Mis pedidos»: historial del cliente (sin dirección ni teléfono). */
+function accionMisPedidos_(data) {
+  if (!estaInstalado_()) throw fallo_('El sistema aún no está instalado.', 'NO_INSTALADO');
+  var c = limpiarTexto_(data.c, 40).toLowerCase();
+  if (!/^[a-z0-9]{12,24}$/.test(c)) throw fallo_('Este enlace no es válido.', 'NO_EXISTE');
+  var cli = leerTabla_('clientes').filter(function (x) { return String(x.clave_cliente || '') === c && x.anonimizado !== true; })[0];
+  if (!cli) throw fallo_('Este enlace no es válido o ya venció.', 'NO_EXISTE');
+  var suyos = leerTabla_('pedidos').filter(function (p) { return String(p.cliente_id) === String(cli.id); })
+    .sort(function (a, b) { return (b.creado instanceof Date ? b.creado.getTime() : 0) - (a.creado instanceof Date ? a.creado.getTime() : 0); }).slice(0, 30);
+  var det = detallePorPedido_(suyos.map(function (p) { return String(p.id); }));
+  return { ok: true, data: { nombre: String(cli.nombre).split(/\s+/)[0], pedidos: suyos.map(function (p) {
+    return { numero: String(p.numero), s: String(p.clave_seguimiento || '') ? String(p.numero) + '-' + String(p.clave_seguimiento) : '', estado: String(p.estado), creado: iso_(p.creado), total: redondear_(p.total), local_id: String(p.local_id),
+      items: (det[String(p.id)] || []).map(function (d) { return { p: d.plato_id, c: d.cantidad, n: d.nombre }; }) };
+  }) } };
+}
+
+/* ¿Este cliente puede pagar en efectivo? (lo decide el dueño en Clientes). Solo devuelve sí/no. */
+function accionPagoOpciones_(data) {
+  var tel = normalizarTelefono_(data.telefono, leerConfig_().pais_codigo);
+  var cache = CacheService.getScriptCache(), clave = 'PAGOOP_' + String(tel).replace(/\D/g, '');
+  var veces = Number(cache.get('PAGOOP_N') || 0);
+  if (veces > 600) throw fallo_('Intente en un momento.', 'LIMITE');
+  cache.put('PAGOOP_N', String(veces + 1), 60);
+  var guardado = cache.get(clave);
+  if (guardado) return { ok: true, data: { efectivo: guardado === '1' } };
+  var c = leerTabla_('clientes').filter(function (x) { return String(x.telefono) === tel; })[0];
+  var ok = !!(c && c.efectivo_ok === true);
+  cache.put(clave, ok ? '1' : '0', 120);
+  return { ok: true, data: { efectivo: ok } };
+}
+
+/* El dueño marca a un cliente como «puede pagar en efectivo». */
+function accionClienteEfectivo_(data, ctx) {
+  var id = limpiarTexto_(data.id, 40), lock = candado_(), c;
+  try {
+    c = leerTabla_('clientes').filter(function (x) { return String(x.id) === id; })[0];
+    if (!c) throw fallo_('Ese cliente no existe.', 'NO_EXISTE');
+    actualizarCampos_('clientes', c._fila, c, { efectivo_ok: data.efectivo === true });
+  } finally { lock.releaseLock(); }
+  CacheService.getScriptCache().remove('PAGOOP_' + String(c.telefono).replace(/\D/g, ''));
+  bitacora_(ctx.sesion, 'CLIENTES', data.efectivo === true ? 'EFECTIVO_SI' : 'EFECTIVO_NO', id, ctx.dispositivo);
+  return { ok: true, data: { id: id, efectivo: data.efectivo === true } };
+}
+
+/* Clave del enlace «Mis pedidos» de un cliente (se crea si no tiene). */
+function claveCliente_(c) {
+  if (String(c.clave_cliente || '')) return String(c.clave_cliente);
+  var k = nuevaClaveSeguimiento_() + nuevaClaveSeguimiento_();
+  actualizarCampos_('clientes', c._fila, c, { clave_cliente: k });
+  c.clave_cliente = k;
+  return k;
+}
+
+/* Datos personales de clientes que no piden en N años: se borran solos (quedan los totales). */
+function limpiarClientesInactivos_() {
+  var anos = numero_(leerConfig_().anos_limpieza_clientes);
+  if (!(anos > 0)) return 0;
+  var limite = new Date(Date.now() - anos * 365 * 86400000), n = 0;
+  leerTabla_('clientes').forEach(function (c) {
+    if (c.anonimizado === true || !(c.ultimo_pedido instanceof Date) || c.ultimo_pedido >= limite) return;
+    try { accionClienteAnonimizar_({ id: String(c.id) }, { sesion: { usuario: 'sistema', rol: '', local_id: 'TODOS' }, dispositivo: '' }); n++; } catch (e) { console.error('limpieza cliente: ' + e); }
+  });
+  return n;
 }

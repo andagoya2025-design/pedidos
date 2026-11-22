@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#1F1B16">
+  <title>Cómo funciona tu pedido</title>
+  <link rel="icon" href="iconos/icono-192.png" type="image/png">
+  <link rel="stylesheet" href="css/app.css">
+  <link rel="stylesheet" href="css/modulos.css">
+</head>
+<body>
+  <main class="privacidad">
+    <a class="btn secundario chico" href="pedir.html">← Volver al pedido</a>
+    <h1>📋 Cómo funciona tu pedido</h1>
+    <p class="subtitulo" id="pv-negocio">Cargando…</p>
+    <section class="tarjeta politicas-lista" id="pl-lista" aria-busy="true"></section>
+    <section class="tarjeta">
+      <h2>¿Dudas o cambios?</h2>
+      <p>Un pedido enviado ya no se edita en la página. Escríbenos por WhatsApp con tu número de pedido y te ayudamos.</p>
+      <p id="pv-contacto"></p>
+      <p><a href="privacidad.html">🔒 Aviso de privacidad</a></p>
+    </section>
+  </main>
+  <script src="js/config.js"></script>
+  <script>
+    (function () {
+      'use strict';
+      var DEF = '🔒 Pago con transferencia o Deuna: tu pedido se prepara cuando confirmamos el pago en nuestra cuenta (la foto del comprobante sola no basta).\n⏳ Si pagas desde otro banco, la acreditación puede tardar; preparamos apenas llegue.\n🔢 Te damos un código de 4 números: dáselo al motorizado solo cuando tengas tu pedido en la mano.\n✏️ Una vez enviado, el pedido no se puede editar: para cambios escríbenos por WhatsApp.\n↩️ Si tu pago no se acredita, el pedido se anula. Si anulamos un pedido ya pagado, te devolvemos el dinero.\n🕒 La hora es aproximada y el envío depende de tu zona.';
+      function poner(id, txt) { var e = document.getElementById(id); if (e) e.textContent = txt; }
+      function lista(t) {
+        var c = document.getElementById('pl-lista'); c.innerHTML = ''; c.removeAttribute('aria-busy');
+        String(t || DEF).split('\n').filter(function (l) { return l.trim(); }).forEach(function (l) { var p = document.createElement('p'); p.textContent = l; c.appendChild(p); });
+      }
+      var cfg = window.APP_CONFIG || {};
+      if (!cfg.url) { poner('pv-negocio', ''); lista(''); return; }
+      fetch(cfg.url, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ accion: 'privacidadPublica', data: {} }), redirect: 'follow', cache: 'no-store' })
+        .then(function (r) { return r.json(); })
+        .then(function (r) {
+          var d = (r && r.data) || {};
+          poner('pv-negocio', d.negocio ? d.negocio + (d.ciudad ? ' · ' + d.ciudad : '') : '');
+          lista(String(d.politicas || '').trim());
+          var tel = String(d.whatsapp || '').replace(/\D/g, '');
+          if (tel) {
+            var c = document.getElementById('pv-contacto'), a = document.createElement('a');
+            a.className = 'btn'; a.target = '_blank'; a.rel = 'noopener';
+            a.href = 'https://wa.me/' + tel + '?text=' + encodeURIComponent('Hola, tengo una consulta sobre mi pedido: ');
+            a.textContent = '💬 Escribir por WhatsApp';
+            c.appendChild(a);
+          }
+        })
+        .catch(function () { poner('pv-negocio', ''); lista(''); });
+    })();
+  </script>
+</body>
+</html>

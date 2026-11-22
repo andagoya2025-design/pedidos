@@ -512,3 +512,40 @@ details.otras-fechas[open] summary { margin-bottom: 10px; }
 .moto-foto { width: 72px; height: 72px; }
 .moto-foto img { object-position: center 22%; }
 .plato-admin .miniatura img { object-position: center 22%; }
+.iva-linea { font-size: 13px; color: var(--texto-2); }
+
+/* 3.1.5: cuentas bancarias «premium», estado del pago, mis pedidos, políticas */
+.cuentas { display: grid; gap: 10px; margin-top: 12px; }
+.cuenta-banco { position: relative; border-radius: 18px; padding: 14px 16px; color: #fff; background: linear-gradient(135deg, var(--banco, #2b2b2b), color-mix(in srgb, var(--banco, #2b2b2b) 70%, #000)); box-shadow: 0 8px 22px rgba(0,0,0,.18); text-align: left; }
+.cuenta-banco.elegida { outline: 3px solid var(--acento); outline-offset: 2px; }
+.cb-cabeza { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.cb-cabeza b { display: block; font-size: 16px; }
+.cb-cabeza small { opacity: .85; font-size: 12px; }
+.cb-logo { width: 36px; height: 36px; border-radius: 10px; background: rgba(255,255,255,.2); display: grid; place-items: center; font-weight: 800; font-size: 18px; flex: none; }
+.cb-numero { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 22px; font-weight: 800; letter-spacing: 1.5px; font-variant-numeric: tabular-nums; margin-bottom: 8px; }
+.cb-dato { display: flex; align-items: center; gap: 8px; font-size: 13px; padding: 2px 0; }
+.cb-dato span { opacity: .8; min-width: 56px; }
+.cb-dato b { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.cb-copiar { border: 0; background: rgba(255,255,255,.2); color: inherit; border-radius: 10px; min-width: 40px; min-height: 36px; font-size: 16px; cursor: pointer; }
+.cb-elegir { margin-top: 10px; background: rgba(255,255,255,.95); color: #1f1b16; border: 0; }
+.cuenta-banco.elegida .cb-elegir { background: var(--acento); color: #fff; }
+.cb-monto { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; padding: 10px 12px; border-radius: var(--radio); background: var(--superficie-2); }
+.cb-monto span { color: var(--texto-2); font-size: 13px; }
+.cb-monto b { font-size: 20px; flex: 1; }
+.cb-monto .cb-copiar { background: var(--superficie); border: 1px solid var(--borde); }
+.cb-monto small { width: 100%; color: var(--texto-2); }
+.politica-linea { display: flex; gap: 8px; margin-top: 10px; padding: 10px 12px; border-radius: var(--radio); background: color-mix(in srgb, var(--acento) 10%, var(--superficie)); font-size: 14px; }
+.pago-estado { display: flex; gap: 8px; margin-top: 10px; padding: 10px 12px; border-radius: var(--radio); font-size: 14px; text-align: left; }
+.pago-estado.espera { background: color-mix(in srgb, #e9a400 16%, var(--superficie)); }
+.pago-estado.ok { background: color-mix(in srgb, var(--exito) 14%, var(--superficie)); }
+.mis-pedidos summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: 6px; min-height: 40px; }
+.mis-pedidos summary::-webkit-details-marker { display: none; }
+.mis-pedidos summary small { color: var(--texto-2); }
+.mp-fila { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-top: 1px solid var(--borde); }
+.mp-fila .item-sub { overflow-wrap: anywhere; }
+.seguimiento .seg-caja + .seg-caja { margin-top: 10px; }
+.politicas-lista p { margin: 0 0 10px; text-align: left; }
+.pedir-pie { text-align: center; padding: 18px 16px 110px; font-size: 13px; color: var(--texto-2); }
+.pedir-pie a, .pedir-pie .enlace { color: var(--texto-2); font-weight: 600; }
+.pago-bloqueo { display: flex; gap: 8px; padding: 8px 10px; border-radius: var(--radio); background: color-mix(in srgb, #e9a400 16%, var(--superficie)); font-size: 13px; }
+.pago-bloqueo.tarde { background: color-mix(in srgb, var(--error) 16%, var(--superficie)); }

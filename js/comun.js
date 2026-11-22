@@ -147,13 +147,14 @@
         img.onerror = function () { rechazar(new Error('No se pudo abrir la foto.')); };
         img.onload = function () {
           var c = document.createElement('canvas');
+          function blanco() { var g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); } // 3.1.5: PNG transparente → fondo blanco
           if (op.cuadrado) {
             var lado = Math.min(img.width, img.height), dest = Math.min(max, lado);
-            c.width = dest; c.height = dest;
+            c.width = dest; c.height = dest; blanco();
             c.getContext('2d').drawImage(img, (img.width - lado) / 2, (img.height - lado) / 2, lado, lado, 0, 0, dest, dest);
           } else {
             var esc = Math.min(1, max / Math.max(img.width, img.height));
-            c.width = Math.round(img.width * esc); c.height = Math.round(img.height * esc);
+            c.width = Math.round(img.width * esc); c.height = Math.round(img.height * esc); blanco();
             c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
           }
           resolver(c.toDataURL('image/jpeg', 0.72));

@@ -23,10 +23,11 @@
       <h2>¿Quién los ve?</h2>
       <p>Solo el personal del local y el motorizado que te lleva el pedido (él ve tu nombre, dirección y celular mientras dura la entrega). No vendemos ni compartimos tus datos con otras empresas.</p>
       <h2>¿Cuánto tiempo?</h2>
-      <p>Tus datos de contacto se guardan mientras seas cliente. El recorrido GPS del motorizado se borra solo a los 30 días. Los valores de las ventas se guardan por obligación contable, sin tus datos personales si pides que te borremos.</p>
+      <p>Tus datos de contacto se guardan mientras seas cliente: si no pides en <b id="pv-anos">2</b> años, se borran solos. El recorrido GPS del motorizado y la foto de entrega se borran solos a los <b id="pv-rastreo">30</b> días. «Mis pedidos» se guarda solo en tu teléfono, se borra solo a los <b id="pv-hist">30</b> días y puedes borrarlo cuando quieras. Los valores de las ventas se guardan por obligación contable, sin tus datos personales si pides que te borremos.</p>
       <h2>Tus derechos</h2>
       <p>Según la Ley Orgánica de Protección de Datos Personales del Ecuador puedes pedir ver, corregir o <b>eliminar</b> tus datos, y oponerte a recibir promociones. Escríbenos por WhatsApp y lo hacemos sin costo.</p>
       <p id="pv-contacto"></p>
+      <p><a href="politicas.html">📋 Cómo funciona tu pedido (pagos, cambios y entrega)</a></p>
     </section>
   </main>
   <script src="js/config.js"></script>
@@ -41,6 +42,7 @@
         .then(function (r) {
           var d = (r && r.data) || {};
           poner('pv-negocio', 'Responsable de tus datos: ' + (d.negocio || 'el restaurante') + (d.ciudad ? ' · ' + d.ciudad : ''));
+          if (d.anos_clientes) poner('pv-anos', d.anos_clientes); if (d.dias_rastreo) poner('pv-rastreo', d.dias_rastreo); if (d.dias_historial) poner('pv-hist', d.dias_historial);
           if (d.texto) { var p = document.getElementById('pv-propio'); p.textContent = d.texto; p.hidden = false; p.style.whiteSpace = 'pre-line'; }
           var tel = String(d.whatsapp || '').replace(/\D/g, '');
           if (tel) {

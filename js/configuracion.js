@@ -119,7 +119,11 @@
         UI.aviso('Subiendo el logo…', '');
         var s = await DATOS.pedir('fotoSubir', { foto: base64 }, { guardar: true });
         UI.$('#cf-logo_url', f).value = s.url;
-        UI.aviso('Logo listo. Toque «Guardar cambios».', 'ok');
+        // 3.1.5: el logo se guarda al instante (no hace falta «Guardar cambios»)
+        var rg = await DATOS.pedir('configGuardar', { config: { logo_url: s.url } }, { guardar: true });
+        if (cache.config && rg.config) cache.config.config = rg.config;
+        APP.publico.logo_url = s.url; UI.aplicarMarca(APP.publico); global.APP_MEMORIA.guardar('marca', APP.publico);
+        UI.aviso('✅ Logo guardado.', 'ok');
       } catch (err) { UI.error('No se subió el logo', err.message); }
     });
     UI.$$('input[type=color]', f).forEach(function (inp) {

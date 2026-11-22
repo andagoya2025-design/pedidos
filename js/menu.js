@@ -398,10 +398,11 @@
       var f = lista.filter(function (c) { return !c.anonimizado && (filtro === 'todos' || (filtro === 'vip' && c.vip) || (filtro === 'inactivos' && c.inactivo) || (filtro === 'promos' && c.acepta_promos)); });
       UI.$('#cl-lista').innerHTML = f.length ? '<div class="lista">' + f.map(function (c) {
         return '<div class="item"><div class="avatar">' + UI.esc(UI.iniciales(c.nombre)) + '</div><div class="item-cuerpo"><div class="item-titulo">' + UI.esc(c.nombre) +
-          (c.vip ? ' <span class="etiqueta ok">VIP</span>' : '') + (c.inactivo ? ' <span class="etiqueta aviso">+30 días</span>' : '') + (c.acepta_promos ? ' <span class="etiqueta">📣 Acepta promos</span>' : '') + '</div>' +
+          (c.vip ? ' <span class="etiqueta ok">VIP</span>' : '') + (c.efectivo_ok ? ' <span class="etiqueta ok">💵 Efectivo</span>' : '') + (c.inactivo ? ' <span class="etiqueta aviso">+30 días</span>' : '') + (c.acepta_promos ? ' <span class="etiqueta">📣 Acepta promos</span>' : '') + '</div>' +
           '<div class="item-sub">' + UI.esc(c.telefono) + ' · ' + c.pedidos + ' pedido(s) · ' + UI.dinero(c.total_gastado) + '</div>' +
           '<div class="item-sub">Último: ' + UI.esc(UI.fechaHora(c.ultimo_pedido)) + '</div></div>' +
-          (c.anonimizado ? '' : '<button class="btn secundario chico" type="button" data-wa="' + UI.esc(c.telefono) + '" data-nombre="' + UI.esc(c.nombre) + '" aria-label="WhatsApp">💬</button>' +
+          (c.anonimizado ? '' : '<button class="btn ' + (c.efectivo_ok ? '' : 'borde ') + 'chico" type="button" data-efectivo="' + UI.esc(c.id) + '" aria-pressed="' + !!c.efectivo_ok + '" title="Puede pagar en efectivo aunque el efectivo esté apagado o pase del límite">💵</button>' +
+            '<button class="btn secundario chico" type="button" data-wa="' + UI.esc(c.telefono) + '" data-nombre="' + UI.esc(c.nombre) + '" aria-label="WhatsApp">💬</button>' +
             '<button class="btn borde chico" type="button" data-borrar="' + UI.esc(c.id) + '" data-nombre="' + UI.esc(c.nombre) + '" aria-label="Borrar datos" title="Borrar sus datos personales">🗑</button>') + '</div>';
       }).join('') + '</div>' : UI.vacio('👥', 'No hay clientes en este grupo.');
       UI.$$('[data-borrar]', UI.$('#cl-lista')).forEach(function (b) {
@@ -412,13 +413,22 @@
           catch (err) { UI.error('No se pudo', err.message); }
         });
       });
+      UI.$$('[data-efectivo]', UI.$('#cl-lista')).forEach(function (b) { // 3.1.5: efectivo por cliente (lo decide el dueño)
+        b.addEventListener('click', function () {
+          var c = lista.filter(function (x) { return x.id === b.getAttribute('data-efectivo'); })[0]; if (!c) return;
+          UI.trabajando(b, async function () {
+            try { await DATOS.pedir('clienteEfectivo', { id: c.id, permitir: !c.efectivo_ok }, { guardar: true }); c.efectivo_ok = !c.efectivo_ok; UI.aviso(c.efectivo_ok ? '💵 ' + c.nombre + ' ya puede pagar en efectivo.' : c.nombre + ' vuelve a las reglas generales de pago.', 'ok'); pintar(); }
+            catch (err) { UI.error('No se pudo', err.message); }
+          });
+        });
+      });
       UI.$$('[data-wa]', UI.$('#cl-lista')).forEach(function (b) {
         b.addEventListener('click', function () { UI.abrirWhatsApp(b.getAttribute('data-wa'), 'Hola ' + b.getAttribute('data-nombre').split(' ')[0] + ', '); });
       });
     }
     cuerpo().innerHTML = '<p class="subtitulo">' + r.total + ' cliente(s), guardados por su celular (no se repiten).</p>' +
       '<div class="filtros"><button class="pestana" type="button" data-f="todos" aria-selected="true">Todos</button><button class="pestana" type="button" data-f="vip" aria-selected="false">⭐ VIP</button><button class="pestana" type="button" data-f="inactivos" aria-selected="false">💤 No vuelven hace 30 días</button><button class="pestana" type="button" data-f="promos" aria-selected="false">📣 Aceptan promos</button></div><div id="cl-lista"></div>' +
-      '<p class="ayuda">Envíe promociones solo a quienes las aceptaron (ley de protección de datos). Si un cliente pide que borren sus datos, toque 🗑.</p>';
+      '<p class="ayuda">💵 = ese cliente puede pagar en efectivo aunque el efectivo esté apagado. Envíe promociones solo a quienes las aceptaron (ley de protección de datos). Si un cliente pide que borren sus datos, toque 🗑. Los clientes que no piden hace ' + UI.esc((APP.publico && APP.publico.anos_limpieza_clientes) || '2') + ' años se borran solos.</p>';
     UI.$$('[data-f]', cuerpo()).forEach(function (b) {
       b.addEventListener('click', function () {
         filtro = b.getAttribute('data-f');
@@ -471,11 +481,16 @@
       '<div class="campo"><label for="aj-atraso">Atrasado después de (min)</label><input class="entrada" id="aj-atraso" name="minutos_atraso" inputmode="numeric" value="' + UI.esc(c.minutos_atraso) + '"></div>' +
       '<div class="campo"><label for="aj-mesas">Mesas con QR</label><input class="entrada" id="aj-mesas" name="mesas" inputmode="numeric" value="' + UI.esc(c.mesas || '0') + '"><span class="ayuda">0 = no se pide en mesa.</span></div></div>' +
       '<h4>💳 Pagos</h4>' +
-      '<div class="campo"><label for="aj-transf">Datos para transferencia</label><textarea class="entrada" id="aj-transf" name="datos_transferencia" maxlength="300" placeholder="Banco, tipo y número de cuenta, nombre, cédula">' + UI.esc(c.datos_transferencia) + '</textarea></div>' +
+      '<div class="campo"><label>🏦 Cuentas bancarias (hasta 6)</label><div id="aj-cuentas" class="lista"></div>' +
+      '<button class="btn borde chico" type="button" id="aj-cuenta-mas" style="margin-top:8px">＋ Agregar cuenta</button>' +
+      '<span class="ayuda">El cliente las ve como tarjetas, con botones para copiar el número y el monto. Si hay varias, elige a cuál pagó.</span></div>' +
+      '<div class="campo"><label for="aj-transf">Nota extra para transferencias (opcional)</label><textarea class="entrada" id="aj-transf" name="datos_transferencia" maxlength="600" placeholder="Ej. Envía el comprobante por WhatsApp con tu número de pedido.">' + UI.esc(c.datos_transferencia) + '</textarea></div>' +
       '<div class="campo"><label>QR de Deuna del negocio</label><div class="item" style="padding:8px"><div class="miniatura" id="aj-deuna-prev">' + (c.deuna_qr_url ? '<img src="' + UI.esc(c.deuna_qr_url) + '" alt="" referrerpolicy="no-referrer">' : '📲') + '</div>' +
       '<div class="item-cuerpo"><input class="entrada" id="aj-deuna-archivo" type="file" accept="image/*"><span class="ayuda">Foto o captura del QR de tu app Deuna Negocios. Sin QR, Deuna no aparece al cliente.</span></div></div>' +
       '<input type="hidden" name="deuna_qr_url" id="aj-deuna" value="' + UI.esc(c.deuna_qr_url || '') + '"></div>' +
       '<label class="interruptor"><input type="checkbox" id="aj-verificar"' + (c.verificar_antes_salir !== 'NO' ? ' checked' : '') + '> Transferencia y Deuna: no despachar hasta verificar el pago en el banco</label>' +
+      '<label class="interruptor"><input type="checkbox" id="aj-verprep"' + (c.verificar_antes_preparar !== 'NO' ? ' checked' : '') + '> Ni siquiera preparar hasta verificar el pago (recomendado)</label>' +
+      '<div class="campo"><label for="aj-alpago">Avisar si el pago no se verifica en (min)</label><input class="entrada" id="aj-alpago" name="minutos_alerta_pago" inputmode="numeric" value="' + UI.esc(c.minutos_alerta_pago || '30') + '"><span class="ayuda">El pedido se marca en rojo en el panel para que llame o escriba al cliente.</span></div>' +
       /* 3.1.3 */
       '<label class="interruptor"><input type="checkbox" id="aj-efectivo"' + (c.efectivo_permitido !== 'NO' ? ' checked' : '') + '> El cliente puede pagar en efectivo</label>' +
       '<div class="campo"><label for="aj-efmax">Efectivo solo hasta (USD)</label><input class="entrada" id="aj-efmax" name="efectivo_maximo" inputmode="decimal" value="' + UI.esc(c.efectivo_maximo || '') + '" placeholder="Ej. 20"><span class="ayuda">Vacío = sin límite. Si apaga el efectivo o el pedido pasa de este monto, el cliente solo ve transferencia o Deuna, y el pedido no pasa a cocina hasta que usted verifique el pago en su banco. Llene los datos de transferencia de arriba.</span></div>' +
@@ -499,11 +514,16 @@
       '<div class="campo"><label for="aj-sen">Alerta «sin señal» (min)</label><input class="entrada" id="aj-sen" name="minutos_alerta_senal" inputmode="numeric" value="' + UI.esc(c.minutos_alerta_senal || '5') + '"></div></div>' +
       '<div class="fila-campos"><div class="campo"><label for="aj-meta">Meta de entregas por día</label><input class="entrada" id="aj-meta" name="meta_entregas_dia" inputmode="numeric" value="' + UI.esc(c.meta_entregas_dia || '') + '" placeholder="Ej. 15"><span class="ayuda">Vacío = sin meta.</span></div>' +
       '<div class="campo"><label for="aj-bono">Bono por día cumplido (USD)</label><input class="entrada" id="aj-bono" name="bono_meta" inputmode="decimal" value="' + UI.esc(c.bono_meta || '') + '" placeholder="Ej. 3"></div></div>' +
+      '<h4>📋 Políticas para el cliente</h4>' +
+      '<div class="campo"><label for="aj-pol">Texto de «Cómo funciona tu pedido» (opcional)</label><textarea class="entrada" id="aj-pol" name="politicas_texto" maxlength="2000" rows="5" placeholder="Una regla por línea. Vacío = se usan las reglas estándar (pago, cambios, anulación, entrega).">' + UI.esc(c.politicas_texto || '') + '</textarea>' +
+      '<span class="ayuda">El cliente las acepta antes de enviar su pedido. <a href="politicas.html" target="_blank" rel="noopener">Ver políticas</a>.</span></div>' +
       '<h4>🕒 Formato de hora</h4>' +
       '<div class="segmento" id="aj-hora"><button type="button" data-h="24" class="' + (c.formato_hora !== '12' ? 'activo' : '') + '">24 h (18:30)</button><button type="button" data-h="12" class="' + (c.formato_hora === '12' ? 'activo' : '') + '">12 h (6:30 p. m.)</button></div>' +
       '<h4>🔒 Privacidad (ley de protección de datos)</h4>' +
       '<div class="campo"><label for="aj-priv">Texto propio del aviso (opcional)</label><textarea class="entrada" id="aj-priv" name="privacidad_texto" maxlength="1500" placeholder="Ej. Responsable: Pollos Don Diego, RUC…, dirección…">' + UI.esc(c.privacidad_texto || '') + '</textarea>' +
       '<span class="ayuda">Se muestra arriba del aviso estándar. <a href="privacidad.html" target="_blank" rel="noopener">Ver aviso</a>. Recorridos GPS y fotos de entrega se borran solos a los ' + UI.esc(c.dias_guardar_rastreo || '30') + ' días.</span></div>' +
+      '<div class="fila-campos"><div class="campo"><label for="aj-dhist">Historial del cliente en su teléfono (días)</label><input class="entrada" id="aj-dhist" name="dias_historial_cliente" inputmode="numeric" value="' + UI.esc(c.dias_historial_cliente || '30') + '"><span class="ayuda">«Mis pedidos» se borra solo pasado este tiempo. El cliente también puede borrarlo.</span></div>' +
+      '<div class="campo"><label for="aj-alimp">Borrar clientes que no piden en (años)</label><input class="entrada" id="aj-alimp" name="anos_limpieza_clientes" inputmode="numeric" value="' + UI.esc(c.anos_limpieza_clientes || '2') + '"><span class="ayuda">Se borran sus datos personales; las ventas quedan para la contabilidad.</span></div></div>' +
       '<button class="btn bloque" type="submit">Guardar ajustes</button></form>';
     var nombre = c.negocio_nombre;
     UI.$$('[data-h]', cuerpo()).forEach(function (b) { b.addEventListener('click', function () { UI.$$('[data-h]', cuerpo()).forEach(function (x) { x.classList.toggle('activo', x === b); }); }); });
@@ -531,6 +551,53 @@
       });
     });
     UI.$$('[data-dia]', cuerpo()).forEach(function (b) { b.addEventListener('click', function () { b.classList.toggle('activo'); }); });
+    /* 3.1.5: editor de cuentas bancarias (se guardan con «Guardar ajustes») */
+    var cuentas = [];
+    try { cuentas = JSON.parse(c.cuentas_bancarias || '[]'); } catch (e) { cuentas = []; }
+    if (!Array.isArray(cuentas)) cuentas = [];
+    function pintarCuentas() {
+      UI.$('#aj-cuentas').innerHTML = cuentas.length ? cuentas.map(function (x, i) {
+        return '<div class="item"><div class="avatar">🏦</div><div class="item-cuerpo"><div class="item-titulo">' + UI.esc(x.banco) + (x.activa === false ? ' <span class="etiqueta aviso">oculta</span>' : '') + '</div>' +
+          '<div class="item-sub">' + UI.esc(x.tipo === 'corriente' ? 'Corriente' : 'Ahorros') + ' N.º ' + UI.esc(x.numero) + ' · ' + UI.esc(x.titular) + '</div></div>' +
+          '<button class="btn secundario chico" type="button" data-cta-ed="' + i + '" aria-label="Editar">✏️</button><button class="btn borde chico" type="button" data-cta-del="' + i + '" aria-label="Quitar">🗑</button></div>';
+      }).join('') : '<p class="ayuda" style="margin:0">Aún no hay cuentas. Sin cuentas, la transferencia no aparece al cliente.</p>';
+      UI.$('#aj-cuenta-mas').hidden = cuentas.length >= 6;
+      UI.$$('[data-cta-ed]', cuerpo()).forEach(function (b) { b.addEventListener('click', function () { editarCuenta(Number(b.getAttribute('data-cta-ed'))); }); });
+      UI.$$('[data-cta-del]', cuerpo()).forEach(function (b) {
+        b.addEventListener('click', async function () {
+          var x = cuentas[Number(b.getAttribute('data-cta-del'))];
+          if (await UI.confirmar('¿Quitar la cuenta de ' + x.banco + '?', 'Deja de mostrarse al cliente cuando toque «Guardar ajustes».', 'Sí, quitar', true)) { cuentas.splice(Number(b.getAttribute('data-cta-del')), 1); pintarCuentas(); }
+        });
+      });
+    }
+    function editarCuenta(i) {
+      var x = i >= 0 ? cuentas[i] : { banco: '', tipo: 'ahorros', numero: '', titular: '', documento: '', correo: '', activa: true };
+      function validarCuenta(v) {
+          var n = { banco: UI.$('#cta-b', v).value.trim(), tipo: UI.$('[data-t].activo', v).getAttribute('data-t'), numero: UI.$('#cta-n', v).value.replace(/\D/g, ''), titular: UI.$('#cta-ti', v).value.trim(), documento: UI.$('#cta-d', v).value.replace(/\D/g, ''), correo: UI.$('#cta-c', v).value.trim(), activa: UI.$('#cta-a', v).checked };
+          if (!n.banco) return 'Escriba el banco.';
+          if (n.numero.length < 5) return 'Revise el número de cuenta.';
+          if (!n.titular) return 'Escriba a nombre de quién está.';
+          if (n.documento && n.documento.length !== 10 && n.documento.length !== 13) return 'La cédula tiene 10 números y el RUC 13.';
+          if (n.correo && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(n.correo)) return 'Revise el correo.';
+          if (i >= 0) cuentas[i] = n; else cuentas.push(n);
+          return true;
+      }
+      UI.ventana({
+        icono: '🏦', titulo: i >= 0 ? 'Editar cuenta' : 'Nueva cuenta bancaria',
+        html: '<form id="cta-f" class="formulario" novalidate>' +
+          '<div class="campo"><label for="cta-b">Banco</label><input class="entrada" id="cta-b" maxlength="40" list="cta-bancos" value="' + UI.esc(x.banco) + '" placeholder="Ej. Banco Pichincha"><datalist id="cta-bancos">' + ['Banco Pichincha', 'Banco Guayaquil', 'Produbanco', 'Banco del Pacífico', 'Banco Internacional', 'Banco Bolivariano', 'Cooperativa JEP', 'Banco del Austro'].map(function (n) { return '<option value="' + n + '">'; }).join('') + '</datalist></div>' +
+          '<div class="campo"><label>Tipo</label><div class="segmento" id="cta-t"><button type="button" data-t="ahorros" class="' + (x.tipo !== 'corriente' ? 'activo' : '') + '">Ahorros</button><button type="button" data-t="corriente" class="' + (x.tipo === 'corriente' ? 'activo' : '') + '">Corriente</button></div></div>' +
+          '<div class="campo"><label for="cta-n">Número de cuenta</label><input class="entrada" id="cta-n" inputmode="numeric" maxlength="20" value="' + UI.esc(x.numero) + '"></div>' +
+          '<div class="campo"><label for="cta-ti">A nombre de</label><input class="entrada" id="cta-ti" maxlength="60" value="' + UI.esc(x.titular) + '"></div>' +
+          '<div class="campo"><label for="cta-d">Cédula o RUC del titular (opcional)</label><input class="entrada" id="cta-d" inputmode="numeric" maxlength="13" value="' + UI.esc(x.documento || '') + '"><span class="ayuda">Algunos bancos lo piden para transferir desde otro banco.</span></div>' +
+          '<div class="campo"><label for="cta-c">Correo para el comprobante (opcional)</label><input class="entrada" id="cta-c" type="email" maxlength="80" value="' + UI.esc(x.correo || '') + '" autocapitalize="off"></div>' +
+          '<label class="interruptor"><input type="checkbox" id="cta-a"' + (x.activa !== false ? ' checked' : '') + '> Mostrar esta cuenta al cliente</label></form>',
+        alAbrir: function (v) { UI.$$('[data-t]', v).forEach(function (b) { b.addEventListener('click', function () { UI.$$('[data-t]', v).forEach(function (y) { y.classList.toggle('activo', y === b); }); }); }); },
+        botones: [{ texto: 'Cancelar', valor: false, clase: 'secundario' }, { texto: 'Listo', valor: true, antes: function (v) { var m = validarCuenta(v); if (m !== true) { UI.aviso(m, 'error'); return false; } return true; } }]
+      }).then(function (ok) { if (ok) { pintarCuentas(); UI.aviso('Toque «Guardar ajustes» para publicar la cuenta.', ''); } });
+    }
+    UI.$('#aj-cuenta-mas').addEventListener('click', function () { editarCuenta(-1); });
+    pintarCuentas();
     UI.$('#aj-deuna-archivo').addEventListener('change', async function (e) {
       var archivo = e.target.files[0]; if (!archivo) return;
       try {
@@ -552,6 +619,11 @@
       if (d.whatsapp_dueno) d.whatsapp_dueno = d.whatsapp_dueno.replace(/[^\d+]/g, '');
       d.dias_cerrado = UI.$$('[data-dia].activo', f).map(function (x) { return x.getAttribute('data-dia'); }).join(',');
       d.verificar_antes_salir = UI.$('#aj-verificar').checked ? 'SI' : 'NO';
+      d.verificar_antes_preparar = UI.$('#aj-verprep').checked ? 'SI' : 'NO'; // 3.1.5
+      d.cuentas_bancarias = JSON.stringify(cuentas);
+      d.minutos_alerta_pago = String(Math.max(5, Math.floor(UI.numero(d.minutos_alerta_pago) || 30)));
+      d.dias_historial_cliente = String(Math.min(365, Math.max(1, Math.floor(UI.numero(d.dias_historial_cliente) || 30))));
+      d.anos_limpieza_clientes = String(Math.min(10, Math.max(1, Math.floor(UI.numero(d.anos_limpieza_clientes) || 2))));
       d.propinas = UI.$('#aj-propinas').checked ? 'SI' : 'NO';
       d.codigo_entrega = UI.$('#aj-codigo').checked ? 'SI' : 'NO';
       d.efectivo_permitido = UI.$('#aj-efectivo').checked ? 'SI' : 'NO'; // 3.1.3
@@ -581,6 +653,7 @@
 (function (global) {
   'use strict';
   var UI = global.UI, DATOS = global.DATOS, APP = global.APP, MEM = global.APP_MEMORIA;
+  function cuentasCon(c) { try { return JSON.parse(c.cuentas_bancarias || '[]').some(function (x) { return x.activa !== false; }); } catch (e) { return !!String(c.datos_transferencia || '').trim(); } }
   APP.guiaInicio = async function (cont) {
     if (!cont || MEM.leer('guia_oculta')) return;
     var r;
@@ -592,7 +665,8 @@
       ['🏷️', 'Nombre y logo del negocio', c.negocio_nombre && c.negocio_nombre !== 'Mi Restaurante' && !!c.logo_url, 'config'],
       ['🍔', 'Menú con platos y fotos', (m.platos || []).length > 0, 'menu?p=platos'],
       ['🛵', 'Zonas y costo de envío', (m.zonas || []).length > 0, 'menu?p=zonas'],
-      ['💳', 'Datos de transferencia o QR de Deuna', !!(c.datos_transferencia || c.deuna_qr_url), 'menu?p=enlace'],
+      ['💳', 'Cuentas bancarias o QR de Deuna', !!(cuentasCon(c) || c.deuna_qr_url), 'menu?p=enlace'],
+      ['💬', 'WhatsApp del negocio (para recibir comprobantes)', !!String(c.whatsapp || '').trim(), 'config'],
       ['⏰', 'Horario de atención', !!(c.horario_apertura && c.horario_cierre), 'menu?p=enlace'],
       ['🏍️', 'Tu primer motorizado', (r[2].motorizados || []).length > 0, 'motorizados'],
       ['📤', 'Compartir el enlace con tus clientes', !!MEM.leer('compartio_enlace'), 'compartir']

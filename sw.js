@@ -8,7 +8,7 @@
  * - Nunca guarda datos del negocio: los pedidos van siempre al servidor.
  * ============================================================
  */
-var VERSION = 'app-3.1.6';
+var VERSION = 'app-3.1.8';
 var FOTOS = 'fotos-1';      // 3.1: fotos de platos y mapas (sobrevive a las actualizaciones)
 var MAX_FOTOS = 150;
 
@@ -40,6 +40,7 @@ var ARCHIVOS = [
   'js/monitoreo.js',
   'js/informe_motorizados.js',
   'privacidad.html',
+  'politicas.html',
   'img/platos/pollo.svg',
   'img/platos/bebida.svg',
   'img/platos/postre.svg',

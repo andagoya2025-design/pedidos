@@ -119,10 +119,14 @@
     /* 3.1.3: enlace propio del pedido (?s=PED-0006-clave): abre directo su seguimiento */
     var sg = String(params.get('s') || '').trim();
     if (/^PED-\d{4,}-[a-z0-9]{6,12}$/i.test(sg)) {
-      var ant = MEM.leer('ultimo_pedido') || {};
-      if (ant.s !== sg) MEM.guardar('ultimo_pedido', { numero: sg.replace(/-[a-z0-9]+$/i, '').toUpperCase(), s: sg, fecha: Date.now() });
+      var num = sg.replace(/-[a-z0-9]+$/i, '').toUpperCase();
+      if (!misPedidos().some(function (x) { return x.n === num; })) guardarMiPedido({ n: num, s: sg, f: Date.now(), t: 0, e: 'Recibido', i: [] });
       try { global.history.replaceState(null, '', global.location.pathname + (params.get('local') ? '?local=' + encodeURIComponent(params.get('local')) : '')); } catch (e) { /* sin historial */ }
       pintarSeguimiento(true);
+    } else if (/^[a-z0-9]{12,24}$/i.test(String(params.get('c') || ''))) { // 3.1.5: enlace personal «Mis pedidos»
+      var cc = String(params.get('c'));
+      try { global.history.replaceState(null, '', global.location.pathname); } catch (e) { /* sin historial */ }
+      traerMisPedidos(cc).then(function () { pintarSeguimiento(true); });
     } else pintarSeguimiento();
     if (localId) pintarMenu(); else pintarLocales();
   }
@@ -501,20 +505,23 @@
   async function leerCopiado() { try { return sacarEnlace(await global.navigator.clipboard.readText()); } catch (e) { return ''; } }
 
   async function pegarUbicacion() {
-    /* Camino rápido: si ya copió el enlace, se usa con un solo toque. */
-    var enlace = await leerCopiado();
+    /* Camino rápido: si ya copió el enlace, se usa con un solo toque.
+       3.1.5: en iPhone el navegador no deja leer lo copiado → se va directo al cuadro para pegar con el dedo. */
+    var ios = /iPhone|iPad|iPod/.test(global.navigator.userAgent);
+    var enlace = await leerCopiado(); // en iPhone aparece la burbuja «Pegar»: al tocarla se usa directo
     if (!enlace) {
       var dato = '';
       var ok = await UI.ventana({
         icono: '📋', titulo: 'Pegar ubicación',
         html: '<ol class="pasos-lista"><li>Abre <b>Google Maps</b> y toca el punto de tu casa.</li><li>Toca <b>Compartir</b> → <b>Copiar</b>.</li><li>Vuelve aquí y toca <b>📋 Pegar</b>.</li></ol>' +
-          '<button class="btn bloque" type="button" id="pu-pegar" style="margin-bottom:10px">📋 Pegar</button>' +
-          '<div class="campo"><label for="pu-dato">O pega aquí (mantén el dedo → Pegar)</label><input class="entrada" id="pu-dato" maxlength="400" placeholder="https://maps.app.goo.gl/…" autocomplete="off"></div>' +
+          '<button class="btn bloque" type="button" id="pu-pegar" style="margin-bottom:6px">📋 Pegar</button>' +
+          (ios ? '<p class="ayuda" style="margin:0 0 10px">En iPhone sale una burbujita negra que dice <b>«Pegar»</b> justo encima del botón: <b>tócala</b>.</p>' : '') +
+          '<div class="campo"><label for="pu-dato">Si no funciona, pega aquí (mantén el dedo → Pegar)</label><input class="entrada" id="pu-dato" maxlength="400" placeholder="Mantén el dedo aquí → Pegar" autocomplete="off"></div>' +
           '<button class="btn secundario chico" type="button" id="pu-maps">🗺️ Abrir Google Maps</button>',
         alAbrir: function (v, cerrar) {
-          UI.$('#pu-pegar', v).addEventListener('click', async function () {
+          var pb = UI.$('#pu-pegar', v); if (pb) pb.addEventListener('click', async function () {
             var e = await leerCopiado();
-            if (e) { dato = e; cerrar(true); } else UI.aviso('No hay un enlace copiado. Cópialo en Google Maps o pégalo abajo.', 'error');
+            if (e) { dato = e; cerrar(true); } else { UI.aviso(ios ? 'Toca «Pegar» en la burbujita del iPhone, o mantén el dedo en el cuadro → Pegar.' : 'No hay un enlace copiado. Cópialo en Google Maps o pégalo abajo.', 'error'); var c = UI.$('#pu-dato', v); if (c) c.focus(); }
           });
           UI.$('#pu-maps', v).addEventListener('click', function () { global.open('https://www.google.com/maps', '_blank', 'noopener'); });
         },
@@ -549,6 +556,57 @@
   }
   function quitarUbicacion() { ubic = null; cambio(); if (mapa) { mapa.destruir(); mapa = null; } $('#ubic-zona').innerHTML = ''; }
 
+  /* ---------------- 3.1.5: cuentas bancarias, políticas y efectivo por cliente ---------------- */
+  function cuentasBanco() {
+    var t = String(cfg().cuentas_bancarias || ''), lista = [];
+    try { lista = t ? JSON.parse(t) : []; } catch (e) { lista = []; }
+    return lista.filter(function (x) { return x && x.activa !== false && x.numero; });
+  }
+  function hayTransferencia() { return cuentasBanco().length > 0 || !!String(cfg().datos_transferencia || '').trim(); }
+  function etiquetaCuenta(x) { return x.banco + ' · ' + x.numero; }
+  function colorBanco(n) { var h = 0; String(n).split('').forEach(function (ch) { h = (h * 31 + ch.charCodeAt(0)) % 360; }); return 'hsl(' + h + ' 55% 32%)'; }
+  /* Tarjetas «premium» de las cuentas del negocio, con botón de copiar cada dato. */
+  function tarjetasCuentasSolo(p) { return tarjetasCuentas(p.total, p.numero, false, p.cuenta_pago); }
+  function tarjetasCuentas(monto, referencia, elegir, solo) {
+    var lista = cuentasBanco(), nota = String(cfg().datos_transferencia || '').trim();
+    if (solo && lista.some(function (x) { return etiquetaCuenta(x) === solo; })) lista = lista.filter(function (x) { return etiquetaCuenta(x) === solo; });
+    if (!lista.length) return nota ? '<div class="banda" style="margin-top:10px;text-align:left;white-space:pre-line">🏦 <span>' + UI.esc(nota) + (referencia ? '\nReferencia: ' + UI.esc(referencia) : '') + '</span></div>' : '';
+    var elegida = pago.cuenta || '';
+    return '<div class="cuentas">' + lista.map(function (x) {
+      var et = etiquetaCuenta(x), sel = elegir && elegida === et;
+      return '<div class="cuenta-banco' + (sel ? ' elegida' : '') + '" style="--banco:' + colorBanco(x.banco) + '">' +
+        '<div class="cb-cabeza"><span class="cb-logo" aria-hidden="true">' + UI.esc(String(x.banco).replace(/^(banco|cooperativa)\s+(de(l)?\s+)?/i, '').charAt(0).toUpperCase()) + '</span>' +
+        '<div><b>' + UI.esc(x.banco) + '</b><small>Cuenta ' + (x.tipo === 'corriente' ? 'corriente' : 'de ahorros') + '</small></div></div>' +
+        '<div class="cb-numero"><span>' + UI.esc(x.numero) + '</span><button type="button" class="cb-copiar" data-copiar="' + UI.esc(x.numero.replace(/\D/g, '')) + '" aria-label="Copiar número de cuenta">📋</button></div>' +
+        '<div class="cb-dato"><span>Titular</span><b>' + UI.esc(x.titular) + '</b></div>' +
+        (x.documento ? '<div class="cb-dato"><span>' + (x.documento.length === 13 ? 'RUC' : 'Cédula') + '</span><b>' + UI.esc(x.documento) + '</b><button type="button" class="cb-copiar" data-copiar="' + UI.esc(x.documento) + '" aria-label="Copiar documento">📋</button></div>' : '') +
+        (x.correo ? '<div class="cb-dato"><span>Correo</span><b>' + UI.esc(x.correo) + '</b></div>' : '') +
+        (elegir ? '<button type="button" class="btn ' + (sel ? '' : 'secundario ') + 'chico bloque cb-elegir" data-cuenta="' + UI.esc(et) + '">' + (sel ? '✓ Pagaré a esta cuenta' : 'Pagaré a esta cuenta') + '</button>' : '') +
+        '</div>';
+    }).join('') + '</div>' +
+      (monto ? '<div class="cb-monto"><span>Monto exacto</span><b>' + UI.dinero(monto) + '</b><button type="button" class="cb-copiar" data-copiar="' + Number(monto).toFixed(2) + '" aria-label="Copiar monto">📋</button>' + (referencia ? '<small>Referencia: ' + UI.esc(referencia) + '</small>' : '') + '</div>' : '') +
+      (nota ? '<p class="ayuda" style="white-space:pre-line;margin:6px 0 0">' + UI.esc(nota) + '</p>' : '') +
+      (lista.length > 1 ? '<p class="ayuda" style="margin:6px 0 0">💡 Si pagas desde el mismo banco, se acredita al instante.</p>' : '');
+  }
+  var POLITICAS_DEFECTO = '🔒 Pago con transferencia o Deuna: tu pedido se prepara cuando confirmamos el pago en nuestra cuenta (la foto del comprobante sola no basta).\n' +
+    '⏳ Si pagas desde otro banco, la acreditación puede tardar; preparamos apenas llegue.\n' +
+    '🔢 Te damos un código de 4 números: dáselo al motorizado solo cuando tengas tu pedido en la mano.\n' +
+    '✏️ Una vez enviado, el pedido no se puede editar: para cambios escríbenos por WhatsApp.\n' +
+    '↩️ Si tu pago no se acredita, el pedido se anula. Si anulamos un pedido ya pagado, te devolvemos el dinero.\n' +
+    '🕒 La hora es aproximada y el envío depende de tu zona.';
+  function textoPoliticas() { return String(cfg().politicas_texto || '').trim() || POLITICAS_DEFECTO; }
+  function verPoliticas() {
+    UI.ventana({ icono: '📋', titulo: 'Cómo funciona tu pedido', html: '<div class="politicas-lista">' + textoPoliticas().split('\n').filter(String).map(function (l) { return '<p>' + UI.esc(l) + '</p>'; }).join('') + '</div>' });
+  }
+  var efectivoCliente = null, efectivoTel = '';
+  async function revisarEfectivoCliente() {
+    var tel = (MEM.leer('cliente') || {}).telefono || '';
+    if (!UI.digitos(tel) || tel === efectivoTel) return;
+    efectivoTel = tel;
+    try { efectivoCliente = (await DATOS.pedir('pagoOpciones', { telefono: tel })).efectivo === true; } catch (e) { efectivoCliente = false; }
+    if (efectivoCliente && paso === 3 && !UI.$('[data-forma=efectivo]')) { guardarNotas(); pintarConfirmar(); restaurarNotas(); }
+  }
+
   /* ---------------- Paso 3: confirmar y pagar ---------------- */
   function pintarConfirmar() {
     $('#barra-pedido').hidden = true;
@@ -558,8 +616,9 @@
     /* 3.1.3: efectivo solo si el dueño lo permite y hasta su monto máximo */
     var efOk = efectivoPermitido();
     var formas = efOk ? [['efectivo', '💵', 'Efectivo', entrega.tipo === 'domicilio' ? 'Pagas al recibir' : 'Pagas en el local']] : [];
-    formas.push(['transferencia', '🏦', 'Transferencia', 'A la cuenta del local']);
+    if (hayTransferencia()) formas.push(['transferencia', '🏦', 'Transferencia', cuentasBanco().length > 1 ? cuentasBanco().length + ' bancos' : 'A la cuenta del local']); // 3.1.5: sin cuenta no se ofrece
     if (c.deuna_qr_url) formas.push(['deuna', '📲', 'Deuna', 'Escaneas el QR']);
+    if (!formas.length) formas.push(['transferencia', '🏦', 'Transferencia', 'Te damos los datos por WhatsApp']); // nunca sin forma de pago
     if (!formas.some(function (f) { return f[0] === pago.forma; })) pago.forma = formas[0][0];
     var conPropina = entrega.tipo === 'domicilio' && c.propinas !== 'NO';
     var resumenEntrega = entrega.tipo === 'domicilio' ? '🛵 A domicilio · ' + UI.esc(z ? z.nombre : '') + '<br><small>' + UI.esc(cli.direccion || (ubic ? 'Ubicación marcada en el mapa' : '')) + '</small>'
@@ -573,9 +632,9 @@
       '<div class="tarjeta"><h3 style="margin-top:0">¿Cómo pagas?</h3><div class="tipos-entrega formas">' + formas.map(function (f) {
         return '<button type="button" class="tipo-op' + (pago.forma === f[0] ? ' activo' : '') + '" data-forma="' + f[0] + '" aria-pressed="' + (pago.forma === f[0]) + '"><span class="tipo-ico">' + f[1] + '</span><b>' + f[2] + '</b><small>' + f[3] + '</small></button>';
       }).join('') + '</div>' +
-      (pago.forma === 'transferencia' && c.datos_transferencia ? '<div class="banda" style="margin-top:10px;white-space:pre-line">🏦 <span>' + UI.esc(c.datos_transferencia) + '</span></div>' : '') +
+      (pago.forma === 'transferencia' ? tarjetasCuentas(0, '', cuentasBanco().length > 1) : '') +
       (pago.forma === 'deuna' ? '<div class="banda" style="margin-top:10px">📲 <span>Al enviar te mostramos el QR de Deuna para pagar.</span></div>' : '') +
-      (UI.esDigital(pago.forma) ? '<p class="ayuda">Prepararemos tu pedido apenas el local confirme en su banco que llegó el pago.</p>' : '') +
+      (UI.esDigital(pago.forma) ? '<div class="politica-linea">🔒 <span>Tu pedido <b>se prepara cuando confirmemos el pago en nuestra cuenta</b>. Si pagas desde otro banco puede tardar un poco.</span></div>' : '') +
       (!efOk && c.efectivo_permitido !== 'NO' ? '<p class="ayuda">💵 En efectivo se aceptan pedidos de hasta ' + UI.dinero(Number(c.efectivo_maximo)) + '.</p>' : '') +
       '</div>' +
       (conPropina ? '<div class="tarjeta"><h3 style="margin-top:0">Propina para el motorizado <small style="font-weight:600;color:var(--texto-2)">(opcional)</small></h3><div class="segmento">' +
@@ -585,6 +644,7 @@
       '<div class="campo" style="margin-bottom:0"><label for="pe-notas">Nota para la cocina</label><textarea class="entrada" id="pe-notas" name="notas" maxlength="300" placeholder="Ej. sin ají"></textarea></div></details></div>' +
       '<div class="tarjeta"><div id="totales"></div>' +
       '<label class="casilla"><input type="checkbox" name="acepta_privacidad" id="pe-privacidad"' + (MEM.leer('acepta_privacidad') ? ' checked' : '') + '> <span>Acepto que usen mi nombre, celular y dirección solo para este pedido. <a href="privacidad.html" target="_blank" rel="noopener">Aviso de privacidad</a></span></label>' +
+      '<label class="casilla"><input type="checkbox" id="pe-politicas"' + (MEM.leer('acepta_politicas') ? ' checked' : '') + '> <span>Leí <a href="#" id="ver-politicas">cómo funciona el pedido</a> (pago, entrega y cambios).</span></label>' +
       '<label class="casilla"><input type="checkbox" name="acepta_promos"' + (MEM.leer('acepta_promos') ? ' checked' : '') + '> <span>Quiero recibir promociones por WhatsApp (opcional).</span></label>' +
       '<button class="btn bloque btn-enviar" type="submit">Enviar pedido · <span id="total-boton"></span></button>' +
       '<p class="ayuda" style="text-align:center;margin-top:8px">Recibirás tu número de pedido al instante.</p></div>' +
@@ -602,12 +662,17 @@
       });
     });
     $('#form-pedido').addEventListener('submit', enviar);
+    $('#ver-politicas').addEventListener('click', function (e) { e.preventDefault(); verPoliticas(); });
+    UI.$$('[data-cuenta]').forEach(function (b) { b.addEventListener('click', function () { pago.cuenta = b.getAttribute('data-cuenta'); guardarNotas(); pintarConfirmar(); restaurarNotas(); }); });
+    if (pago.forma === 'transferencia' && cuentasBanco().length === 1) pago.cuenta = etiquetaCuenta(cuentasBanco()[0]);
     pintarItemsResumen();
     totales();
+    revisarEfectivoCliente();
   }
   function totalActual() { return Math.round((subtotal() + envio() + propina()) * 100) / 100; }
   function efectivoPermitido() {
     var c = cfg();
+    if (efectivoCliente) return true; // 3.1.5: el local autorizó a este cliente
     if (c.efectivo_permitido === 'NO') return false;
     var max = Number(c.efectivo_maximo);
     return !(max > 0 && totalActual() > max);
@@ -623,7 +688,10 @@
       (entrega.tipo === 'domicilio' ? '<div class="resumen-linea"><span>Envío</span><span>' + UI.dinero(e) + '</span></div>' : '') +
       (pr ? '<div class="resumen-linea"><span>Propina</span><span>' + UI.dinero(pr) + '</span></div>' : '') +
       '<div class="resumen-linea total"><span>Total</span><span>' + UI.dinero(t) + '</span></div>' +
-      (cfg().precios_incluyen_iva !== 'NO' ? '<p class="ayuda" style="margin:2px 0 8px">Precios con IVA incluido.</p>' : '');
+      (cfg().precios_incluyen_iva !== 'NO' ? (function () { // 3.1.5: IVA desglosado (el precio no cambia; la propina no lleva IVA)
+        var pct = Number(cfg().iva_porcentaje) || 15, gravado = subtotal() + e, iva = Math.round((gravado - gravado / (1 + pct / 100)) * 100) / 100;
+        return '<div class="resumen-linea iva-linea"><span>Incluye IVA ' + pct + ' %</span><span>' + UI.dinero(iva) + '</span></div>';
+      })() : '');
     $('#total-boton').textContent = UI.dinero(t);
   }
 
@@ -654,12 +722,16 @@
     var cli = MEM.leer('cliente') || {};
     var priv = $('#pe-privacidad'), promos = f.querySelector('[name=acepta_promos]');
     if (!priv.checked) { UI.aviso('Marca la casilla del aviso de privacidad para enviar.', 'error'); priv.focus(); priv.closest('.casilla').classList.add('falta'); return; }
+    var pol = $('#pe-politicas');
+    if (pol && !pol.checked) { UI.aviso('Marca que leíste cómo funciona el pedido.', 'error'); pol.focus(); pol.closest('.casilla').classList.add('falta'); return; }
+    if (pago.forma === 'transferencia' && cuentasBanco().length > 1 && !pago.cuenta) { UI.aviso('Elige a qué cuenta vas a pagar.', 'error'); var cb = UI.$('.cuentas'); if (cb) cb.scrollIntoView({ block: 'center' }); return; }
+    MEM.guardar('acepta_politicas', true);
     MEM.guardar('acepta_privacidad', true); MEM.guardar('acepta_promos', !!(promos && promos.checked));
     if (!codigoEnvio) codigoEnvio = UI.codigoEnvio();
     var dom = entrega.tipo === 'domicilio';
     var datos = {
       op_id: codigoEnvio, local_id: localId, tipo_entrega: entrega.tipo, zona_id: dom ? entrega.zona : '', mesa: entrega.tipo === 'mesa' ? entrega.mesa : '',
-      hora_llegada: entrega.cuando === 'programar' ? entrega.hora : '', forma_pago: pago.forma, propina: propina(), cupon: d.cupon, notas: d.notas,
+      hora_llegada: entrega.cuando === 'programar' ? entrega.hora : '', forma_pago: pago.forma, cuenta_pago: pago.forma === 'transferencia' ? (pago.cuenta || '') : '', propina: propina(), cupon: d.cupon, notas: d.notas,
       origen: origen, canal: 'cliente', disp_id: UI.dispId(), acepta_privacidad: true, acepta_promos: !!(promos && promos.checked),
       items: items().map(function (it) { return { plato_id: it.plato.id, cantidad: it.cantidad, extras: it.extras }; }),
       cliente: { nombre: cli.nombre, telefono: cli.telefono, direccion: dom ? cli.direccion : '', referencia: dom ? cli.referencia : '',
@@ -669,8 +741,9 @@
     await UI.trabajando(boton, async function () {
       try {
         var r = await DATOS.pedir('pedidoCrear', datos, { guardar: true });
-        MEM.guardar('ultimo_pedido', { numero: r.pedido.numero, telefono: cli.telefono, s: r.pedido.clave_seguimiento ? r.pedido.numero + '-' + r.pedido.clave_seguimiento : '', local: localId, fecha: Date.now() });
         MEM.guardar('ultimo_carrito', { local: localId, items: datos.items });
+        guardarMiPedido({ n: r.pedido.numero, tel: cli.telefono, s: r.pedido.clave_seguimiento ? r.pedido.numero + '-' + r.pedido.clave_seguimiento : '', f: Date.now(), t: r.pedido.total, e: 'Recibido', l: localId,
+          i: datos.items.map(function (x) { var pl = plato(x.plato_id); return { p: x.plato_id, c: x.cantidad, x: x.extras, n: pl ? pl.nombre : '' }; }) });
         var detalle = items();
         r.pedido.ubic_por_wa = !!(ubic && ubic.fuente === 'whatsapp'); // 3.1.1: solo entonces se pide la ubicación por WhatsApp
         carrito = {}; codigoEnvio = ''; ubic = null; pago.propina = 0;
@@ -708,8 +781,8 @@
       (p.hora_estimada ? '<p class="subtitulo" style="margin:4px 0 0">' + (UI.tipoEntrega(p) === 'domicilio' ? 'Llega aprox. a las ' : 'Listo aprox. a las ') + UI.esc(UI.hora(p.hora_estimada)) + '</p>' : '') +
       (p.forma_pago === 'deuna' && c.deuna_qr_url ? '<div class="pago-qr"><b>Paga con Deuna</b><img src="' + UI.esc(c.deuna_qr_url) + '" alt="QR de Deuna del local" referrerpolicy="no-referrer"><small>Monto: ' + UI.dinero(p.total) + ' · Referencia: ' + UI.esc(p.numero) + '</small>' +
         '<button class="btn borde chico" type="button" id="btn-guardar-qr">💾 Guardar QR</button><small>¿Pagas desde este mismo teléfono? Guarda el QR y en Deuna elige «Escanear» → «Galería».</small></div>' : '') +
-      (p.forma_pago === 'transferencia' && c.datos_transferencia ? '<div class="banda" style="margin-top:12px;text-align:left;white-space:pre-line">🏦 <span>' + UI.esc(c.datos_transferencia) + '\nReferencia: ' + UI.esc(p.numero) + '</span></div>' : '') +
-      (UI.esDigital(p.forma_pago) ? '<p class="ayuda">Envía el comprobante por WhatsApp para que lo preparemos enseguida.</p>' : '') +
+      (p.forma_pago === 'transferencia' ? '<div style="text-align:left;margin-top:12px">' + tarjetasCuentasSolo(p) + '</div>' : '') +
+      (UI.esDigital(p.forma_pago) ? '<div class="politica-linea" style="text-align:left">🔒 <span><b>Tu pedido se prepara cuando confirmemos el pago en nuestra cuenta.</b> Envía el comprobante por WhatsApp para ubicarlo más rápido. Si pagas desde otro banco puede tardar un poco.</span></div>' : '') +
       '<div class="acciones" style="margin-top:16px">' +
       (UI.digitos(wa) ? '<button class="btn" type="button" id="btn-wa">💬 ' + (UI.esDigital(p.forma_pago) ? 'Enviar comprobante' : 'Avisar por WhatsApp') + '</button>' : '') +
       '<button class="btn borde" type="button" id="btn-seguir">🔎 Ver cómo va</button></div>' +
@@ -742,40 +815,128 @@
     }
   }
 
-  /* ---------------- Barra «Tu pedido» (seguimiento) ---------------- */
+  /* ---------------- 3.1.5: «Mis pedidos» del cliente (guardado liviano en su teléfono) ---------------- */
   var PASOS_SEG = ['Recibido', 'Preparando', 'En camino', 'Entregado'];
+  var FINALES = ['Entregado', 'Anulado'];
+  function diasHistorial() { return Math.max(1, Number(cfg().dias_historial_cliente) || 30); }
+  function misPedidos() {
+    var l = MEM.leer('mis_pedidos'); if (!Array.isArray(l)) l = [];
+    var u = MEM.leer('ultimo_pedido'); // pedidos hechos antes de la 3.1.5
+    if (u && u.numero && !l.some(function (x) { return x.n === u.numero; })) l.unshift({ n: u.numero, s: u.s || '', tel: u.telefono || '', f: u.fecha || Date.now(), t: 0, e: 'Recibido', i: [] });
+    var corte = Date.now() - diasHistorial() * 86400000;
+    return l.filter(function (x) { return x && x.n && (x.f || 0) >= corte; }).slice(0, 30);
+  }
+  function guardarMisPedidos(l) { MEM.guardar('mis_pedidos', l.slice(0, 30)); }
+  function guardarMiPedido(x) { var l = misPedidos().filter(function (y) { return y.n !== x.n; }); l.unshift(x); guardarMisPedidos(l); }
+  function activo(x) { return FINALES.indexOf(x.e) < 0 || (x.e === 'Entregado' && !x.cal && Date.now() - (x.fe || x.f || 0) < 6 * 3600000); }
+
   async function pintarSeguimiento(abrir) {
-    var u = MEM.leer('ultimo_pedido');
     var cont = $('#seguimiento');
     if (!cont) return;
-    if (!u || !u.numero || Date.now() - (u.fecha || 0) > 24 * 3600 * 1000) { cont.hidden = true; return; }
+    var lista = misPedidos();
+    if (!lista.length) { cont.hidden = true; cont.innerHTML = ''; return; }
     cont.hidden = false;
-    if (!cont.innerHTML) cont.innerHTML = '<div class="seg-caja"><b>Tu pedido ' + UI.esc(u.numero) + '</b><span class="item-sub">Consultando…</span></div>';
-    try {
-      var r = await DATOS.pedir('pedidoConsultar', u.s ? { s: u.s } : { numero: u.numero, telefono: u.telefono });
-      if (r.seguimiento && !u.s) { u.s = r.seguimiento; MEM.guardar('ultimo_pedido', u); }
-      if (r.estado === 'Entregado' && r.calificacion && !abrir) { cont.hidden = true; return; }
-      var tipo = r.tipo_entrega;
-      var pasos = tipo === 'domicilio' ? PASOS_SEG : ['Recibido', 'Preparando', 'Entregado'];
-      var i = r.estado === 'Anulado' ? -1 : pasos.indexOf(r.estado);
-      var nombreFin = tipo === 'domicilio' ? 'Entregado' : 'Listo';
-      cont.innerHTML = '<div class="seg-caja"><div class="seg-cabeza"><b>Tu pedido ' + UI.esc(r.numero) + '</b>' + (r.estado === 'Anulado' ? UI.chipEstado('Anulado') : UI.chipEstado(r.estado)) +
-        '<button class="btn secundario chico" type="button" id="seg-act" aria-label="Actualizar">↻</button></div>' +
-        (r.estado === 'Anulado' ? '<p class="item-sub">' + UI.esc(r.motivo_anulacion || 'Fue anulado. Escríbenos por WhatsApp si tienes dudas.') + '</p>' :
-          '<div class="seg-linea">' + pasos.map(function (n, k) { return '<span class="' + (k <= i ? 'hecho' : '') + (k === i ? ' actual' : '') + '"><i></i>' + UI.esc(k === pasos.length - 1 ? nombreFin : n) + '</span>'; }).join('') + '</div>' +
-          (r.hora_estimada && r.estado !== 'Entregado' ? '<p class="item-sub" style="margin:6px 0 0">Hora estimada: <b>' + UI.esc(UI.hora(r.hora_estimada)) + '</b></p>' : '')) +
-        (r.motorizado ? tarjetaMoto(r.motorizado) : '') +
-        (r.codigo_entrega ? '<div class="codigo-entrega"><span>🔢 Tu código de entrega</span><b>' + UI.esc(r.codigo_entrega) + '</b><small>Dáselo al motorizado solo cuando tengas tu pedido en la mano.</small></div>' : '') +
-        (r.estado === 'Entregado' && !r.calificacion ? '<button class="btn chico bloque" type="button" id="seg-calificar" style="margin-top:10px">⭐ ¿Cómo estuvo? Califícanos</button>' : '') +
-        (r.sellos_meta ? '<div class="sellos" title="Tarjeta de sellos">' + sellosHtml(r.sellos, r.sellos_meta) + '</div>' : '') + '</div>';
-      $('#seg-act').addEventListener('click', function (e) { UI.trabajando(e.currentTarget, function () { return pintarSeguimiento(true); }); });
-      var cal = $('#seg-calificar'); if (cal) cal.addEventListener('click', function () { calificar(u); });
-      if (abrir) cont.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    } catch (err) {
-      if (err.codigo === 'NO_EXISTE') { cont.hidden = true; return; }
-      cont.innerHTML = '<div class="seg-caja"><b>Tu pedido ' + UI.esc(u.numero) + '</b><span class="item-sub">No se pudo consultar ahora. <button class="enlace" type="button" id="seg-act">Reintentar</button></span></div>';
-      $('#seg-act').addEventListener('click', function () { pintarSeguimiento(true); });
+    var act = lista.filter(activo), hist = lista.filter(function (x) { return !activo(x); });
+    var res = {};
+    if (act.length) {
+      if (!cont.innerHTML) cont.innerHTML = '<div class="seg-caja"><b>Mis pedidos</b><span class="item-sub">Consultando…</span></div>';
+      try {
+        var conClave = act.filter(function (x) { return x.s; });
+        var r = conClave.length ? await DATOS.pedir('pedidosSeguir', { s: conClave.map(function (x) { return x.s; }) }) : { pedidos: [] };
+        r.pedidos.forEach(function (p, k) { res[conClave[k].n] = p; });
+        for (var j = 0; j < act.length; j++) { // pedidos viejos sin clave: número + celular
+          var x = act[j]; if (x.s || res[x.n]) continue;
+          try { res[x.n] = await DATOS.pedir('pedidoConsultar', { numero: x.n, telefono: x.tel || (MEM.leer('cliente') || {}).telefono || '' }); } catch (e) { res[x.n] = { no_existe: true }; }
+        }
+        var cambio2 = false;
+        lista.forEach(function (x) {
+          var p = res[x.n]; if (!p) return;
+          if (p.no_existe) { x.e = 'Anulado'; cambio2 = true; return; }
+          if (p.estado !== x.e) { x.e = p.estado; if (p.estado === 'Entregado') x.fe = Date.now(); cambio2 = true; }
+          if (p.total && !x.t) { x.t = p.total; cambio2 = true; }
+          if (p.seguimiento && !x.s) { x.s = p.seguimiento; cambio2 = true; }
+          if (p.calificacion && !x.cal) { x.cal = p.calificacion; cambio2 = true; }
+        });
+        if (cambio2) guardarMisPedidos(lista);
+        act = lista.filter(activo); hist = lista.filter(function (x) { return !activo(x); });
+      } catch (err) {
+        cont.innerHTML = '<div class="seg-caja"><b>Mis pedidos</b><span class="item-sub">No se pudo consultar ahora. <button class="enlace" type="button" id="seg-act">Reintentar</button></span></div>';
+        $('#seg-act').addEventListener('click', function () { pintarSeguimiento(true); });
+        return;
+      }
     }
+    cont.innerHTML = act.map(function (x) { return res[x.n] && !res[x.n].no_existe ? tarjetaSeguimiento(res[x.n], x) : ''; }).join('') +
+      (hist.length ? '<details class="seg-caja mis-pedidos"' + (act.length ? '' : ' open') + '><summary><b>🧾 Mis pedidos anteriores</b> <small>(' + hist.length + ')</small></summary>' +
+        '<div class="lista">' + hist.map(function (x) {
+          var fecha = new Date(x.f || Date.now());
+          return '<div class="mp-fila"><div class="item-cuerpo"><div class="item-titulo">' + UI.esc(x.n) + ' · ' + (x.t ? UI.esc(UI.dinero(x.t)) : '') + '</div>' +
+            '<div class="item-sub">' + UI.esc(fecha.toLocaleDateString('es-EC', { day: 'numeric', month: 'short' })) + ' · ' + UI.esc(x.e) + (x.i && x.i.length ? ' · ' + UI.esc(x.i.map(function (y) { return y.c + '× ' + (y.n || ''); }).join(', ')) : '') + '</div></div>' +
+            (x.i && x.i.length ? '<button class="btn secundario chico" type="button" data-repetir="' + UI.esc(x.n) + '">🔁 Repetir</button>' : '') + '</div>';
+        }).join('') + '</div>' +
+        '<p class="ayuda" style="margin:8px 0 4px">Tu historial se guarda solo en este teléfono y se borra solo a los ' + diasHistorial() + ' días.</p>' +
+        '<button class="btn borde chico" type="button" id="mp-borrar">🗑 Borrar mi historial</button></details>' : '');
+    UI.$$('[data-seg-act]', cont).forEach(function (b) { b.addEventListener('click', function (e) { UI.trabajando(e.currentTarget, function () { return pintarSeguimiento(true); }); }); });
+    UI.$$('[data-calificar]', cont).forEach(function (b) { b.addEventListener('click', function () { var x = lista.filter(function (y) { return y.n === b.getAttribute('data-calificar'); })[0]; if (x) calificar({ numero: x.n, telefono: x.tel || (MEM.leer('cliente') || {}).telefono || '', s: x.s }); }); });
+    UI.$$('[data-comprobante]', cont).forEach(function (b) { b.addEventListener('click', function () { var p = res[b.getAttribute('data-comprobante')]; if (p) UI.abrirWhatsApp(cfg().whatsapp, 'Hola, envío el comprobante del pedido *' + p.numero + '* por ' + UI.dinero(p.total) + (p.cuenta_pago ? ' (a ' + p.cuenta_pago + ')' : '') + '. 👇'); }); });
+    UI.$$('[data-escribir]', cont).forEach(function (b) { b.addEventListener('click', function () { UI.abrirWhatsApp(cfg().whatsapp, 'Hola, sobre mi pedido *' + b.getAttribute('data-escribir') + '*: '); }); });
+    UI.$$('[data-repetir]', cont).forEach(function (b) { b.addEventListener('click', function () { var x = lista.filter(function (y) { return y.n === b.getAttribute('data-repetir'); })[0]; repetirDe(x); }); });
+    var bb = $('#mp-borrar'); if (bb) bb.addEventListener('click', async function () {
+      var ok = await UI.confirmar('¿Borrar tu historial?', 'Se borra la lista de pedidos de este teléfono. Tus pedidos ya hechos no se cancelan.', 'Sí, borrar', true);
+      if (!ok) return;
+      guardarMisPedidos(misPedidos().filter(activo)); MEM.guardar('ultimo_pedido', null); UI.aviso('Historial borrado.', 'ok'); pintarSeguimiento();
+    });
+    if (abrir) cont.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  /* Tarjeta de seguimiento de un pedido en curso. */
+  function tarjetaSeguimiento(r, x) {
+    var tipo = r.tipo_entrega;
+    var pasos = tipo === 'domicilio' ? PASOS_SEG : ['Recibido', 'Preparando', 'Entregado'];
+    var i = r.estado === 'Anulado' ? -1 : pasos.indexOf(r.estado);
+    var nombreFin = tipo === 'domicilio' ? 'Entregado' : 'Listo';
+    var digital = UI.esDigital(r.forma_pago) && r.estado !== 'Anulado';
+    return '<div class="seg-caja"><div class="seg-cabeza"><b>Tu pedido ' + UI.esc(r.numero) + '</b>' + UI.chipEstado(r.estado) +
+      '<button class="btn secundario chico" type="button" data-seg-act aria-label="Actualizar">↻</button></div>' +
+      (r.estado === 'Anulado' ? '<p class="item-sub">' + UI.esc(r.motivo_anulacion || 'Fue anulado. Escríbenos por WhatsApp si tienes dudas.') + '</p>' :
+        '<div class="seg-linea">' + pasos.map(function (n, k) { return '<span class="' + (k <= i ? 'hecho' : '') + (k === i ? ' actual' : '') + '"><i></i>' + UI.esc(k === pasos.length - 1 ? nombreFin : n) + '</span>'; }).join('') + '</div>' +
+        (r.hora_estimada && r.estado !== 'Entregado' ? '<p class="item-sub" style="margin:6px 0 0">Hora estimada: <b>' + UI.esc(UI.hora(r.hora_estimada)) + '</b></p>' : '')) +
+      (digital ? (r.pago_verificado
+        ? '<div class="pago-estado ok">✅ <span><b>Pago confirmado en nuestra cuenta.</b>' + (r.estado === 'Recibido' ? ' Ya preparamos tu pedido.' : '') + '</span></div>'
+        : '<div class="pago-estado espera">⏳ <span><b>Pago por confirmar.</b> Tu pedido se prepara cuando confirmemos el pago de <b>' + UI.esc(UI.dinero(r.total)) + '</b> en nuestra cuenta' + (r.cuenta_pago ? ' (' + UI.esc(r.cuenta_pago) + ')' : '') + '. Si pagaste desde otro banco puede tardar un poco.</span></div>' +
+          (r.forma_pago === 'transferencia' ? tarjetasCuentasSolo(r) : '') +
+          (UI.digitos(cfg().whatsapp) ? '<button class="btn chico bloque" type="button" data-comprobante="' + UI.esc(r.numero) + '" style="margin-top:8px">💬 Enviar comprobante por WhatsApp</button>' : '')) : '') +
+      (r.motorizado ? tarjetaMoto(r.motorizado) : '') +
+      (r.codigo_entrega ? '<div class="codigo-entrega"><span>🔢 Tu código de entrega</span><b>' + UI.esc(r.codigo_entrega) + '</b><small>Dáselo al motorizado solo cuando tengas tu pedido en la mano.</small></div>' : '') +
+      (r.estado === 'Entregado' && !r.calificacion ? '<button class="btn chico bloque" type="button" data-calificar="' + UI.esc(r.numero) + '" style="margin-top:10px">⭐ ¿Cómo estuvo? Califícanos</button>' : '') +
+      (r.sellos_meta ? '<div class="sellos" title="Tarjeta de sellos">' + sellosHtml(r.sellos, r.sellos_meta) + '</div>' : '') +
+      (FINALES.indexOf(r.estado) < 0 && UI.digitos(cfg().whatsapp) ? '<p class="ayuda" style="margin:8px 0 0">¿Necesitas cambiar algo? <button class="enlace" type="button" data-escribir="' + UI.esc(r.numero) + '">Escríbenos por WhatsApp</button> (un pedido enviado ya no se edita aquí).</p>' : '') +
+      '</div>';
+  }
+
+  /* Repetir un pedido del historial (solo platos que siguen disponibles en ese local). */
+  function repetirDe(x) {
+    if (!x || !x.i) return;
+    if (x.l && x.l !== localId && M.locales.some(function (l) { return l.id === x.l; })) { localId = x.l; MEM.guardar('pedir_local', localId); marcarAgotados(); }
+    var lista = x.i.map(function (y) { return { plato_id: y.p, cantidad: y.c, extras: y.x || [] }; }).filter(function (y) { var p = plato(y.plato_id); return p && !p.agotado && (p.local_id === 'TODOS' || p.local_id === localId); });
+    if (!lista.length) return UI.aviso('Esos platos ya no están disponibles.', 'error');
+    if (paso !== 1) { paso = 1; pintarMenu(); }
+    repetir(lista);
+    if (lista.length < x.i.length) UI.aviso('Algunos platos ya no están disponibles; agregamos los demás.', '');
+  }
+
+  /* 3.1.5: enlace personal «Mis pedidos» (?c=…): trae el historial a este teléfono. */
+  async function traerMisPedidos(c) {
+    try {
+      var r = await DATOS.pedir('misPedidos', { c: c });
+      var l = misPedidos();
+      r.pedidos.forEach(function (p) {
+        if (l.some(function (x) { return x.n === p.numero; })) return;
+        l.push({ n: p.numero, s: p.s, f: p.creado ? Date.parse(p.creado) : Date.now(), t: p.total, e: p.estado, l: p.local_id, i: p.items.map(function (y) { return { p: y.p, c: y.c, n: y.n }; }) });
+      });
+      l.sort(function (a, b) { return (b.f || 0) - (a.f || 0); });
+      guardarMisPedidos(l);
+      UI.aviso('¡Hola ' + r.nombre + '! Aquí están tus pedidos.', 'ok');
+    } catch (err) { UI.aviso(err.message, 'error'); }
   }
   /* 3.1: quién te lleva el pedido (sin cédula ni celular personal). */
   function tarjetaMoto(m) {
@@ -843,6 +1004,9 @@
 
   document.addEventListener('DOMContentLoaded', function () {
     botonVolverApp();
+    /* 3.1.5: botones «📋» de las cuentas bancarias */
+    document.addEventListener('click', function (e) { var b = e.target.closest('[data-copiar]'); if (b) { e.preventDefault(); UI.copiar(b.getAttribute('data-copiar')); } });
+    var pp = $('#pie-politicas'); if (pp) pp.addEventListener('click', verPoliticas);
     $('#btn-ver-pedido').addEventListener('click', async function () {
       if (!cantidadTotal()) return;
       await sugerir();
