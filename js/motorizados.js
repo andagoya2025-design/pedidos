@@ -233,7 +233,7 @@
       '<h3 style="margin:6px 0 10px">Por entregar (' + abiertos.length + ')</h3>' +
       (abiertos.length ? '<div class="lista">' + abiertos.map(tarjetaEntrega).join('') + '</div>' : UI.vacio('🛵', 'No tienes pedidos asignados ahora.')) +
       (hechos.length ? '<h3 style="margin:20px 0 10px">Entregados hoy (' + hechos.length + ')</h3><div class="lista">' + hechos.map(function (p) {
-        return '<div class="item"><div class="item-cuerpo"><div class="item-titulo">' + UI.esc(p.numero) + ' · ' + UI.esc(p.cliente_nombre) + '</div><div class="item-sub">' + UI.esc(UI.hora(p.entregado)) + ' · ' + (p.forma_pago === 'efectivo' ? 'cobraste ' + UI.dinero(p.total) : (p.forma_pago === 'deuna' ? 'Deuna' : 'transferencia')) + '</div></div>' + UI.chipEstado('Entregado') + '</div>';
+        return '<div class="item"><div class="item-cuerpo"><div class="item-titulo">' + UI.esc(p.numero) + ' · ' + UI.esc(p.cliente_nombre) + '</div><div class="item-sub">' + UI.esc(UI.hora(p.entregado)) + ' · ' + (p.forma_pago === 'efectivo' ? 'cobraste ' + UI.dinero(p.total) : (p.forma_pago === 'deuna' ? 'Deuna' : 'transferencia')) + '</div></div>' + (p.tiene_foto ? '<button class="btn borde chico" type="button" data-foto="' + UI.esc(p.id) + '" data-num="' + UI.esc(p.numero) + '" aria-label="Ver foto de entrega">📷 Foto</button>' : UI.chipEstado('Entregado')) + '</div>';
       }).join('') + '</div>' : '') +
       '<div class="tarjeta debe" style="margin-top:18px"><div class="modulo-ico" aria-hidden="true">💵</div><div style="flex:1;min-width:0">' +
       '<div class="item-sub">Al terminar, entregas en caja</div><div class="monto">' + UI.dinero(mias.debe.total) + '</div>' +
@@ -241,6 +241,7 @@
     UI.$$('[data-e]', c).forEach(function (b) { b.addEventListener('click', function () { accionEntrega(b, b.getAttribute('data-e'), b.getAttribute('data-id')); }); });
     var tb = UI.$('#btn-turno', c); if (tb) tb.addEventListener('click', function () { cambiarTurno(tb); });
     var gm = UI.$('#btn-ubic-vivo', c); if (gm) gm.addEventListener('click', guiaUbicacionVivo);
+    UI.$$('[data-foto]', c).forEach(function (b) { b.addEventListener('click', function () { UI.verFotoEntrega(b.getAttribute('data-foto'), b.getAttribute('data-num')); }); }); // 3.1.3
     if (global.RASTREO) global.RASTREO.actualizar(enCamino.map(function (p) { return p.id; }));
   }
 

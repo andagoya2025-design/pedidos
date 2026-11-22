@@ -18,8 +18,9 @@
         '<div class="filtros" id="rp-rapidos">' + [['hoy', 'Hoy'], ['ayer', 'Ayer'], ['7', '7 días'], ['30', '30 días'], ['mes', 'Este mes']].map(function (x) {
           return '<button class="pestana" type="button" data-r="' + x[0] + '" aria-selected="false">' + x[1] + '</button>';
         }).join('') + '</div>' +
+        '<details class="otras-fechas"><summary>📅 Otras fechas <span id="rp-rango"></span></summary>' +
         '<form class="fila-campos" id="rp-form"><div class="campo"><label for="rp-desde">Desde</label><input class="entrada" id="rp-desde" type="date" value="' + rango.desde + '"></div>' +
-        '<div class="campo"><label for="rp-hasta">Hasta</label><input class="entrada" id="rp-hasta" type="date" value="' + rango.hasta + '"></div></form>' +
+        '<div class="campo"><label for="rp-hasta">Hasta</label><input class="entrada" id="rp-hasta" type="date" value="' + rango.hasta + '"></div></form></details>' +
         '<div id="rp-cuerpo">' + UI.esqueleto(4) + '</div>';
       UI.$$('[data-r]', cont).forEach(function (b) {
         b.addEventListener('click', function () {
@@ -59,6 +60,10 @@
       hoyNegocio = r.hoy || hoyNegocio;
       rango = { desde: r.desde, hasta: r.hasta };
       if (UI.$('#rp-desde')) { UI.$('#rp-desde').value = r.desde; UI.$('#rp-hasta').value = r.hasta; }
+      /* 3.1.3: se marca el período elegido y se muestra el rango */
+      var marcado = false;
+      UI.$$('#rp-rapidos [data-r]').forEach(function (b) { var q = rapido(b.getAttribute('data-r')), si = !marcado && q[0] === r.desde && q[1] === r.hasta; if (si) marcado = true; b.setAttribute('aria-selected', String(si)); });
+      var rg = UI.$('#rp-rango'); if (rg) rg.textContent = marcado ? '' : '· ' + (r.desde === r.hasta ? r.desde : r.desde + ' a ' + r.hasta);
       if (UI.$('#rp-cuerpo')) pintar(r);
     } catch (err) {
       if (UI.$('#rp-cuerpo')) UI.$('#rp-cuerpo').innerHTML = '<div class="banda error">⚠️ <span>' + UI.esc(err.message) + '</span></div>';

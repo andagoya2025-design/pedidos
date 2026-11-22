@@ -141,20 +141,28 @@
     });
   }
 
+  /* 3.1.3: enlace propio de cada pedido: abre su seguimiento en cualquier teléfono, sin escribir nada. */
+  function enlaceSeguimiento(p) {
+    return UI.enlaceApp() + 'pedir.html' + (p.clave_seguimiento ? '?s=' + encodeURIComponent(p.numero + '-' + p.clave_seguimiento) : '');
+  }
+
   function mensajeCliente(p) {
     var neg = (APP.publico && APP.publico.negocio_nombre) || '';
     var tipo = UI.tipoEntrega(p);
-    if (p.estado === 'Preparando' && tipo !== 'domicilio') return 'Hola ' + p.cliente_nombre + ', tu pedido ' + p.numero + ' ya se está preparando 👨‍🍳.' + (p.hora_estimada ? ' Estará listo a las ' + UI.hora(p.hora_estimada) + '.' : '');
-    if (p.estado === 'Entregado' && tipo !== 'domicilio') return '¡Gracias por tu compra, ' + p.cliente_nombre + '! ' + neg;
+    var link = enlaceSeguimiento(p);
+    var ver = '\n👉 Mira cómo va tu pedido: ' + link;
+    var pagar = UI.esDigital(p.forma_pago) ? (p.pago_verificado ? 'pagado ✅' : 'por ' + (p.forma_pago === 'deuna' ? 'Deuna' : 'transferencia')) : 'en efectivo';
+    if (p.estado === 'Preparando' && tipo !== 'domicilio') return 'Hola ' + p.cliente_nombre + ', tu pedido ' + p.numero + ' ya se está preparando 👨‍🍳.' + (p.hora_estimada ? ' Estará listo a las ' + UI.hora(p.hora_estimada) + '.' : '') + ver;
+    if (p.estado === 'Entregado' && tipo !== 'domicilio') return '¡Gracias por tu compra, ' + p.cliente_nombre + '! ' + neg + '\n⭐ Califícanos aquí: ' + link;
     var t = {
-      'Recibido': 'Hola ' + p.cliente_nombre + ', recibimos tu pedido ' + p.numero + ' en ' + neg + '. Total: ' + UI.dinero(p.total) + '. ¡Gracias!' + (UI.esDigital(p.forma_pago) && !p.pago_verificado ? ' Apenas confirmemos tu pago lo preparamos.' : ''),
-      'Preparando': 'Hola ' + p.cliente_nombre + ', tu pedido ' + p.numero + ' ya se está preparando 👨‍🍳.' + (p.hora_estimada ? ' Hora estimada: ' + UI.hora(p.hora_estimada) + '.' : ''),
+      'Recibido': 'Hola ' + p.cliente_nombre + ', recibimos tu pedido ' + p.numero + ' en ' + neg + '. Total: ' + UI.dinero(p.total) + '. ¡Gracias!' + (UI.esDigital(p.forma_pago) && !p.pago_verificado ? ' Apenas confirmemos tu pago lo preparamos.' : '') + ver,
+      'Preparando': 'Hola ' + p.cliente_nombre + ', tu pedido ' + p.numero + ' ya se está preparando 👨‍🍳.' + (p.hora_estimada ? ' Hora estimada: ' + UI.hora(p.hora_estimada) + '.' : '') + ver,
       'En camino': 'Hola ' + p.cliente_nombre + ', tu pedido ' + p.numero + ' va en camino 🛵' +
-        (p.motorizado ? '\nTe lo lleva: ' + String(p.motorizado.nombre).split(/\s+/).slice(0, 2).join(' ') + (p.motorizado.placa ? '\nPlaca: ' + p.motorizado.placa : '') + (p.motorizado.moto ? '\nMoto: ' + p.motorizado.moto : '') : '') +
-        '\nTotal a pagar: ' + UI.dinero(p.total) + (p.forma_pago === 'efectivo' ? ' en efectivo.' : '.') +
-        (APP.publico && APP.publico.codigo_entrega !== 'NO' ? '\n🔢 Al recibir, dale al motorizado el código de 4 números que ves en «Ver cómo va».' : '') +
-        '\nSigue tu pedido: ' + UI.enlaceApp() + 'pedir.html',
-      'Entregado': '¡Gracias por tu compra, ' + p.cliente_nombre + '! Esperamos que disfrutes tu pedido ' + p.numero + '. ' + neg
+        (p.motorizado ? '\nTe lo lleva: ' + String(p.motorizado.nombre).split(/\s+/).slice(0, 2).join(' ') + (p.motorizado.placa ? ' · Placa ' + p.motorizado.placa : '') : '') +
+        '\nTotal: ' + UI.dinero(p.total) + ' ' + pagar + '.' +
+        (APP.publico && APP.publico.codigo_entrega !== 'NO' && p.pide_codigo !== false ? '\n🔢 Al recibir, dale al motorizado tu código de 4 números (está en el enlace).' : '') +
+        '\n👉 Mira a tu motorizado y tu código aquí: ' + link,
+      'Entregado': '¡Gracias por tu compra, ' + p.cliente_nombre + '! Esperamos que disfrutes tu pedido ' + p.numero + '. ' + neg + '\n⭐ Califícanos aquí: ' + link
     };
     return t[p.estado] || '';
   }
@@ -313,6 +321,8 @@
     var dom = UI.tipoEntrega(p) === 'domicilio';
     var opciones = [['avisar', '💬 Avisar al cliente por WhatsApp'], ['llamar', '📞 Llamar al cliente']];
     var cerrado = p.estado === 'Entregado'; // 3.1.1: entregado = solo consultar
+    if (p.tiene_foto) opciones.unshift(['foto', '📷 Ver foto de entrega']); // 3.1.3
+    if (p.clave_seguimiento && p.estado !== 'Anulado') opciones.push(['copiar', '🔗 Copiar enlace de seguimiento']);
     if (dom && !cerrado) opciones.push(['mapa', '🗺️ Ver en el mapa · ' + UI.fuenteUbicacion(p).replace(/^\S+\s/, '')], ['pedir_ubic', '📍 Pedir ubicación por WhatsApp'], ['ubicacion', '📋 Pegar ubicación que mandó']);
     if (dom && (p.estado === 'Recibido' || p.estado === 'Preparando')) opciones.push(['asignar', '🛵 ' + (p.motorizado_id ? 'Cambiar' : 'Asignar') + ' motorizado']);
     if (p.motorizado && !cerrado) opciones.push(['wa_moto', '💬 WhatsApp al motorizado']);
@@ -324,6 +334,8 @@
     });
     if (!op) return;
     if (op === 'avisar') return UI.abrirWhatsApp(p.telefono, mensajeCliente(p));
+    if (op === 'foto') return UI.verFotoEntrega(p.id, p.numero);
+    if (op === 'copiar') return UI.copiar(enlaceSeguimiento(p), 'Enlace copiado. Pégalo en el chat del cliente.');
     if (op === 'llamar') { global.location.href = 'tel:+' + UI.digitos(p.telefono); return; }
     if (op === 'pedir_ubic') return UI.abrirWhatsApp(p.telefono, 'Hola ' + p.cliente_nombre + ', somos ' + ((APP.publico && APP.publico.negocio_nombre) || 'el local') + '. Para llevarte tu pedido ' + p.numero + ', ¿nos envías tu ubicación por aquí? 📍 (toca 📎 → Ubicación → Enviar tu ubicación actual). ¡Gracias!');
     if (op === 'verificar' && !p.pago_verificado) return verificar(boton, p);

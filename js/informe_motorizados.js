@@ -39,8 +39,9 @@
         '<div class="filtros" id="im-rapidos">' + [['hoy', 'Hoy'], ['ayer', 'Ayer'], ['7', '7 días'], ['30', '30 días'], ['mes', 'Este mes']].map(function (x) {
           return '<button class="pestana" type="button" data-r="' + x[0] + '" aria-selected="false">' + x[1] + '</button>';
         }).join('') + '</div>' +
+        '<details class="otras-fechas"><summary>📅 Otras fechas</summary>' +
         '<div class="fila-campos"><div class="campo"><label for="im-desde">Desde</label><input class="entrada" type="date" id="im-desde" value="' + UI.esc(rango.desde) + '"></div>' +
-        '<div class="campo"><label for="im-hasta">Hasta</label><input class="entrada" type="date" id="im-hasta" value="' + UI.esc(rango.hasta) + '"></div></div>' +
+        '<div class="campo"><label for="im-hasta">Hasta</label><input class="entrada" type="date" id="im-hasta" value="' + UI.esc(rango.hasta) + '"></div></div></details>' +
         '<div id="im-cuerpo">' + UI.esqueleto(4) + '</div>';
       UI.$('[data-actualizar]', cont).addEventListener('click', function (e) { UI.trabajando(e.currentTarget, cargar); });
       UI.$('#im-excel', cont).addEventListener('click', excel);
@@ -159,11 +160,16 @@
             return '<div class="item"><div class="item-cuerpo"><div class="item-titulo">' + UI.esc(d.numero) + (d.a_tiempo === false ? ' <span class="etiqueta aviso">tarde</span>' : '') + (d.estrellas ? ' <span class="etiqueta ' + (d.estrellas <= 2 ? 'mal' : 'ok') + '">' + d.estrellas + '⭐</span>' : '') + '</div>' +
               '<div class="item-sub">' + UI.esc(d.dia) + ' · salió ' + UI.esc(UI.hora(d.salio)) + ' · ' + v(d.minutos, ' min') + (d.zona ? ' · ' + UI.esc(d.zona) : '') + ' · ' + UI.esc(UI.dinero(d.total)) + '</div>' +
               (d.comentario ? '<div class="item-sub">«' + UI.esc(d.comentario) + '»</div>' : '') + '</div>' +
-              (d.con_ruta ? '<button class="btn borde chico" type="button" data-ruta="' + UI.esc(d.id) + '" data-num="' + UI.esc(d.numero) + '">🗺️</button>' : '') + '</div>';
+              '<div class="det-botones">' + (d.tiene_foto ? '<button class="btn borde chico" type="button" data-foto="' + UI.esc(d.id) + '" data-num="' + UI.esc(d.numero) + '" aria-label="Ver foto de entrega ' + UI.esc(d.numero) + '">📷</button>' : '') +
+              (d.con_ruta ? '<button class="btn borde chico" type="button" data-ruta="' + UI.esc(d.id) + '" data-num="' + UI.esc(d.numero) + '" aria-label="Ver recorrido">🗺️</button>' : '') + '</div></div>';
           }).join('') + '</div>',
-        alAbrir: function (vv, cerrar) { UI.$$('[data-ruta]', vv).forEach(function (b) { b.addEventListener('click', function () { cerrar({ id: b.getAttribute('data-ruta'), num: b.getAttribute('data-num') }); }); }); },
+        alAbrir: function (vv, cerrar) {
+          UI.$$('[data-ruta]', vv).forEach(function (b) { b.addEventListener('click', function () { cerrar({ id: b.getAttribute('data-ruta'), num: b.getAttribute('data-num') }); }); });
+          UI.$$('[data-foto]', vv).forEach(function (b) { b.addEventListener('click', function () { cerrar({ foto: b.getAttribute('data-foto'), num: b.getAttribute('data-num') }); }); }); // 3.1.3
+        },
         botones: [{ texto: 'Cerrar', valor: null, clase: 'secundario' }]
       });
+      if (elegido && elegido.foto) { await UI.verFotoEntrega(elegido.foto, elegido.num); return detalle(id); }
       if (elegido) {
         var ru = await DATOS.pedir('rutaPedido', { pedido_id: elegido.id });
         await UI.ventana({ icono: '🗺️', titulo: 'Recorrido de ' + elegido.num,

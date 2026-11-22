@@ -226,9 +226,26 @@
     var ok = await UI.ventana({
       icono: '🧪', titulo: 'Receta de ' + p.nombre, texto: 'Cuánto de cada insumo se usa en UNA unidad. Al vender, se descuenta solo. Deje vacío lo que no usa.',
       html: '<div class="lista">' + insumos.map(function (i) {
-        return '<div class="item" style="min-height:56px"><div class="item-cuerpo"><div class="item-titulo">' + UI.esc(i.nombre) + '</div><div class="item-sub">' + UI.esc(i.local) + ' · ' + UI.esc(i.unidad) + '</div></div>' +
-          '<input class="entrada" style="max-width:110px" inputmode="decimal" data-ins="' + UI.esc(i.id) + '" value="' + (cant[i.id] || '') + '" placeholder="0"></div>';
-      }).join('') + '</div>',
+        return '<div class="item" style="min-height:56px"><div class="item-cuerpo"><div class="item-titulo">' + UI.esc(i.nombre) + '</div><div class="item-sub">' + UI.esc(i.local) + ' · ' + UI.esc(i.unidad) + (i.costo !== '' ? ' · ' + UI.esc(UI.dinero(i.costo)) + ' c/u' : ' · sin costo') + '</div></div>' +
+          '<input class="entrada" style="max-width:110px" inputmode="decimal" data-ins="' + UI.esc(i.id) + '" data-costo="' + (i.costo === '' ? '' : i.costo) + '" value="' + (cant[i.id] || '') + '" placeholder="0"></div>';
+      }).join('') + '</div><div class="ganancia" id="rc-ganancia" aria-live="polite"></div>',
+      alAbrir: function (v) { // 3.1.3: costo y ganancia por plato, al instante
+        function calc() {
+          var costo = 0, falta = false;
+          UI.$$('[data-ins]', v).forEach(function (inp) {
+            var c = UI.numero(inp.value) || 0;
+            if (!c) return;
+            if (inp.getAttribute('data-costo') === '') falta = true; else costo += c * Number(inp.getAttribute('data-costo'));
+          });
+          costo = Math.round(costo * 100) / 100;
+          var gan = Math.round((p.precio - costo) * 100) / 100, pct = p.precio > 0 ? Math.round(gan / p.precio * 100) : 0;
+          UI.$('#rc-ganancia', v).innerHTML = '<div><span>Precio</span><b>' + UI.esc(UI.dinero(p.precio)) + '</b></div><div><span>Costo insumos</span><b>' + UI.esc(UI.dinero(costo)) + '</b></div>' +
+            '<div class="' + (gan < 0 ? 'mal' : 'bien') + '"><span>Ganancia por plato</span><b>' + UI.esc(UI.dinero(gan)) + ' (' + pct + ' %)</b></div>' +
+            (falta ? '<p class="ayuda">Algún insumo no tiene costo: póngalo en Inventario → Editar para que el cálculo sea exacto.</p>' : '');
+        }
+        UI.$$('[data-ins]', v).forEach(function (inp) { inp.addEventListener('input', calc); });
+        calc();
+      },
       botones: [{ texto: 'Cancelar', valor: false, clase: 'secundario' }, { texto: 'Guardar receta', valor: true, antes: function (v) {
         items = UI.$$('[data-ins]', v).map(function (inp) { return { insumo_id: inp.getAttribute('data-ins'), cantidad: inp.value.trim() === '' ? 0 : UI.numero(inp.value) }; });
         if (items.some(function (x) { return !(x.cantidad >= 0); })) { UI.aviso('Revise las cantidades.', 'error'); return false; }
@@ -421,18 +438,19 @@
     var locales = APP.locales.filter(function (l) { return l.activo; });
     var enlaces = [['Todos los locales', '', UI.enlacePedir({})]].concat(locales.map(function (l) { return [l.nombre, l.id, UI.enlacePedir({ local: l.id })]; }));
     var mesas = Number(c.mesas) || 0;
-    var ORIGENES = [['volante', '📄 Volantes'], ['funda', '🛍️ Fundas y cajas'], ['instagram', '📸 Instagram'], ['mesa_mostrador', '🏪 Mostrador'], ['google', '🗺️ Google Maps'], ['web', '🌐 Página web']];
+    var ORIGENES = [['volante', '📄 Volantes', 'Imprímelo en tus hojas volantes'], ['funda', '🛍️ Fundas y cajas', 'Pégalo en las fundas y cajas para llevar'], ['instagram', '📸 Instagram', 'Pon el enlace en tu perfil'], ['mesa_mostrador', '🏪 Mostrador', 'Cartel junto a la caja'], ['google', '🗺️ Google Maps', 'Pon el enlace en tu ficha de Google'], ['web', '🌐 Página web', 'Dale el enlace a quien maneja tu página']];
     cuerpo().innerHTML =
-      '<div class="tarjeta" style="margin-bottom:14px"><h3 style="margin-top:0">🔗 Enlace para que los clientes pidan</h3>' +
-      '<p class="subtitulo">Un toque y lo compartes por WhatsApp, Instagram o como código QR. El mensaje ya va escrito.</p>' +
+      '<div class="tarjeta" style="margin-bottom:14px"><h3 style="margin-top:0">🔗 Tu enlace para pedir</h3>' +
+      '<p class="subtitulo">Es el mismo para todos tus clientes y abre tu menú. Compártelo por WhatsApp o Instagram, o imprime su QR para fundas, volantes y el mostrador.</p>' +
       '<div class="lista">' + enlaces.map(function (e, i) {
         return '<div class="item enlace-item"><div class="avatar" aria-hidden="true">' + (i ? '📍' : '🌎') + '</div><div class="item-cuerpo"><div class="item-titulo">' + UI.esc(e[0]) + '</div><div class="item-sub" style="overflow-wrap:anywhere">' + UI.esc(e[2].replace(/^https:\/\//, '')) + '</div></div>' +
-          '<button class="btn chico" type="button" data-compartir="' + i + '">📤 Compartir</button><button class="btn borde chico" type="button" data-qr="' + i + '">📱 QR</button></div>';
+          '<div class="enlace-botones"><button class="btn chico" type="button" data-compartir="' + i + '">📤 Compartir</button><button class="btn borde chico" type="button" data-copiar="' + i + '">📋 Copiar</button><button class="btn borde chico" type="button" data-qr="' + i + '">📱 QR</button></div></div>';
       }).join('') + '</div></div>' +
-      '<div class="tarjeta" style="margin-bottom:14px"><h3 style="margin-top:0">📊 QR para saber qué funciona</h3>' +
-      '<p class="subtitulo">Usa un QR distinto en cada lugar. En Reportes verás cuántos pedidos llegaron por cada uno.</p>' +
+      '<details class="tarjeta plegable" style="margin-bottom:14px"><summary><h3>📊 Medir de dónde llegan <small>(opcional)</small></h3></summary>' +
+      '<p class="subtitulo">Todos abren el mismo menú. La diferencia es que cada uno lleva una etiqueta escondida: así, en <b>Reportes → «De dónde llegan»</b> ves si te piden más por las fundas, por Instagram o por Google. Úsalo solo si te interesa medirlo.</p>' +
       '<div class="campo"><label for="qr-local">Local</label><select class="entrada" id="qr-local">' + locales.map(function (l) { return '<option value="' + UI.esc(l.id) + '">' + UI.esc(l.nombre) + '</option>'; }).join('') + '</select></div>' +
-      '<div class="qr-lista">' + ORIGENES.map(function (o) { return '<button class="btn secundario" type="button" data-origen="' + o[0] + '">' + o[1] + '</button>'; }).join('') + '</div></div>' +
+      '<div class="lista">' + ORIGENES.map(function (o) { return '<div class="item"><div class="item-cuerpo"><div class="item-titulo">' + o[1] + '</div><div class="item-sub">' + o[2] + '</div></div>' +
+        (['instagram', 'google', 'web'].indexOf(o[0]) >= 0 ? '<button class="btn borde chico" type="button" data-copiar-origen="' + o[0] + '">📋 Copiar enlace</button>' : '<button class="btn borde chico" type="button" data-origen="' + o[0] + '">📱 QR</button>') + '</div>'; }).join('') + '</div></details>' +
       '<div class="tarjeta" style="margin-bottom:14px"><h3 style="margin-top:0">🍽️ QR de mesas</h3>' +
       (mesas ? '<p class="subtitulo">El cliente escanea en su mesa, pide desde su celular y el pedido llega al panel con el número de mesa.</p><div class="qr-lista">' +
         Array.apply(null, { length: Math.min(mesas, 60) }).map(function (_, i) { return '<button class="btn secundario" type="button" data-mesa="' + (i + 1) + '">Mesa ' + (i + 1) + '</button>'; }).join('') + '</div>'
@@ -458,10 +476,19 @@
       '<div class="item-cuerpo"><input class="entrada" id="aj-deuna-archivo" type="file" accept="image/*"><span class="ayuda">Foto o captura del QR de tu app Deuna Negocios. Sin QR, Deuna no aparece al cliente.</span></div></div>' +
       '<input type="hidden" name="deuna_qr_url" id="aj-deuna" value="' + UI.esc(c.deuna_qr_url || '') + '"></div>' +
       '<label class="interruptor"><input type="checkbox" id="aj-verificar"' + (c.verificar_antes_salir !== 'NO' ? ' checked' : '') + '> Transferencia y Deuna: no despachar hasta verificar el pago en el banco</label>' +
+      /* 3.1.3 */
+      '<label class="interruptor"><input type="checkbox" id="aj-efectivo"' + (c.efectivo_permitido !== 'NO' ? ' checked' : '') + '> El cliente puede pagar en efectivo</label>' +
+      '<div class="campo"><label for="aj-efmax">Efectivo solo hasta (USD)</label><input class="entrada" id="aj-efmax" name="efectivo_maximo" inputmode="decimal" value="' + UI.esc(c.efectivo_maximo || '') + '" placeholder="Ej. 20"><span class="ayuda">Vacío = sin límite. Si apaga el efectivo o el pedido pasa de este monto, el cliente solo ve transferencia o Deuna, y el pedido no pasa a cocina hasta que usted verifique el pago en su banco. Llene los datos de transferencia de arriba.</span></div>' +
       '<label class="interruptor"><input type="checkbox" id="aj-propinas"' + (c.propinas !== 'NO' ? ' checked' : '') + '> El cliente puede dejar propina al motorizado</label>' +
       '<h4>🎁 Tarjeta de sellos</h4>' +
       '<div class="fila-campos"><div class="campo"><label for="aj-sellos">Pedidos para el premio</label><input class="entrada" id="aj-sellos" name="fidelidad_sellos" inputmode="numeric" value="' + UI.esc(c.fidelidad_sellos || '0') + '"><span class="ayuda">0 = apagado. Ej. 8.</span></div>' +
       '<div class="campo"><label for="aj-premio">Descuento del premio (%)</label><input class="entrada" id="aj-premio" name="fidelidad_descuento" inputmode="numeric" value="' + UI.esc(c.fidelidad_descuento || '50') + '"><span class="ayuda">Sobre el plato más caro del pedido.</span></div></div>' +
+      '<h4>🌐 Redes y página web</h4>' +
+      '<p class="ayuda" style="margin:-4px 0 8px">Salen como botones en la página donde piden tus clientes. Deja vacío lo que no tengas: no aparece.</p>' +
+      '<div class="fila-campos"><div class="campo"><label for="aj-ig">Instagram</label><input class="entrada" id="aj-ig" name="red_instagram" value="' + UI.esc(c.red_instagram || '') + '" placeholder="@tunegocio" autocapitalize="off"></div>' +
+      '<div class="campo"><label for="aj-fb">Facebook</label><input class="entrada" id="aj-fb" name="red_facebook" value="' + UI.esc(c.red_facebook || '') + '" placeholder="facebook.com/tunegocio" autocapitalize="off"></div></div>' +
+      '<div class="fila-campos"><div class="campo"><label for="aj-tt">TikTok</label><input class="entrada" id="aj-tt" name="red_tiktok" value="' + UI.esc(c.red_tiktok || '') + '" placeholder="@tunegocio" autocapitalize="off"></div>' +
+      '<div class="campo"><label for="aj-web">Página web</label><input class="entrada" id="aj-web" name="pagina_web" value="' + UI.esc(c.pagina_web || '') + '" placeholder="www.tunegocio.com" autocapitalize="off" inputmode="url"></div></div>' +
       '<h4>📲 Avisos</h4>' +
       '<div class="campo"><label for="aj-wa">WhatsApp del dueño (resumen del cierre de caja)</label><input class="entrada" id="aj-wa" name="whatsapp_dueno" inputmode="tel" value="' + UI.esc(c.whatsapp_dueno) + '" placeholder="0991234567"></div>' +
       /* 3.1 */
@@ -490,9 +517,13 @@
     UI.$$('[data-origen]', cuerpo()).forEach(function (b) {
       b.addEventListener('click', function () {
         var l = UI.$('#qr-local').value, o = b.getAttribute('data-origen');
-        UI.hojaQR({ titulo: 'QR · ' + b.textContent, nombre: nombre, subtitulo: APP.nombreLocal(l), enlace: UI.enlacePedir({ local: l, origen: o }), logo: c.logo_url });
+        var nom = (ORIGENES.filter(function (x) { return x[0] === o; })[0] || ['', ''])[1];
+        UI.hojaQR({ titulo: 'QR · ' + nom, nombre: nombre, subtitulo: APP.nombreLocal(l), enlace: UI.enlacePedir({ local: l, origen: o }), logo: c.logo_url });
       });
     });
+    /* 3.1.3: copiar enlaces */
+    UI.$$('[data-copiar]', cuerpo()).forEach(function (b) { b.addEventListener('click', function () { UI.copiar(enlaces[Number(b.getAttribute('data-copiar'))][2]); }); });
+    UI.$$('[data-copiar-origen]', cuerpo()).forEach(function (b) { b.addEventListener('click', function () { UI.copiar(UI.enlacePedir({ local: UI.$('#qr-local').value, origen: b.getAttribute('data-copiar-origen') })); }); });
     UI.$$('[data-mesa]', cuerpo()).forEach(function (b) {
       b.addEventListener('click', function () {
         var l = UI.$('#qr-local').value, m = b.getAttribute('data-mesa');
@@ -523,6 +554,9 @@
       d.verificar_antes_salir = UI.$('#aj-verificar').checked ? 'SI' : 'NO';
       d.propinas = UI.$('#aj-propinas').checked ? 'SI' : 'NO';
       d.codigo_entrega = UI.$('#aj-codigo').checked ? 'SI' : 'NO';
+      d.efectivo_permitido = UI.$('#aj-efectivo').checked ? 'SI' : 'NO'; // 3.1.3
+      d.efectivo_maximo = d.efectivo_maximo ? String(UI.numero(d.efectivo_maximo) || '') : '';
+      if (d.efectivo_permitido === 'NO' && !UI.$('#aj-verificar').checked) return UI.aviso('Sin efectivo, deje activado «no despachar hasta verificar el pago».', 'error');
       d.exigir_turno = UI.$('#aj-turno').checked ? 'SI' : 'NO';
       d.formato_hora = (UI.$('[data-h].activo', f) || { getAttribute: function () { return '24'; } }).getAttribute('data-h');
       d.meta_entregas_dia = d.meta_entregas_dia ? String(Math.max(0, Math.floor(UI.numero(d.meta_entregas_dia) || 0))) : '';

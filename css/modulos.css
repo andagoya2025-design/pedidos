@@ -455,3 +455,51 @@ button.enlace { color: var(--texto); }
 #btn-ubic-wa { grid-column: 1 / -1; }
 @media (min-width: 560px) { .ubic-opciones { grid-template-columns: repeat(3, minmax(0, 1fr)); } #btn-ubic-wa { grid-column: auto; } }
 .hecho-final { display: inline-flex; align-items: center; padding: 6px 12px; border-radius: 999px; font-weight: 800; font-size: 14px; color: var(--exito); background: color-mix(in srgb, var(--exito) 12%, transparent); }
+
+/* 3.1.3 */
+.solo-lector { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.pedir-redes { position: relative; z-index: 1; display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.pedir-redes a { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 6px 12px; border-radius: 999px; background: rgba(255,255,255,.16); color: #fff; font-weight: 700; font-size: 13px; text-decoration: none; border: 1px solid rgba(255,255,255,.28); }
+.foto-entrega { text-align: center; }
+.foto-entrega img { display: block; max-width: 100%; max-height: 60vh; margin: 0 auto 6px; border-radius: 12px; border: 1px solid var(--borde); }
+.foto-entrega small { color: var(--texto-2); }
+.det-botones, .enlace-botones, .insumo-botones { display: flex; gap: 6px; flex-wrap: wrap; }
+.enlace-item { flex-wrap: wrap; }
+.enlace-item .enlace-botones { width: 100%; }
+.enlace-item .enlace-botones .btn { flex: 1 1 0; }
+details.plegable summary { list-style: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; min-height: 44px; }
+details.plegable summary::-webkit-details-marker { display: none; }
+details.plegable summary h3 { margin: 0; font-size: 17px; }
+details.plegable summary h3 small { font-weight: 600; color: var(--texto-2); font-size: 13px; }
+details.plegable summary::after { content: '▾'; font-size: 18px; color: var(--texto-2); transition: transform .15s; }
+details.plegable[open] summary::after { transform: rotate(180deg); }
+details.plegable[open] summary { margin-bottom: 8px; }
+.ganancia { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+.ganancia > div { background: var(--superficie-2); border-radius: var(--radio); padding: 8px 10px; }
+.ganancia > div:nth-child(3) { grid-column: 1 / -1; }
+.ganancia span { display: block; font-size: 12px; color: var(--texto-2); }
+.ganancia b { display: block; font-size: 17px; }
+.ganancia .bien b { color: var(--exito); }
+.ganancia .mal b { color: var(--error); }
+.ganancia p { grid-column: 1 / -1; margin: 0; }
+.banda-accion { align-items: center; flex-wrap: wrap; }
+.banda-accion span { flex: 1 1 160px; }
+.tarjeta.insumo { display: block; padding: 12px 14px; }
+.tarjeta.insumo.bajo { border-color: color-mix(in srgb, var(--error) 45%, var(--borde)); }
+.insumo-cabeza { display: flex; align-items: flex-start; gap: 12px; }
+.insumo-stock { text-align: right; flex: none; }
+.insumo-stock b { display: block; font-size: 22px; line-height: 1.1; }
+.insumo.bajo .insumo-stock b { color: var(--error); }
+.insumo-stock span { font-size: 12px; color: var(--texto-2); }
+.insumo-botones { margin-top: 10px; }
+.insumo-botones .btn { flex: 1 1 0; }
+.compra-grupo { display: block; margin-bottom: 10px; text-align: left; }
+.compra-grupo h4 { margin: 0 0 6px; }
+.compra-grupo .item { min-height: 0; padding: 8px 0; }
+.filtros .pestana[aria-selected="true"] { background: var(--acento); border-color: var(--acento); color: #fff; }
+details.otras-fechas { margin: 0 0 12px; }
+details.otras-fechas summary { cursor: pointer; display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--borde); background: var(--superficie); font-weight: 700; font-size: 14px; list-style: none; }
+details.otras-fechas summary::-webkit-details-marker { display: none; }
+details.otras-fechas summary span { font-weight: 600; color: var(--texto-2); }
+details.otras-fechas[open] summary { margin-bottom: 10px; }
+.enlace-botones .btn { white-space: nowrap; font-size: 13px; padding-left: 8px; padding-right: 8px; min-width: 0; }

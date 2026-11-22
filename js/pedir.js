@@ -45,6 +45,13 @@
   function zonasDe(lid) { return M.zonas.filter(function (z) { return z.local_id === 'TODOS' || z.local_id === lid; }); }
   function local() { return M.locales.filter(function (l) { return l.id === localId; })[0] || {}; }
   function plato(id) { return M.platos.filter(function (p) { return p.id === id; })[0]; }
+  /* 3.1.3: agotado a mano o porque no quedan insumos en este local */
+  function marcarAgotados() {
+    M.platos.forEach(function (p) {
+      if (p.agotado_manual === undefined) p.agotado_manual = p.agotado === true;
+      p.agotado = p.agotado_manual || (p.agotado_locales || []).indexOf(localId) >= 0;
+    });
+  }
   function mesasOn() { return Number(cfg().mesas) > 0; }
 
   function claveItem(p, extras) { return p.id + '|' + extras.slice().sort().join(','); }
@@ -107,7 +114,16 @@
     var pedido = params.get('local') || MEM.leer('pedir_local');
     localId = conMenu.some(function (l) { return l.id === pedido; }) ? pedido : (conMenu.length === 1 ? conMenu[0].id : '');
     if (entrega.mesa && mesasOn()) entrega.tipo = 'mesa';
-    pintarSeguimiento();
+    marcarAgotados();
+    pintarRedes();
+    /* 3.1.3: enlace propio del pedido (?s=PED-0006-clave): abre directo su seguimiento */
+    var sg = String(params.get('s') || '').trim();
+    if (/^PED-\d{4,}-[a-z0-9]{6,12}$/i.test(sg)) {
+      var ant = MEM.leer('ultimo_pedido') || {};
+      if (ant.s !== sg) MEM.guardar('ultimo_pedido', { numero: sg.replace(/-[a-z0-9]+$/i, '').toUpperCase(), s: sg, fecha: Date.now() });
+      try { global.history.replaceState(null, '', global.location.pathname + (params.get('local') ? '?local=' + encodeURIComponent(params.get('local')) : '')); } catch (e) { /* sin historial */ }
+      pintarSeguimiento(true);
+    } else pintarSeguimiento();
     if (localId) pintarMenu(); else pintarLocales();
   }
 
@@ -154,7 +170,7 @@
 
   function cambiarLocal(id) {
     if (id !== localId && cantidadTotal()) carrito = {}; // el carrito es por local
-    localId = id; categoria = ''; cambio(); entrega.zona = '';
+    localId = id; categoria = ''; cambio(); entrega.zona = ''; marcarAgotados();
     MEM.guardar('pedir_local', id);
     irA(1);
   }
@@ -539,10 +555,12 @@
     if (!items().length) return irA(1);
     var c = cfg(), cli = MEM.leer('cliente') || {};
     var z = zonaElegida();
-    var formas = [['efectivo', '💵', 'Efectivo', entrega.tipo === 'domicilio' ? 'Pagas al recibir' : 'Pagas en el local']];
+    /* 3.1.3: efectivo solo si el dueño lo permite y hasta su monto máximo */
+    var efOk = efectivoPermitido();
+    var formas = efOk ? [['efectivo', '💵', 'Efectivo', entrega.tipo === 'domicilio' ? 'Pagas al recibir' : 'Pagas en el local']] : [];
     formas.push(['transferencia', '🏦', 'Transferencia', 'A la cuenta del local']);
     if (c.deuna_qr_url) formas.push(['deuna', '📲', 'Deuna', 'Escaneas el QR']);
-    if (!formas.some(function (f) { return f[0] === pago.forma; })) pago.forma = 'efectivo';
+    if (!formas.some(function (f) { return f[0] === pago.forma; })) pago.forma = formas[0][0];
     var conPropina = entrega.tipo === 'domicilio' && c.propinas !== 'NO';
     var resumenEntrega = entrega.tipo === 'domicilio' ? '🛵 A domicilio · ' + UI.esc(z ? z.nombre : '') + '<br><small>' + UI.esc(cli.direccion || (ubic ? 'Ubicación marcada en el mapa' : '')) + '</small>'
       : entrega.tipo === 'mesa' ? '🍽️ Mesa ' + UI.esc(entrega.mesa) : '🏪 Retiro en ' + UI.esc(local().nombre);
@@ -557,7 +575,8 @@
       }).join('') + '</div>' +
       (pago.forma === 'transferencia' && c.datos_transferencia ? '<div class="banda" style="margin-top:10px;white-space:pre-line">🏦 <span>' + UI.esc(c.datos_transferencia) + '</span></div>' : '') +
       (pago.forma === 'deuna' ? '<div class="banda" style="margin-top:10px">📲 <span>Al enviar te mostramos el QR de Deuna para pagar.</span></div>' : '') +
-      (UI.esDigital(pago.forma) ? '<p class="ayuda">Prepararemos tu pedido apenas confirmemos el pago.</p>' : '') +
+      (UI.esDigital(pago.forma) ? '<p class="ayuda">Prepararemos tu pedido apenas el local confirme en su banco que llegó el pago.</p>' : '') +
+      (!efOk && c.efectivo_permitido !== 'NO' ? '<p class="ayuda">💵 En efectivo se aceptan pedidos de hasta ' + UI.dinero(Number(c.efectivo_maximo)) + '.</p>' : '') +
       '</div>' +
       (conPropina ? '<div class="tarjeta"><h3 style="margin-top:0">Propina para el motorizado <small style="font-weight:600;color:var(--texto-2)">(opcional)</small></h3><div class="segmento">' +
         [0, 0.5, 1, 2].map(function (v) { return '<button type="button" data-propina="' + v + '" class="' + (pago.propina === v ? 'activo' : '') + '">' + (v ? UI.dinero(v) : 'Sin propina') + '</button>'; }).join('') + '</div><p class="ayuda" style="margin:8px 0 0">Va completa para quien te lleva el pedido. 🙌</p></div>' : '') +
@@ -577,6 +596,7 @@
     UI.$$('[data-propina]').forEach(function (b) {
       b.addEventListener('click', function () {
         pago.propina = Number(b.getAttribute('data-propina')); cambio();
+        if (efectivoPermitido() !== !!UI.$('[data-forma=efectivo]')) { guardarNotas(); pintarConfirmar(); restaurarNotas(); return; } // 3.1.3: cambió si alcanza para efectivo
         UI.$$('[data-propina]').forEach(function (x) { x.classList.toggle('activo', x === b); });
         totales();
       });
@@ -584,6 +604,13 @@
     $('#form-pedido').addEventListener('submit', enviar);
     pintarItemsResumen();
     totales();
+  }
+  function totalActual() { return Math.round((subtotal() + envio() + propina()) * 100) / 100; }
+  function efectivoPermitido() {
+    var c = cfg();
+    if (c.efectivo_permitido === 'NO') return false;
+    var max = Number(c.efectivo_maximo);
+    return !(max > 0 && totalActual() > max);
   }
   var notasTmp = {};
   function guardarNotas() { notasTmp = { cupon: ($('#pe-cupon') || {}).value || '', notas: ($('#pe-notas') || {}).value || '' }; }
@@ -642,7 +669,7 @@
     await UI.trabajando(boton, async function () {
       try {
         var r = await DATOS.pedir('pedidoCrear', datos, { guardar: true });
-        MEM.guardar('ultimo_pedido', { numero: r.pedido.numero, telefono: cli.telefono, local: localId, fecha: Date.now() });
+        MEM.guardar('ultimo_pedido', { numero: r.pedido.numero, telefono: cli.telefono, s: r.pedido.clave_seguimiento ? r.pedido.numero + '-' + r.pedido.clave_seguimiento : '', local: localId, fecha: Date.now() });
         MEM.guardar('ultimo_carrito', { local: localId, items: datos.items });
         var detalle = items();
         r.pedido.ubic_por_wa = !!(ubic && ubic.fuente === 'whatsapp'); // 3.1.1: solo entonces se pide la ubicación por WhatsApp
@@ -725,7 +752,8 @@
     cont.hidden = false;
     if (!cont.innerHTML) cont.innerHTML = '<div class="seg-caja"><b>Tu pedido ' + UI.esc(u.numero) + '</b><span class="item-sub">Consultando…</span></div>';
     try {
-      var r = await DATOS.pedir('pedidoConsultar', { numero: u.numero, telefono: u.telefono });
+      var r = await DATOS.pedir('pedidoConsultar', u.s ? { s: u.s } : { numero: u.numero, telefono: u.telefono });
+      if (r.seguimiento && !u.s) { u.s = r.seguimiento; MEM.guardar('ultimo_pedido', u); }
       if (r.estado === 'Entregado' && r.calificacion && !abrir) { cont.hidden = true; return; }
       var tipo = r.tipo_entrega;
       var pasos = tipo === 'domicilio' ? PASOS_SEG : ['Recibido', 'Preparando', 'Entregado'];
@@ -782,10 +810,23 @@
     });
     if (!ok) return;
     try {
-      await DATOS.pedir('pedidoCalificar', { numero: u.numero, telefono: u.telefono, estrellas: estrellas, comentario: comentario }, { guardar: true });
+      await DATOS.pedir('pedidoCalificar', { numero: u.numero, telefono: u.telefono || '', s: u.s || '', estrellas: estrellas, comentario: comentario }, { guardar: true });
       UI.aviso('¡Gracias por calificarnos!', 'ok');
       pintarSeguimiento();
     } catch (err) { UI.error('No se envió', err.message); }
+  }
+
+  /* 3.1.3: redes y página web del negocio (solo las que el dueño llenó). */
+  function pintarRedes() {
+    var c = cfg(), redes = [['red_instagram', 'Instagram', '📸'], ['red_facebook', 'Facebook', '👍'], ['red_tiktok', 'TikTok', '🎵'], ['pagina_web', 'Página web', '🌐']]
+      .filter(function (x) { return /^https:\/\//.test(c[x[0]] || ''); });
+    var caja = $('#pedir-redes');
+    if (!caja) {
+      caja = document.createElement('nav'); caja.id = 'pedir-redes'; caja.className = 'pedir-redes'; caja.setAttribute('aria-label', 'Redes del negocio');
+      var b = $('#pedir-bienvenida'); if (b && b.parentNode) b.parentNode.insertBefore(caja, b.nextSibling);
+    }
+    caja.hidden = !redes.length;
+    caja.innerHTML = redes.map(function (x) { return '<a href="' + UI.esc(c[x[0]]) + '" target="_blank" rel="noopener"><span aria-hidden="true">' + x[2] + '</span>' + x[1] + '</a>'; }).join('');
   }
 
   /* Personal con sesión abierta en este teléfono: botón para regresar a la app. */

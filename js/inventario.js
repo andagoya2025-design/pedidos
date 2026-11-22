@@ -10,7 +10,7 @@
   'use strict';
   var UI = global.UI, DATOS = global.DATOS, APP = global.APP;
   var insumos = [];
-  var soloBajos = false;
+  var soloBajos = false, busca = '';
 
   APP.vistas.inventario = {
     titulo: 'Inventario', icono: '📦', orden: 50, roles: ['dueno', 'cajero'],
@@ -18,10 +18,12 @@
       cont.innerHTML = UI.encabezado('Inventario', APP.nombreLocal(APP.local)) +
         '<div class="acciones" style="margin:0 0 12px">' + (APP.sesion.rol === 'dueno' ? '<button class="btn" type="button" id="btn-nuevo-insumo">＋ Nuevo insumo</button>' : '') +
         '<label class="interruptor" style="flex:1 1 160px"><input type="checkbox" id="solo-bajos"' + (soloBajos ? ' checked' : '') + '> Solo bajo el mínimo</label></div>' +
+        '<div class="campo" style="margin:0 0 12px"><label class="solo-lector" for="in-busca">Buscar insumo</label><input class="entrada" id="in-busca" type="search" placeholder="🔎 Buscar insumo…" value="' + UI.esc(busca) + '" autocomplete="off"></div>' +
         '<div id="in-cuerpo">' + UI.esqueleto(4) + '</div>';
       UI.$('[data-actualizar]', cont).addEventListener('click', function (e) { UI.trabajando(e.currentTarget, cargar); });
       var n = UI.$('#btn-nuevo-insumo', cont); if (n) n.addEventListener('click', function () { editar(null); });
       UI.$('#solo-bajos', cont).addEventListener('change', function (e) { soloBajos = e.target.checked; pintar(); });
+      UI.$('#in-busca', cont).addEventListener('input', function (e) { busca = e.target.value; pintar(); });
       cargar();
     }
   };
@@ -37,7 +39,9 @@
 
   function filtrar(lista) {
     // Al traer TODOS y luego elegir un local arriba, se muestra solo ese local.
-    return lista.filter(function (i) { return (APP.local === 'TODOS' || i.local_id === APP.local) && (!soloBajos || i.bajo); });
+    function norm(t) { return String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim(); }
+    var q = norm(busca);
+    return lista.filter(function (i) { return (APP.local === 'TODOS' || i.local_id === APP.local) && (!soloBajos || i.bajo) && (!q || norm(i.nombre).indexOf(q) >= 0); });
   }
 
   function pintar() {
@@ -45,22 +49,48 @@
     if (!c) return;
     var lista = filtrar(insumos);
     var bajos = insumos.filter(function (i) { return i.bajo && (APP.local === 'TODOS' || i.local_id === APP.local); }).length;
-    c.innerHTML = (bajos ? '<div class="banda error">📉 <span>' + bajos + ' insumo(s) en o bajo el mínimo. Toque «Compra» para reponer.</span></div>' : '') +
+    c.innerHTML = (bajos ? '<div class="banda error banda-accion">📉 <span>' + bajos + ' insumo(s) en o bajo el mínimo.</span><button class="btn chico" type="button" id="btn-compras">🛒 Lista de compras</button></div>' : '') +
       (lista.length ? '<div class="lista">' + lista.map(function (i) {
-        return '<div class="item" style="flex-wrap:wrap"><div class="avatar" aria-hidden="true">' + (i.bajo ? '📉' : '📦') + '</div><div class="item-cuerpo" style="min-width:150px">' +
+        return '<div class="tarjeta insumo' + (i.bajo ? ' bajo' : '') + '"><div class="insumo-cabeza"><div class="item-cuerpo">' +
           '<div class="item-titulo">' + UI.esc(i.nombre) + (i.activo ? '' : ' <span class="etiqueta mal">Inactivo</span>') + '</div>' +
-          '<div class="item-sub">' + (APP.local === 'TODOS' ? UI.esc(i.local) + ' · ' : '') + 'mínimo ' + i.minimo + ' ' + UI.esc(i.unidad) + '</div></div>' +
-          '<div style="text-align:right"><div style="font-weight:800;font-size:20px' + (i.bajo ? ';color:var(--error)' : '') + '">' + i.stock + '</div><div class="item-sub">' + UI.esc(i.unidad) + '</div></div>' +
-          '<div class="mov-botones">' +
-          '<button class="btn chico" type="button" data-mov="compra" data-id="' + UI.esc(i.id) + '">＋ Compra</button>' +
-          '<button class="btn secundario chico" type="button" data-mov="salida" data-id="' + UI.esc(i.id) + '">− Salida</button>' +
-          '<button class="btn secundario chico" type="button" data-mov="conteo" data-id="' + UI.esc(i.id) + '">🔢 Conteo</button>' +
-          '<button class="btn secundario chico" type="button" data-mov="traspaso" data-id="' + UI.esc(i.id) + '">⇄ Traspaso</button>' +
-          '<button class="btn borde chico" type="button" data-mov="historial" data-id="' + UI.esc(i.id) + '">🕘 Historial</button>' +
-          (APP.sesion.rol === 'dueno' ? '<button class="btn borde chico" type="button" data-mov="editar" data-id="' + UI.esc(i.id) + '">Editar</button>' : '') +
-          '</div></div>';
-      }).join('') + '</div>' : UI.vacio('📦', soloBajos ? 'Nada bajo el mínimo. 👍' : (APP.sesion.rol === 'dueno' ? 'Aún no hay insumos. Toque «Nuevo insumo».' : 'Aún no hay insumos en su local.')));
+          '<div class="item-sub">' + [APP.local === 'TODOS' ? UI.esc(i.local) : '', i.costo !== '' ? UI.esc(UI.dinero(i.costo)) + ' c/' + UI.esc(i.unidad) : '', i.proveedor ? 'Prov.: ' + UI.esc(i.proveedor) : ''].filter(String).join(' · ') + '</div></div>' +
+          '<div class="insumo-stock"><b>' + i.stock + '</b><span>' + UI.esc(i.unidad) + ' · mín. ' + i.minimo + '</span></div></div>' +
+          '<div class="insumo-botones"><button class="btn chico" type="button" data-mov="compra" data-id="' + UI.esc(i.id) + '">＋ Compra</button>' +
+          '<button class="btn secundario chico" type="button" data-mov="mas" data-id="' + UI.esc(i.id) + '">⋯ Más</button></div></div>';
+      }).join('') + '</div>' : UI.vacio('📦', soloBajos ? 'Nada bajo el mínimo. 👍' : busca ? 'No hay insumos con ese nombre.' : (APP.sesion.rol === 'dueno' ? 'Aún no hay insumos. Toque «Nuevo insumo».' : 'Aún no hay insumos en su local.')));
     UI.$$('[data-mov]', c).forEach(function (b) { b.addEventListener('click', function () { movimiento(b, b.getAttribute('data-mov'), b.getAttribute('data-id')); }); });
+    var bc = UI.$('#btn-compras', c); if (bc) bc.addEventListener('click', listaCompras);
+  }
+
+  /* 3.1.3: lista de compras de lo que está bajo el mínimo, por proveedor, lista para WhatsApp. */
+  function listaCompras() {
+    var bajos = insumos.filter(function (i) { return i.activo && i.bajo && (APP.local === 'TODOS' || i.local_id === APP.local); });
+    var grupos = {};
+    bajos.forEach(function (i) {
+      var k = (i.proveedor || 'Sin proveedor') + '|' + (i.proveedor_tel || '') + '|' + i.local_id;
+      var pedir = Math.max(Math.ceil(i.minimo * 2 - i.stock), 1);
+      (grupos[k] = grupos[k] || { proveedor: i.proveedor || 'Sin proveedor', tel: i.proveedor_tel, local: i.local, items: [] }).items.push({ i: i, cant: pedir });
+    });
+    var ks = Object.keys(grupos), neg = (APP.publico && APP.publico.negocio_nombre) || '';
+    function texto(g) {
+      return 'Hola' + (g.proveedor !== 'Sin proveedor' ? ' ' + g.proveedor : '') + ', le escribo de ' + neg + (g.local ? ' (' + g.local + ')' : '') + '. Necesito:\n' +
+        g.items.map(function (x) { return '- ' + x.i.nombre + ': ' + x.cant + ' ' + x.i.unidad; }).join('\n') + '\n¿Me confirma precio y hora de entrega? Gracias.';
+    }
+    UI.ventana({
+      icono: '🛒', titulo: 'Lista de compras', texto: 'Lo que está en o bajo el mínimo. Se sugiere comprar hasta el doble del mínimo.',
+      html: ks.map(function (k, n) {
+        var g = grupos[k], total = g.items.reduce(function (s, x) { return s + (x.i.costo !== '' ? x.i.costo * x.cant : 0); }, 0);
+        return '<div class="tarjeta compra-grupo"><h4>' + UI.esc(g.proveedor) + (APP.local === 'TODOS' && g.local ? ' <small>· ' + UI.esc(g.local) + '</small>' : '') + '</h4><div class="lista">' +
+          g.items.map(function (x) { return '<div class="item"><div class="item-cuerpo"><div class="item-titulo">' + UI.esc(x.i.nombre) + '</div><div class="item-sub">Hay ' + x.i.stock + ' · mín. ' + x.i.minimo + '</div></div><b>' + x.cant + ' ' + UI.esc(x.i.unidad) + '</b></div>'; }).join('') + '</div>' +
+          (total ? '<p class="ayuda">Total aprox.: ' + UI.esc(UI.dinero(Math.round(total * 100) / 100)) + '</p>' : '') +
+          (g.tel ? '<button class="btn bloque" type="button" data-wa="' + n + '">💬 Enviar por WhatsApp</button>' : '<button class="btn secundario bloque" type="button" data-copiar="' + n + '">📋 Copiar lista</button><p class="ayuda">Ponga el WhatsApp del proveedor en Editar insumo para enviarlo directo.</p>') + '</div>';
+      }).join(''),
+      alAbrir: function (v) {
+        UI.$$('[data-wa]', v).forEach(function (b) { b.addEventListener('click', function () { var g = grupos[ks[Number(b.getAttribute('data-wa'))]]; UI.abrirWhatsApp(g.tel, texto(g)); }); });
+        UI.$$('[data-copiar]', v).forEach(function (b) { b.addEventListener('click', function () { UI.copiar(texto(grupos[ks[Number(b.getAttribute('data-copiar'))]])); }); });
+      },
+      botones: [{ texto: 'Cerrar', valor: null, clase: 'secundario' }]
+    });
   }
 
   async function editar(i) {
@@ -75,12 +105,17 @@
         (nuevo ? '<div class="campo"><label for="ins-stock">Cantidad inicial</label><input class="entrada" id="ins-stock" name="stock" inputmode="decimal" placeholder="0"></div>' : '') +
         '<div class="campo"><label for="ins-local">Local</label><select class="entrada" id="ins-local" name="local_id"' + (nuevo ? '' : ' disabled') + '>' +
         APP.locales.filter(function (l) { return l.activo || l.id === i.local_id; }).map(function (l) { return '<option value="' + UI.esc(l.id) + '"' + (l.id === i.local_id ? ' selected' : '') + '>' + UI.esc(l.nombre) + '</option>'; }).join('') + '</select></div></div>' +
+        '<div class="fila-campos"><div class="campo"><label for="ins-costo">Costo por unidad (USD)</label><input class="entrada" id="ins-costo" name="costo" inputmode="decimal" placeholder="Ej. 2,50" value="' + UI.esc(i.costo === undefined ? '' : i.costo) + '"><span class="ayuda">Para saber cuánto gana en cada plato.</span></div>' +
+        '<div class="campo"><label for="ins-prov">Proveedor</label><input class="entrada" id="ins-prov" name="proveedor" maxlength="60" placeholder="Ej. Avícola Sur" value="' + UI.esc(i.proveedor || '') + '"></div>' +
+        '<div class="campo"><label for="ins-provtel">WhatsApp del proveedor</label><input class="entrada" id="ins-provtel" name="proveedor_tel" inputmode="tel" placeholder="0991234567" value="' + UI.esc(i.proveedor_tel || '') + '"></div></div>' +
         (nuevo ? '' : '<p class="ayuda">La cantidad no se edita aquí: use Compra, Salida o Conteo (queda en el historial).</p>') +
         '<label class="interruptor"><input type="checkbox" name="activo"' + (i.activo ? ' checked' : '') + '> Activo</label></form>',
       botones: [{ texto: 'Cancelar', valor: false, clase: 'secundario' }, { texto: 'Guardar', valor: true, antes: function (v) {
         enviar = UI.leerFormulario(UI.$('#form-insumo', v));
         enviar.local_id = UI.$('#ins-local', v).value;
         enviar.minimo = UI.numero(enviar.minimo || 0);
+        enviar.costo = String(enviar.costo || '').trim() === '' ? '' : UI.numero(enviar.costo);
+        if (enviar.costo !== '' && !(enviar.costo >= 0)) { UI.aviso('Costo no válido.', 'error'); return false; }
         if (nuevo) enviar.stock = UI.numero(enviar.stock || 0);
         var malo = !enviar.nombre ? 'Escriba el nombre.' : !(enviar.minimo >= 0) ? 'Mínimo no válido.' : (nuevo && !(enviar.stock >= 0)) ? 'Cantidad no válida.' : !enviar.local_id ? 'Elija el local.' : '';
         if (malo) { UI.aviso(malo, 'error'); return false; }
@@ -99,6 +134,13 @@
   async function movimiento(boton, tipo, id) {
     var i = insumos.filter(function (x) { return x.id === id; })[0];
     if (!i) return;
+    if (tipo === 'mas') { // 3.1.3: menos botones a la vista
+      var op = await UI.ventana({ icono: '📦', titulo: i.nombre, texto: 'Hay ' + i.stock + ' ' + i.unidad + '.',
+        botones: [['salida', '− Salida (dañado, consumo…)'], ['conteo', '🔢 Conteo físico'], ['traspaso', '⇄ Traspaso a otro local'], ['historial', '🕘 Historial']].concat(APP.sesion.rol === 'dueno' ? [['editar', '✏️ Editar (costo, proveedor, mínimo)']] : [])
+          .map(function (o) { return { texto: o[1], valor: o[0], clase: 'borde opcion-lista' }; }).concat([{ texto: 'Cerrar', valor: null, clase: 'secundario' }]) });
+      if (!op) return;
+      return movimiento(boton, op, id);
+    }
     if (tipo === 'editar') return editar(i);
     if (tipo === 'historial') return historial(i);
     var titulos = { compra: '＋ Compra de ', salida: '− Salida de ', conteo: '🔢 Conteo de ', traspaso: '⇄ Traspaso de ' };

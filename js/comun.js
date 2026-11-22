@@ -196,6 +196,21 @@
     UI.aviso('Archivo listo.', 'ok');
   };
 
+  /* 3.1.3: foto de entrega (privada): se pide al servidor solo al abrirla. */
+  UI.verFotoEntrega = function (id, numero) {
+    return UI.ventana({
+      icono: '📷', titulo: 'Foto de entrega' + (numero ? ' · ' + numero : ''),
+      html: '<div class="foto-entrega" id="fe-caja"><span class="ayuda">Cargando la foto…</span></div>',
+      alAbrir: function (v) {
+        global.DATOS.pedir('fotoEntregaVer', { id: id }).then(function (r) {
+          var c = UI.$('#fe-caja', v);
+          if (c) c.innerHTML = '<img src="' + r.imagen + '" alt="Foto de la entrega ' + UI.esc(r.numero) + '">' + (r.entregado ? '<small>Entregado el ' + UI.esc(UI.fechaHora(r.entregado)) + '</small>' : '');
+        }).catch(function (e) { var c = UI.$('#fe-caja', v); if (c) c.innerHTML = '<span class="ayuda">⚠️ ' + UI.esc(e.message) + '</span>'; });
+      },
+      botones: [{ texto: 'Cerrar', valor: null, clase: 'secundario' }]
+    });
+  };
+
   /* Pide un texto en ventana premium (motivo, monto…). Devuelve el texto o null. */
   UI.pedirDato = function (op) {
     var valor = null;

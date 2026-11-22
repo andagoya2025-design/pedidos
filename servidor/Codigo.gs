@@ -18,8 +18,8 @@
  * ============================================================
  */
 
-var APP_VERSION = '3.1.2';
-var APP_VERSION_NUM = 30102; // 3.1.0 -> 30100 (la pantalla compara con su mínimo)
+var APP_VERSION = '3.1.3';
+var APP_VERSION_NUM = 30103; // 3.1.0 -> 30100 (la pantalla compara con su mínimo)
 var SESION_SEGUNDOS = 21600;  // 6 h; se renueva con cada uso
 var ROLES = ['dueno', 'cajero', 'motorizado'];
 
@@ -37,7 +37,8 @@ var HOJAS = {
   pedidos: [['id', 't'], ['numero', 't'], ['op_id', 't'], ['local_id', 't'], ['dia_trabajo', 'f'], ['cliente_id', 't'], ['cliente_nombre', 't'], ['telefono', 't'], ['direccion', 't'], ['referencia', 't'], ['lat', 'n'], ['lng', 'n'], ['zona_id', 't'], ['forma_pago', 't'], ['subtotal', 'm'], ['envio', 'm'], ['descuento', 'm'], ['total', 'm'], ['cupon', 't'], ['estado', 't'], ['motorizado_id', 't'], ['creado', 'd'], ['preparando', 'd'], ['en_camino', 'd'], ['entregado', 'd'], ['anulado', 'd'], ['motivo_anulacion', 't'], ['usuario', 't'],
     /* fase 2-7 (agregadas al final) */ ['hora_estimada', 'd'], ['ubicacion_enlace', 't'], ['notas', 't'], ['sali_lat', 'n'], ['sali_lng', 'n'], ['entrega_lat', 'n'], ['entrega_lng', 'n'], ['foto_entrega', 't'], ['pago_verificado', 'b'], ['liquidacion_id', 't'], ['inventario_descontado', 'b'],
     /* 3.0 (agregadas al final) */ ['tipo_entrega', 't'], ['mesa', 't'], ['hora_llegada', 'd'], ['origen', 't'], ['propina', 'm'], ['base_iva', 'm'], ['iva', 'm'], ['ubicacion_fuente', 't'], ['cliente_nuevo', 'b'], ['calificacion', 'n'], ['comentario', 't'], ['premio', 'm'], ['disp_id', 't'],
-    /* 3.1 */ ['codigo_entrega', 't'], ['ultima_senal', 'd']],
+    /* 3.1 */ ['codigo_entrega', 't'], ['ultima_senal', 'd'],
+    /* 3.1.3 */ ['clave_seguimiento', 't']],
   pedido_detalle: [['id', 't'], ['pedido_id', 't'], ['plato_id', 't'], ['nombre', 't'], ['precio', 'm'], ['cantidad', 'n'], ['extras', 't'], ['total_linea', 'm']],
   clientes: [['id', 't'], ['telefono', 't'], ['nombre', 't'], ['direccion', 't'], ['referencia', 't'], ['lat', 'n'], ['lng', 'n'], ['pedidos', 'n'], ['total_gastado', 'm'], ['ultimo_pedido', 'd'], ['creado', 'd'],
     /* 3.0 */ ['entregados', 'n'], ['sellos', 'n'],
@@ -45,7 +46,8 @@ var HOJAS = {
   motorizados: [['id', 't'], ['nombre', 't'], ['cedula', 't'], ['celular', 't'], ['direccion', 't'], ['placa', 't'], ['foto_url', 't'], ['usuario_id', 't'], ['activo', 'b'], ['creado', 'd'],
     /* fase 4 */ ['local_id', 't'],
     /* 3.1 */ ['color_moto', 't'], ['modelo_moto', 't'], ['licencia_vence', 'f'], ['matricula_vence', 'f'], ['forma_pago', 't'], ['tarifa', 'm']],
-  insumos: [['id', 't'], ['local_id', 't'], ['nombre', 't'], ['unidad', 't'], ['stock', 'n'], ['minimo', 'n'], ['activo', 'b'], ['creado', 'd']],
+  insumos: [['id', 't'], ['local_id', 't'], ['nombre', 't'], ['unidad', 't'], ['stock', 'n'], ['minimo', 'n'], ['activo', 'b'], ['creado', 'd'],
+    /* 3.1.3 */ ['costo', 'm'], ['proveedor', 't'], ['proveedor_tel', 't']],
   movimientos_inventario: [['id', 't'], ['fecha', 'd'], ['local_id', 't'], ['insumo_id', 't'], ['tipo', 't'], ['cantidad', 'n'], ['motivo', 't'], ['local_destino', 't'], ['usuario', 't']],
   recetas_plato: [['id', 't'], ['plato_id', 't'], ['insumo_id', 't'], ['cantidad', 'n']],
   caja: [['id', 't'], ['local_id', 't'], ['dia_trabajo', 'f'], ['apertura', 'd'], ['fondo', 'm'], ['abierta_por', 't'], ['cierre', 'd'], ['esperado', 'm'], ['contado', 'm'], ['diferencia', 'm'], ['cerrada_por', 't'], ['estado', 't']],
@@ -102,12 +104,20 @@ var CONFIG_DEFECTO = {
   privacidad_texto: '',      // vacío = texto por defecto (privacidad.html)
   formato_hora: '24',        // 24 | 12
   meta_entregas_dia: '',     // 3.1: meta diaria de entregas por motorizado (vacío = sin meta)
-  bono_meta: ''              // 3.1: bono en USD por cada día que cumple la meta
+  bono_meta: '',             // 3.1: bono en USD por cada día que cumple la meta
+  /* 3.1.3 */
+  efectivo_permitido: 'SI',  // SI | NO — si el cliente puede pagar en efectivo
+  efectivo_maximo: '',       // monto máximo en efectivo (vacío = sin límite)
+  red_instagram: '',         // redes y página web del negocio (vacío = no se muestra)
+  red_facebook: '',
+  red_tiktok: '',
+  pagina_web: ''
 };
 
 /* Campos de configuración que puede ver cualquiera (sin sesión). */
 var CONFIG_PUBLICA = ['negocio_nombre', 'logo_url', 'color_primario', 'color_acento', 'whatsapp', 'pais_codigo', 'ciudad', 'moneda', 'zona_horaria', 'mensaje_bienvenida',
-  /* 3.0 */ 'horario_apertura', 'horario_cierre', 'dias_cerrado', 'deuna_qr_url', 'fidelidad_sellos', 'fidelidad_descuento', 'propinas', 'mesas', 'verificar_antes_salir', 'precios_incluyen_iva', 'codigo_entrega', 'privacidad_texto', 'formato_hora'];
+  /* 3.0 */ 'horario_apertura', 'horario_cierre', 'dias_cerrado', 'deuna_qr_url', 'fidelidad_sellos', 'fidelidad_descuento', 'propinas', 'mesas', 'verificar_antes_salir', 'precios_incluyen_iva', 'codigo_entrega', 'privacidad_texto', 'formato_hora',
+  /* 3.1.3 */ 'efectivo_permitido', 'efectivo_maximo', 'red_instagram', 'red_facebook', 'red_tiktok', 'pagina_web'];
 
 /* Acciones: quién puede usarlas. 'publica' = sin sesión. */
 var ACCIONES = {
@@ -178,7 +188,9 @@ var ACCIONES = {
   informeMotorizados: { tipo: 'dueno',   fn: accionInformeMotorizados_ },
   rutaPedido:         { tipo: 'dueno',   fn: accionRutaPedido_ },
   clienteAnonimizar:  { tipo: 'dueno',   fn: accionClienteAnonimizar_ },
-  privacidadPublica:  { tipo: 'publica', fn: accionPrivacidadPublica_ }
+  privacidadPublica:  { tipo: 'publica', fn: accionPrivacidadPublica_ },
+  /* ---- 3.1.3 ---- */
+  fotoEntregaVer:     { tipo: 'sesion',  roles: ['dueno', 'cajero', 'motorizado'], fn: accionFotoEntregaVer_ }
 };
 
 /* ============================================================
@@ -479,6 +491,10 @@ function accionConfigGuardar_(data, ctx) {
     if (k === 'dias_guardar_rastreo' && !(Number(v) >= 1 && Number(v) <= 365)) throw fallo_('Días no válidos (1 a 365).');
     if (k === 'formato_hora' && ['12', '24'].indexOf(v) < 0) throw fallo_('Formato de hora no válido.');
     if ((k === 'meta_entregas_dia' || k === 'bono_meta') && v !== '' && !(Number(v) >= 0 && Number(v) <= 1000)) throw fallo_('Meta o bono no válidos.');
+    /* 3.1.3 */
+    if (k === 'efectivo_permitido' && ['SI', 'NO'].indexOf(v) < 0) throw fallo_('Valor no válido.');
+    if (k === 'efectivo_maximo' && v !== '' && !(Number(v) > 0 && Number(v) <= 10000)) throw fallo_('Monto máximo de efectivo no válido.');
+    if (['red_instagram', 'red_facebook', 'red_tiktok', 'pagina_web'].indexOf(k) >= 0) v = enlaceRed_(k, v);
     limpio[k] = v;
   });
 
@@ -506,6 +522,7 @@ function accionConfigGuardar_(data, ctx) {
     escritas += nuevas.length;
     if (limpio.zona_horaria) SpreadsheetApp.getActive().setSpreadsheetTimeZone(limpio.zona_horaria);
     CacheService.getScriptCache().remove('CONFIG');
+    limpiarMenuCache_(); // 3.1.3: el cliente ve al instante los ajustes nuevos (efectivo, redes, horario)
   } finally {
     lock.releaseLock();
   }
@@ -942,6 +959,8 @@ function pedidoSalida_(r, detalle) {
   if (detalle) o.detalle = detalle;
   o.pide_codigo = String(r.codigo_entrega || '') !== 'NO'; // 3.1
   o.codigo_entrega = ''; // 3.1: solo lo ve el cliente (pedidoConsultar), nunca el personal
+  o.tiene_foto = !!String(r.foto_entrega || ''); // 3.1.3: la foto se ve con fotoEntregaVer (privada)
+  delete o.foto_entrega;
   return o;
 }
 
@@ -982,6 +1001,12 @@ function accionMenuPublico_() {
       return { id: String(z.id), local_id: String(z.local_id), nombre: String(z.nombre), costo: redondear_(z.costo), minutos: numero_(z.minutos) };
     })
   };
+  /* 3.1.3: platos sin insumos suficientes en cada local (agotado automático) */
+  var ag = agotadosPorLocal_();
+  data.platos.forEach(function (p) {
+    var en = Object.keys(ag).filter(function (l) { return ag[l][p.id]; });
+    if (en.length) p.agotado_locales = en;
+  });
   var texto = JSON.stringify(data);
   if (texto.length < 90000) cache.put('MENU_PUBLICO', texto, 120);
   data.abierto = estaAbierto_(cfg, new Date());
@@ -1075,12 +1100,13 @@ function accionPedidoCrear_(data, ctx) {
 
     var platos = {};
     leerTabla_('platos').forEach(function (p) { platos[String(p.id)] = p; });
+    var sinInsumos = (!ses || data.canal === 'cliente') ? (agotadosPorLocal_()[localId] || {}) : {}; // 3.1.3: agotado automático por inventario
     var subtotal = 0, masCaro = 0;
     items.forEach(function (it) {
       var p = platos[String(it.plato_id)];
       var cant = Math.floor(numero_(it.cantidad));
       if (!p || p.activo !== true || (String(p.local_id) !== 'TODOS' && String(p.local_id) !== localId)) throw fallo_('Un plato de su pedido ya no está disponible. Revise su pedido.', 'PLATO');
-      if (p.agotado === true) throw fallo_('«' + p.nombre + '» se agotó. Quítelo de su pedido.', 'AGOTADO');
+      if (p.agotado === true || sinInsumos[String(p.id)]) throw fallo_('«' + p.nombre + '» se agotó. Quítelo de su pedido.', 'AGOTADO');
       if (!(cant >= 1 && cant <= 50)) throw fallo_('Cantidad no válida en «' + p.nombre + '».');
       var extrasDisp = leerExtras_(p.extras_json);
       var elegidos = (Array.isArray(it.extras) ? it.extras : []).map(function (n) { return claveComparar_(n); });
@@ -1126,6 +1152,12 @@ function accionPedidoCrear_(data, ctx) {
     var baseIva = siNo_(cfg.precios_incluyen_iva) ? redondear_(gravado / (1 + pctIva / 100)) : gravado;
     var iva = siNo_(cfg.precios_incluyen_iva) ? redondear_(gravado - baseIva) : redondear_(gravado * pctIva / 100);
     if (!siNo_(cfg.precios_incluyen_iva)) total = redondear_(total + iva);
+    /* 3.1.3: efectivo solo si el dueño lo permite y hasta su monto máximo (el personal sí puede registrar efectivo) */
+    if (forma === 'efectivo' && (!ses || data.canal === 'cliente')) {
+      if (String(cfg.efectivo_permitido) === 'NO') throw fallo_('Este local no recibe efectivo. Elige transferencia' + (cfg.deuna_qr_url ? ' o Deuna.' : '.'), 'EFECTIVO');
+      var maxEf = numero_(cfg.efectivo_maximo);
+      if (maxEf > 0 && total > maxEf) throw fallo_('En efectivo se aceptan pedidos de hasta ' + UI_dinero_(maxEf) + '. Elige transferencia' + (cfg.deuna_qr_url ? ' o Deuna.' : '.'), 'EFECTIVO');
+    }
 
     // Número correlativo: el mayor que exista + 1 (bajo candado: nunca se repite).
     var mayor = 0;
@@ -1158,13 +1190,14 @@ function accionPedidoCrear_(data, ctx) {
       subtotal, envio, descuento, total, codigo, 'Recibido', '', ahora, '', '', '', '', '', ses ? ses.usuario : 'cliente',
       horaEst, enlaceUbic, limpiarTexto_(data.notas, 300), '', '', '', '', '', false, '', false,
       tipo, mesa, llegada || '', origen, propina, baseIva, iva, fuente, nuevo, '', '', premio, dispId,
-      ses && data.canal !== 'cliente' ? 'NO' : '', '']; // 3.1: pedido tomado por el personal (teléfono/mostrador): sin código. 3.1.1: si se hizo desde la página del cliente, sí lleva código
+      ses && data.canal !== 'cliente' ? 'NO' : '', '', nuevaClaveSeguimiento_()]; // 3.1: pedido tomado por el personal (teléfono/mostrador): sin código. 3.1.1: si se hizo desde la página del cliente, sí lleva código
     agregarFilas_('pedidos', [fila]);
     agregarFilas_('pedido_detalle', detalleFilas.map(function (d) { return [nuevoId_('DET'), id, d.plato_id, d.nombre, d.precio, d.cantidad, d.extras, d.total_linea]; }));
     if (cuponFila) actualizarCampos_('cupones', cuponFila._fila, cuponFila, { usos: numero_(cuponFila.usos) + 1 });
 
     var descontado = descontarInventario_(id, numero, localId, detalleFilas, 1, ses ? ses.usuario : 'cliente');
     if (descontado) {
+      limpiarMenuCache_(); // 3.1.3
       var recien = leerTabla_('pedidos').filter(function (p) { return String(p.id) === id; })[0];
       actualizarCampos_('pedidos', recien._fila, recien, { inventario_descontado: true });
     }
@@ -1187,10 +1220,18 @@ function UI_dinero_(n) { return (leerConfig_().moneda || 'USD') + ' ' + redondea
 /* Seguimiento del cliente: número + teléfono (sin listas, sin datos ajenos). */
 function accionPedidoConsultar_(data) {
   if (!estaInstalado_()) throw fallo_('El sistema aún no está instalado.', 'NO_INSTALADO');
-  var numero = limpiarTexto_(data.numero, 20).toUpperCase();
-  var tel = normalizarTelefono_(data.telefono, leerConfig_().pais_codigo);
-  var p = leerTabla_('pedidos').filter(function (x) { return String(x.numero) === numero && String(x.telefono) === tel; })[0];
-  if (!p) throw fallo_('No encontramos ese pedido con ese número de celular.', 'NO_EXISTE');
+  var p;
+  /* 3.1.3: enlace propio del pedido (PED-0006-k7x9q2): abre el seguimiento en cualquier teléfono, sin escribir nada */
+  var sg = /^(PED-\d{4,})-([a-z0-9]{6,12})$/i.exec(limpiarTexto_(data.s, 40));
+  if (sg) {
+    p = leerTabla_('pedidos').filter(function (x) { return String(x.numero) === sg[1].toUpperCase() && String(x.clave_seguimiento || '') === sg[2].toLowerCase(); })[0];
+    if (!p) throw fallo_('Este enlace no es válido o ya venció. Escríbenos por WhatsApp.', 'NO_EXISTE');
+  } else {
+    var numero = limpiarTexto_(data.numero, 20).toUpperCase();
+    var tel = normalizarTelefono_(data.telefono, leerConfig_().pais_codigo);
+    p = leerTabla_('pedidos').filter(function (x) { return String(x.numero) === numero && String(x.telefono) === tel; })[0];
+    if (!p) throw fallo_('No encontramos ese pedido con ese número de celular.', 'NO_EXISTE');
+  }
   var cfgC = leerConfig_();
   /* 3.1.1: pedido que salió «En camino» antes de actualizar el script: se le crea su código ahora. */
   if (String(p.estado) === 'En camino' && siNo_(cfgC.codigo_entrega) && !String(p.codigo_entrega || '')) {
@@ -1199,7 +1240,7 @@ function accionPedidoConsultar_(data) {
     p.codigo_entrega = nuevoCod;
   }
   var cli = leerTabla_('clientes').filter(function (c) { return String(c.id) === String(p.cliente_id); })[0];
-  return { ok: true, data: { numero: String(p.numero), estado: String(p.estado), creado: iso_(p.creado), preparando: iso_(p.preparando), en_camino: iso_(p.en_camino), entregado: iso_(p.entregado), hora_estimada: iso_(p.hora_estimada), total: redondear_(p.total),
+  return { ok: true, data: { numero: String(p.numero), seguimiento: String(p.clave_seguimiento || '') ? String(p.numero) + '-' + String(p.clave_seguimiento) : '', estado: String(p.estado), creado: iso_(p.creado), preparando: iso_(p.preparando), en_camino: iso_(p.en_camino), entregado: iso_(p.entregado), hora_estimada: iso_(p.hora_estimada), total: redondear_(p.total),
     tipo_entrega: tipoEntrega_(p), mesa: String(p.mesa || ''), calificacion: numero_(p.calificacion) || '', motivo_anulacion: String(p.estado) === 'Anulado' ? String(p.motivo_anulacion) : '',
     sellos: cli ? numero_(cli.sellos) : 0, sellos_meta: numero_(cfgC.fidelidad_sellos),
     /* 3.1: tarjeta del motorizado y código de entrega — solo mientras va en camino */
@@ -1442,6 +1483,7 @@ function accionRecetaGuardar_(data, ctx) {
     var filas = Object.keys(nuevos).filter(function (k) { return !vistos[k] && nuevos[k] > 0; }).map(function (k) { return [nuevoId_('REC'), platoId, k, nuevos[k]]; });
     agregarFilas_('recetas_plato', filas);
   } finally { lock.releaseLock(); }
+  limpiarMenuCache_(); // 3.1.3
   bitacora_(ctx.sesion, 'INVENTARIO', 'RECETA', platoId, ctx.dispositivo);
   return accionRecetaListar_({ plato_id: platoId }, ctx);
 }
@@ -1510,6 +1552,15 @@ function accionPedidosListar_(data, ctx) {
     var abierto = ['Entregado', 'Anulado'].indexOf(String(p.estado)) < 0;
     return d === dia || (dia === hoy && abierto); // hoy + los que quedaron abiertos de antes
   });
+  /* 3.1.3: pedidos de antes de la 3.1.3 reciben su clave de seguimiento la primera vez que se listan */
+  var sinClave = lista.filter(function (p) { return !String(p.clave_seguimiento || ''); });
+  if (sinClave.length) {
+    var lockC = LockService.getScriptLock();
+    if (lockC.tryLock(5000)) {
+      try { sinClave.forEach(function (p) { var c = nuevaClaveSeguimiento_(); actualizarCampos_('pedidos', p._fila, p, { clave_seguimiento: c }); p.clave_seguimiento = c; }); }
+      finally { lockC.releaseLock(); }
+    }
+  }
   var det = detallePorPedido_(lista.map(function (p) { return String(p.id); }));
   var motos = {};
   leerTabla_('motorizados').forEach(function (m) { motos[String(m.id)] = motoCorto_(m); });
@@ -1902,7 +1953,8 @@ function accionReportesBase_(data, ctx) {
 
 function insumoSalida_(i, nombresLocal) {
   var s = numero_(i.stock), mn = numero_(i.minimo);
-  return { id: String(i.id), local_id: String(i.local_id), local: nombresLocal[String(i.local_id)] || '', nombre: String(i.nombre), unidad: String(i.unidad), stock: s, minimo: mn, bajo: i.activo === true && s <= mn, activo: i.activo === true };
+  return { id: String(i.id), local_id: String(i.local_id), local: nombresLocal[String(i.local_id)] || '', nombre: String(i.nombre), unidad: String(i.unidad), stock: s, minimo: mn, bajo: i.activo === true && s <= mn, activo: i.activo === true,
+    costo: i.costo === '' || i.costo == null ? '' : redondear_(i.costo), proveedor: String(i.proveedor || ''), proveedor_tel: String(i.proveedor_tel || '') }; // 3.1.3
 }
 
 function accionInsumosListar_(data, ctx) {
@@ -1919,6 +1971,11 @@ function accionInsumoGuardar_(data, ctx) {
   var localId = limpiarTexto_(data.local_id, 40), minimo = Number(data.minimo || 0);
   if (!nombre) throw fallo_('Escriba el nombre del insumo.');
   if (!(minimo >= 0)) throw fallo_('Mínimo no válido.');
+  /* 3.1.3: costo por unidad y proveedor */
+  var costo = data.costo === '' || data.costo == null ? '' : Number(data.costo);
+  if (costo !== '' && !(costo >= 0 && costo <= 100000)) throw fallo_('Costo no válido.');
+  var proveedor = limpiarTexto_(data.proveedor, 60);
+  var provTel = data.proveedor_tel ? normalizarTelefono_(data.proveedor_tel, leerConfig_().pais_codigo) : '';
   var lock = candado_();
   try {
     if (!leerTabla_('locales').some(function (l) { return String(l.id) === localId; })) throw fallo_('Elija el local del insumo.');
@@ -1930,12 +1987,12 @@ function accionInsumoGuardar_(data, ctx) {
       if (!actual) throw fallo_('Ese insumo ya no existe.', 'NO_EXISTE');
       if (String(actual.local_id) !== localId) throw fallo_('Un insumo no cambia de local: use «Traspaso».');
       // El stock NO se edita aquí: solo con movimientos (quedan en el historial).
-      if (actualizarCampos_('insumos', actual._fila, actual, { nombre: nombre, unidad: unidad, minimo: minimo, activo: data.activo !== false })) bitacora_(ctx.sesion, 'INVENTARIO', 'EDITAR_INSUMO', nombre, ctx.dispositivo);
+      if (actualizarCampos_('insumos', actual._fila, actual, { nombre: nombre, unidad: unidad, minimo: minimo, activo: data.activo !== false, costo: costo, proveedor: proveedor, proveedor_tel: provTel })) bitacora_(ctx.sesion, 'INVENTARIO', 'EDITAR_INSUMO', nombre, ctx.dispositivo);
     } else {
       var inicial = Number(data.stock || 0);
       if (!(inicial >= 0)) throw fallo_('Cantidad inicial no válida.');
       var nid = nuevoId_('INS'), ahora = new Date();
-      agregarFilas_('insumos', [[nid, localId, nombre, unidad, inicial, minimo, data.activo !== false, ahora]]);
+      agregarFilas_('insumos', [[nid, localId, nombre, unidad, inicial, minimo, data.activo !== false, ahora, costo, proveedor, provTel]]);
       if (inicial > 0) agregarFilas_('movimientos_inventario', [[nuevoId_('MOV'), ahora, localId, nid, 'inicial', inicial, 'Cantidad inicial', '', ctx.sesion.usuario]]);
       bitacora_(ctx.sesion, 'INVENTARIO', 'CREAR_INSUMO', nombre, ctx.dispositivo);
     }
@@ -1976,12 +2033,13 @@ function accionInventarioMovimiento_(data, ctx) {
       var otro = filas.filter(function (r) { return String(r.local_id) === destino && claveComparar_(r.nombre) === claveComparar_(ins.nombre); })[0];
       var otroId;
       if (otro) { otroId = String(otro.id); actualizarCampos_('insumos', otro._fila, otro, { stock: r3(numero_(otro.stock) + cant) }); }
-      else { otroId = nuevoId_('INS'); agregarFilas_('insumos', [[otroId, destino, ins.nombre, ins.unidad, cant, 0, true, ahora]]); }
+      else { otroId = nuevoId_('INS'); agregarFilas_('insumos', [[otroId, destino, ins.nombre, ins.unidad, cant, 0, true, ahora, ins.costo, ins.proveedor, ins.proveedor_tel]]); }
       movs.push([nuevoId_('MOV'), ahora, ins.local_id, ins.id, 'traspaso_salida', -cant, motivo, destino, u]);
       movs.push([nuevoId_('MOV'), ahora, destino, otroId, 'traspaso_entrada', cant, motivo, String(ins.local_id), u]);
     }
     actualizarCampos_('insumos', ins._fila, ins, { stock: stock });
     agregarFilas_('movimientos_inventario', movs);
+    limpiarMenuCache_(); // 3.1.3: el plato vuelve a aparecer (o se agota) al instante
     res.stock = stock;
     res.nombre = String(ins.nombre);
   } finally { lock.releaseLock(); }
@@ -2306,7 +2364,8 @@ function accionPedidoCalificar_(data) {
   if (!(estrellas >= 1 && estrellas <= 5)) throw fallo_('Elija de 1 a 5 estrellas.');
   var lock = candado_(), p;
   try {
-    p = leerTabla_('pedidos').filter(function (x) { return String(x.numero) === numero && String(x.telefono) === tel; })[0];
+    var sgC = /^(PED-\d{4,})-([a-z0-9]{6,12})$/i.exec(limpiarTexto_(data.s, 40)); // 3.1.3: también con el enlace del pedido
+    p = leerTabla_('pedidos').filter(function (x) { return sgC ? (String(x.numero) === sgC[1].toUpperCase() && String(x.clave_seguimiento || '') === sgC[2].toLowerCase()) : (String(x.numero) === numero && String(x.telefono) === tel); })[0];
     if (!p) throw fallo_('No encontramos ese pedido con ese número de celular.', 'NO_EXISTE');
     if (String(p.estado) !== 'Entregado') throw fallo_('Podrá calificar cuando reciba su pedido.');
     if (numero_(p.calificacion) > 0) throw fallo_('Este pedido ya fue calificado. ¡Gracias!', 'DUPLICADO');
@@ -2728,7 +2787,7 @@ function accionInformeMotorizados_(data, ctx) {
     } else { o.dias_meta = null; o.bono = 0; }
     if (detalle === 'completo') {
       o.detalle = ent.map(function (p) {
-        return { id: String(p.id), numero: String(p.numero), dia: ymd_(p.dia_trabajo, cfg), salio: iso_(p.en_camino), entrego: iso_(p.entregado),
+        return { id: String(p.id), numero: String(p.numero), dia: ymd_(p.dia_trabajo, cfg), salio: iso_(p.en_camino), entrego: iso_(p.entregado), tiene_foto: !!String(p.foto_entrega || ''), // 3.1.3
           minutos: p.en_camino instanceof Date && p.entregado instanceof Date ? Math.round((p.entregado - p.en_camino) / 60000) : null,
           a_tiempo: p.hora_estimada instanceof Date && p.entregado instanceof Date ? p.entregado <= new Date(p.hora_estimada.getTime() + 5 * 60000) : null,
           total: redondear_(p.total), forma_pago: String(p.forma_pago), propina: numero_(p.propina), estrellas: numero_(p.calificacion) || null, comentario: String(p.comentario || ''),
@@ -2854,4 +2913,68 @@ function botarFotoVieja_(url, carpetaNombre) {
 /* 3.1: lo que el personal necesita del motorizado en la lista de pedidos (sin cédula). */
 function motoCorto_(m) {
   return { nombre: String(m.nombre), celular: String(m.celular), placa: String(m.placa || ''), moto: [String(m.modelo_moto || ''), String(m.color_moto || '')].filter(function (x) { return x; }).join(' · ') };
+}
+
+/* ============================================================
+ * 3.1.3 — SEGUIMIENTO POR ENLACE, FOTO DE ENTREGA, AGOTADO AUTOMÁTICO, REDES
+ * ============================================================ */
+
+/* Clave corta y difícil de adivinar para el enlace de seguimiento de cada pedido. */
+function nuevaClaveSeguimiento_() {
+  var letras = 'abcdefghjkmnpqrstuvwxyz23456789', c = '';
+  for (var i = 0; i < 8; i++) c += letras.charAt(Math.floor(Math.random() * letras.length));
+  return c;
+}
+
+/* Redes y página web: se guardan como enlace https completo. Vacío = no se muestra. */
+function enlaceRed_(k, v) {
+  v = limpiarTexto_(v, 200).replace(/\s+/g, '');
+  if (!v) return '';
+  var base = { red_instagram: 'https://instagram.com/', red_facebook: 'https://facebook.com/', red_tiktok: 'https://tiktok.com/@' }[k];
+  if (/^@?[A-Za-z0-9._]{2,60}$/.test(v) && base) return base + v.replace(/^@/, '');
+  if (!/^https?:\/\//i.test(v)) v = 'https://' + v;
+  v = v.replace(/^http:\/\//i, 'https://');
+  if (!/^https:\/\/[A-Za-z0-9.-]+\.[A-Za-z]{2,}(\/[^\s<>"']*)?$/.test(v)) throw fallo_('Enlace no válido: ' + v);
+  return v;
+}
+
+/* { local_id: { plato_id: true } } — platos cuya receta pide más de lo que hay en ese local. */
+function agotadosPorLocal_() {
+  var recetas = leerTabla_('recetas_plato').filter(function (r) { return numero_(r.cantidad) > 0; });
+  if (!recetas.length) return {};
+  var insumos = leerTabla_('insumos');
+  var porId = {}, porLocalNombre = {};
+  insumos.forEach(function (i) { porId[String(i.id)] = i; porLocalNombre[String(i.local_id) + '|' + claveComparar_(i.nombre)] = i; });
+  var res = {};
+  leerTabla_('locales').filter(function (l) { return l.activo === true; }).forEach(function (l) {
+    var lid = String(l.id), m = {};
+    recetas.forEach(function (r) {
+      var base = porId[String(r.insumo_id)];
+      if (!base) return;
+      var ins = String(base.local_id) === lid ? base : porLocalNombre[lid + '|' + claveComparar_(base.nombre)];
+      if (!ins || ins.activo !== true) return; // sin ese insumo en el local: no se controla
+      if (numero_(ins.stock) < numero_(r.cantidad)) m[String(r.plato_id)] = true;
+    });
+    if (Object.keys(m).length) res[lid] = m;
+  });
+  return res;
+}
+
+/* Foto de entrega (privada): dueño y cajero de su local; el motorizado solo las suyas. */
+function accionFotoEntregaVer_(data, ctx) {
+  var s = ctx.sesion, p;
+  if (s.rol === 'motorizado') {
+    var yo = miMotorizado_(ctx);
+    p = leerTabla_('pedidos').filter(function (x) { return String(x.id) === String(data.id); })[0];
+    if (!p || String(p.motorizado_id) !== String(yo.id)) throw fallo_('Solo puede ver las fotos de sus entregas.', 'PERMISO');
+  } else {
+    p = buscarPedido_(data.id, ctx);
+  }
+  var u = String(p.foto_entrega || '');
+  var fid = (/\/d\/([-\w]{20,})/.exec(u) || /[?&]id=([-\w]{20,})/.exec(u) || [])[1];
+  if (!fid) throw fallo_('Este pedido no tiene foto de entrega.', 'NO_EXISTE');
+  var blob;
+  try { blob = DriveApp.getFileById(fid).getBlob(); }
+  catch (e) { throw fallo_('No se pudo abrir la foto. Intente más tarde.', 'FOTO'); }
+  return { ok: true, data: { numero: String(p.numero), entregado: iso_(p.entregado), imagen: 'data:' + blob.getContentType() + ';base64,' + Utilities.base64Encode(blob.getBytes()) } };
 }
