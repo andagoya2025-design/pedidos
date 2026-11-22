@@ -26,8 +26,10 @@
     if (!iso) return '';
     var d = new Date(iso);
     if (isNaN(d.getTime())) return '';
-    try { return new Intl.DateTimeFormat('es-EC', { timeZone: UI.zona, hour: '2-digit', minute: '2-digit', hour12: false }).format(d); } catch (e) { return d.toTimeString().slice(0, 5); }
+    try { return new Intl.DateTimeFormat('es-EC', { timeZone: UI.zona, hour: '2-digit', minute: '2-digit', hour12: UI.hora12() }).format(d); } catch (e) { return d.toTimeString().slice(0, 5); }
   };
+  /* 3.1: horas en 12 h (a. m./p. m.) si el dueño lo eligió en los ajustes. */
+  UI.hora12 = function () { var p = (global.APP && global.APP.publico) || global.__cfgPublica || {}; return String(p.formato_hora) === '12'; };
 
   UI.minutosDesde = function (iso, ahoraIso) {
     var a = new Date(iso).getTime(), b = ahoraIso ? new Date(ahoraIso).getTime() : Date.now();
@@ -160,6 +162,24 @@
     return '<div class="vista-cabeza"><div style="flex:1;min-width:0"><h1 class="titulo">' + UI.esc(titulo) + '</h1>' +
       (subtitulo ? '<p class="subtitulo">' + UI.esc(subtitulo) + '</p>' : '') + '</div>' +
       (extra || '') + '<button class="btn secundario chico" type="button" data-actualizar>↻ Actualizar</button></div>';
+  };
+
+  /* 3.1: archivo para Excel en español («;» y coma decimal). Textos que empiezan con = + - @ nunca se vuelven fórmula. */
+  UI.descargarCSV = function (filas, nombre) {
+    var csv = filas.map(function (f) {
+      return f.map(function (v) {
+        if (typeof v === 'number') return String(Math.round(v * 100) / 100).replace('.', ',');
+        var t = String(v == null ? '' : v);
+        if (/^[=+\-@]/.test(t)) t = "'" + t;
+        return /[";\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t;
+      }).join(';');
+    }).join('\r\n');
+    var blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = nombre + '.csv';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 4000);
+    UI.aviso('Archivo listo.', 'ok');
   };
 
   /* Pide un texto en ventana premium (motivo, monto…). Devuelve el texto o null. */

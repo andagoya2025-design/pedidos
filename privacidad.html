@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#1F1B16">
+  <title>Aviso de privacidad</title>
+  <link rel="icon" href="iconos/icono-192.png" type="image/png">
+  <link rel="stylesheet" href="css/app.css">
+  <link rel="stylesheet" href="css/modulos.css">
+</head>
+<body>
+  <main class="privacidad">
+    <a class="btn secundario chico" href="pedir.html">← Volver al pedido</a>
+    <h1>🔒 Aviso de privacidad</h1>
+    <p class="subtitulo" id="pv-negocio">Cargando…</p>
+    <div id="pv-propio" hidden class="tarjeta"></div>
+    <section class="tarjeta">
+      <h2>¿Qué datos pedimos?</h2>
+      <p>Solo lo necesario para tu pedido: <b>nombre, celular, dirección y referencia</b>, y tu <b>ubicación</b> solo si tú la compartes. No pedimos cédula ni datos de tarjetas.</p>
+      <h2>¿Para qué?</h2>
+      <p>Para preparar, cobrar y entregar tu pedido, avisarte cómo va y, si tienes tarjeta de sellos, darte tu premio. Las promociones por WhatsApp solo si marcaste esa casilla; puedes pedir que dejemos de enviarlas cuando quieras.</p>
+      <h2>¿Quién los ve?</h2>
+      <p>Solo el personal del local y el motorizado que te lleva el pedido (él ve tu nombre, dirección y celular mientras dura la entrega). No vendemos ni compartimos tus datos con otras empresas.</p>
+      <h2>¿Cuánto tiempo?</h2>
+      <p>Tus datos de contacto se guardan mientras seas cliente. El recorrido GPS del motorizado se borra solo a los 30 días. Los valores de las ventas se guardan por obligación contable, sin tus datos personales si pides que te borremos.</p>
+      <h2>Tus derechos</h2>
+      <p>Según la Ley Orgánica de Protección de Datos Personales del Ecuador puedes pedir ver, corregir o <b>eliminar</b> tus datos, y oponerte a recibir promociones. Escríbenos por WhatsApp y lo hacemos sin costo.</p>
+      <p id="pv-contacto"></p>
+    </section>
+  </main>
+  <script src="js/config.js"></script>
+  <script>
+    (function () {
+      'use strict';
+      function poner(id, txt) { var e = document.getElementById(id); if (e) e.textContent = txt; }
+      var cfg = window.APP_CONFIG || {};
+      if (!cfg.url) { poner('pv-negocio', 'Responsable: el restaurante donde hiciste tu pedido.'); return; }
+      fetch(cfg.url, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ accion: 'privacidadPublica', data: {} }), redirect: 'follow', cache: 'no-store' })
+        .then(function (r) { return r.json(); })
+        .then(function (r) {
+          var d = (r && r.data) || {};
+          poner('pv-negocio', 'Responsable de tus datos: ' + (d.negocio || 'el restaurante') + (d.ciudad ? ' · ' + d.ciudad : ''));
+          if (d.texto) { var p = document.getElementById('pv-propio'); p.textContent = d.texto; p.hidden = false; p.style.whiteSpace = 'pre-line'; }
+          var tel = String(d.whatsapp || '').replace(/\D/g, '');
+          if (tel) {
+            var c = document.getElementById('pv-contacto'), a = document.createElement('a');
+            a.className = 'btn'; a.target = '_blank'; a.rel = 'noopener';
+            a.href = 'https://wa.me/' + tel + '?text=' + encodeURIComponent('Hola, quiero ejercer mis derechos sobre mis datos personales (ver / corregir / eliminar).');
+            a.textContent = '💬 Escribir por WhatsApp';
+            c.appendChild(a);
+          }
+        })
+        .catch(function () { poner('pv-negocio', 'Responsable de tus datos: el restaurante donde hiciste tu pedido.'); });
+    })();
+  </script>
+</body>
+</html>

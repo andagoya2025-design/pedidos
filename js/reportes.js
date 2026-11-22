@@ -71,7 +71,8 @@
       var r = await DATOS.pedir('exportar', { desde: UI.$('#rp-desde').value, hasta: UI.$('#rp-hasta').value, local_id: APP.local });
       var csv = r.filas.map(function (f) {
         return f.map(function (v) {
-          var t = typeof v === 'number' ? v.toFixed(2).replace('.', ',') : String(v == null ? '' : v);
+          if (typeof v === 'number') return v.toFixed(2).replace('.', ','); // 3.1: negativos sin apóstrofo
+          var t = String(v == null ? '' : v);
           if (/^[=+\-@]/.test(t)) t = "'" + t; // nunca fórmula
           return /[";\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t;
         }).join(';');
@@ -133,7 +134,7 @@
       }).join('') + '</div><div class="eje-hora">' + r.horas.map(function (h) { return '<span>' + (h.hora % 3 === 0 ? h.hora : '') + '</span>'; }).join('') + '</div></div>' +
       '<div class="tarjeta"><h3 style="margin-top:0">Días de la semana</h3>' + barras(r.dias, function (x) { return x.dia; }, function (x) { return x.pedidos; }, function (x) { return x.pedidos + ' · ' + UI.dinero(x.total); }) + '</div>' +
       '</div>' +
-      '<div class="tarjeta" style="margin-top:14px"><h3 style="margin-top:0">Rendimiento por motorizado</h3>' + (r.motorizados.length ?
+      '<div class="tarjeta" style="margin-top:14px"><h3 style="margin-top:0">Rendimiento por motorizado <button class="btn borde chico" type="button" onclick="APP.ir(\'informeMotos\')">🏍️ Informe completo</button></h3>' + (r.motorizados.length ?
         '<table class="tabla"><thead><tr><th>Motorizado</th><th class="n">Entregas</th><th class="n">Efectivo</th><th class="n">Min. promedio</th><th class="n">Diferencia</th></tr></thead><tbody>' +
         r.motorizados.map(function (m) { return '<tr><td data-r="Motorizado"><b>' + UI.esc(m.nombre) + '</b></td><td class="n" data-r="Entregas">' + m.entregas + '</td><td class="n" data-r="Efectivo">' + UI.esc(UI.dinero(m.efectivo)) + '</td><td class="n" data-r="Min. promedio">' + (m.minutos === null ? '—' : m.minutos) + '</td><td class="n" data-r="Diferencia">' + signo(m.diferencia) + '</td></tr>'; }).join('') +
         '</tbody></table>' : '<p class="subtitulo">Sin entregas a domicilio en estas fechas.</p>') + '</div>') +

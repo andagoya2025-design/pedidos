@@ -339,3 +339,87 @@ button.enlace { border: 0; background: none; color: var(--acento); font: inherit
 .enlace-item { flex-wrap: wrap; }
 .enlace-item .item-cuerpo { flex: 1 1 calc(100% - 60px); }
 .enlace-item > .btn { flex: 1 1 120px; }
+
+/* ============================================================
+ * 3.1 — motorizado para el cliente, código de entrega, privacidad,
+ * monitoreo, informe de motorizados, ilustraciones y enlace.
+ * ============================================================ */
+.pedir-portada { background-image: url("../img/platos/portada.svg"), linear-gradient(140deg, var(--primario), color-mix(in srgb, var(--primario) 65%, var(--acento))); background-size: auto 100%, cover; background-position: right center, center; background-repeat: no-repeat; }
+img.ilustracion { width: 100%; height: 100%; object-fit: cover; }
+.item-boton { width: 100%; text-align: left; font: inherit; color: inherit; cursor: pointer; border: 1px solid var(--borde); background: var(--superficie); }
+.item-boton:hover { border-color: var(--primario); }
+.casilla { display: flex; gap: 10px; align-items: flex-start; padding: 8px 0; font-size: 14px; line-height: 1.4; cursor: pointer; }
+.casilla input { width: 22px; height: 22px; flex: none; margin: 0; accent-color: var(--acento); }
+.casilla a { color: var(--acento); font-weight: 800; text-decoration: underline; }
+.casilla.falta { color: var(--error); animation: sacudir .35s; }
+@keyframes sacudir { 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
+
+/* Tarjeta del motorizado en el seguimiento del cliente */
+.tarjeta-moto { display: flex; gap: 12px; align-items: center; margin-top: 12px; padding: 12px; border-radius: var(--radio); background: var(--superficie-2); }
+.tarjeta-moto small { display: block; color: var(--texto-2); font-size: 12px; }
+.tarjeta-moto b { display: block; font-size: 17px; }
+.moto-foto { width: 58px; height: 58px; flex: none; border-radius: 50%; overflow: hidden; display: grid; place-items: center; font-size: 28px; background: var(--acento-suave); position: relative; }
+.moto-foto img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.moto-datos { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 2px; font-size: 13px; }
+.placa { font-family: ui-monospace, Menlo, monospace; font-weight: 800; letter-spacing: .08em; padding: 2px 8px; border-radius: 6px; background: #fff; color: #111; border: 2px solid #111; }
+.codigo-entrega { margin-top: 12px; padding: 14px; border-radius: var(--radio); text-align: center; background: color-mix(in srgb, var(--acento) 10%, var(--superficie)); border: 2px dashed var(--acento); }
+.codigo-entrega span, .codigo-entrega small { display: block; font-size: 13px; color: var(--texto-2); }
+.codigo-entrega b { display: block; font-size: 40px; letter-spacing: .3em; margin: 4px 0; padding-left: .3em; font-variant-numeric: tabular-nums; }
+
+/* Turno y rastreo del motorizado */
+.tarjeta.turno { display: flex; gap: 12px; align-items: center; margin-bottom: 12px; border-left: 5px solid var(--borde); }
+.tarjeta.turno.abierto { border-left-color: var(--exito); }
+.pasos-lista { padding-left: 20px; line-height: 1.6; }
+
+/* Resumen corto (monitoreo e informe) */
+.resumen-mini { display: grid; grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); gap: 10px; margin-bottom: 12px; }
+.resumen-mini > div { background: var(--superficie); border: 1px solid var(--borde); border-radius: var(--radio); padding: 12px; text-align: center; }
+.resumen-mini b { display: block; font-size: 22px; }
+.resumen-mini span { font-size: 12px; color: var(--texto-2); }
+.resumen-mini .mal b, .mal { color: var(--error); }
+
+/* Mapa liviano de puntos y ruta */
+.mapa-puntos { position: relative; overflow: hidden; border-radius: var(--radio); background: var(--superficie-2); display: flex; justify-content: center; border: 1px solid var(--borde); }
+.mapa-lienzo { position: relative; flex: none; }
+.mapa-lienzo img { position: absolute; width: 256px; height: 256px; max-width: none; }
+.mapa-lienzo svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.mapa-credito { position: absolute; right: 4px; bottom: 2px; font-size: 10px; background: rgba(255,255,255,.8); color: #333; padding: 0 4px; border-radius: 4px; }
+.mapa-vacio { padding: 20px; text-align: center; color: var(--texto-2); background: var(--superficie-2); border-radius: var(--radio); }
+
+/* Monitoreo */
+.tarjeta.monitor { display: block; }
+.tarjeta.monitor.con-alerta { border-color: var(--error); box-shadow: 0 0 0 2px color-mix(in srgb, var(--error) 25%, transparent); }
+.monitor-cabeza { display: flex; gap: 10px; align-items: center; }
+.monitor-cabeza .avatar { position: relative; overflow: hidden; }
+.monitor-cabeza .avatar img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.alertas { display: grid; gap: 6px; margin: 10px 0; }
+.alerta { padding: 8px 10px; border-radius: var(--radio-chico); font-weight: 700; font-size: 14px; background: color-mix(in srgb, var(--aviso) 18%, transparent); }
+.alerta.senal, .alerta.detenido { background: color-mix(in srgb, var(--error) 15%, transparent); color: var(--error); }
+.monitor-pedido { padding: 8px 0; border-top: 1px solid var(--borde); margin-top: 8px; display: grid; gap: 6px; justify-items: start; }
+.monitor-linea { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
+.monitor-datos { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 8px 0 4px; font-size: 14px; }
+.guia-gps summary { font-weight: 800; cursor: pointer; }
+
+/* Informe de motorizados */
+.tarjeta.ranking { display: flex; gap: 12px; align-items: center; padding: 12px 14px; }
+.ranking-pos { width: 34px; height: 34px; flex: none; border-radius: 50%; display: grid; place-items: center; font-weight: 800; background: var(--superficie-2); }
+.ranking .ranking-pos { background: var(--acento-suave); }
+.ranking-datos { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 13px; color: var(--texto-2); margin-top: 4px; }
+.ranking-datos b { color: var(--texto); }
+.sube { color: var(--exito); } .baja { color: var(--error); }
+.datos-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-bottom: 12px; text-align: left; }
+.datos-grid > div { background: var(--superficie-2); border-radius: var(--radio-chico); padding: 8px 10px; min-width: 0; }
+.datos-grid span { display: block; font-size: 12px; color: var(--texto-2); }
+.datos-grid b { font-size: 15px; overflow-wrap: anywhere; }
+
+/* Enlace para clientes en Inicio */
+.btn-enlace-clientes { display: flex; gap: 14px; align-items: center; justify-content: flex-start; text-align: left; padding: 16px 18px; margin-top: 14px; min-height: 72px; }
+.btn-enlace-clientes > span:first-child { font-size: 30px; }
+.btn-enlace-clientes b { display: block; font-size: 17px; }
+.btn-enlace-clientes small { display: block; font-weight: 600; opacity: .9; }
+
+/* Aviso de privacidad */
+.privacidad { max-width: 760px; margin: 0 auto; padding: calc(16px + var(--arriba)) 18px 40px; }
+.privacidad h1 { margin: 14px 0 4px; }
+.privacidad h2 { font-size: 17px; margin: 16px 0 4px; }
+.privacidad .tarjeta { margin-top: 14px; display: block; }

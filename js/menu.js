@@ -378,20 +378,30 @@
     var lista = r.clientes || [];
     var filtro = 'todos';
     function pintar() {
-      var f = lista.filter(function (c) { return filtro === 'todos' || (filtro === 'vip' && c.vip) || (filtro === 'inactivos' && c.inactivo); });
+      var f = lista.filter(function (c) { return !c.anonimizado && (filtro === 'todos' || (filtro === 'vip' && c.vip) || (filtro === 'inactivos' && c.inactivo) || (filtro === 'promos' && c.acepta_promos)); });
       UI.$('#cl-lista').innerHTML = f.length ? '<div class="lista">' + f.map(function (c) {
         return '<div class="item"><div class="avatar">' + UI.esc(UI.iniciales(c.nombre)) + '</div><div class="item-cuerpo"><div class="item-titulo">' + UI.esc(c.nombre) +
-          (c.vip ? ' <span class="etiqueta ok">VIP</span>' : '') + (c.inactivo ? ' <span class="etiqueta aviso">+30 días</span>' : '') + '</div>' +
+          (c.vip ? ' <span class="etiqueta ok">VIP</span>' : '') + (c.inactivo ? ' <span class="etiqueta aviso">+30 días</span>' : '') + (c.acepta_promos ? ' <span class="etiqueta">📣 Acepta promos</span>' : '') + '</div>' +
           '<div class="item-sub">' + UI.esc(c.telefono) + ' · ' + c.pedidos + ' pedido(s) · ' + UI.dinero(c.total_gastado) + '</div>' +
           '<div class="item-sub">Último: ' + UI.esc(UI.fechaHora(c.ultimo_pedido)) + '</div></div>' +
-          '<button class="btn secundario chico" type="button" data-wa="' + UI.esc(c.telefono) + '" data-nombre="' + UI.esc(c.nombre) + '">💬</button></div>';
+          (c.anonimizado ? '' : '<button class="btn secundario chico" type="button" data-wa="' + UI.esc(c.telefono) + '" data-nombre="' + UI.esc(c.nombre) + '" aria-label="WhatsApp">💬</button>' +
+            '<button class="btn borde chico" type="button" data-borrar="' + UI.esc(c.id) + '" data-nombre="' + UI.esc(c.nombre) + '" aria-label="Borrar datos" title="Borrar sus datos personales">🗑</button>') + '</div>';
       }).join('') + '</div>' : UI.vacio('👥', 'No hay clientes en este grupo.');
+      UI.$$('[data-borrar]', UI.$('#cl-lista')).forEach(function (b) {
+        b.addEventListener('click', async function () {
+          var ok = await UI.confirmar('¿Borrar los datos de ' + b.getAttribute('data-nombre') + '?', 'Se borran su nombre, celular, dirección y ubicación de todos sus pedidos (lo pide la ley si el cliente lo solicita). Las ventas y totales se conservan para la contabilidad. No se puede deshacer.', 'Sí, borrar sus datos', true);
+          if (!ok) return;
+          try { await DATOS.pedir('clienteAnonimizar', { id: b.getAttribute('data-borrar') }, { guardar: true }); UI.aviso('Datos del cliente borrados.', 'ok'); pintarClientes(); }
+          catch (err) { UI.error('No se pudo', err.message); }
+        });
+      });
       UI.$$('[data-wa]', UI.$('#cl-lista')).forEach(function (b) {
         b.addEventListener('click', function () { UI.abrirWhatsApp(b.getAttribute('data-wa'), 'Hola ' + b.getAttribute('data-nombre').split(' ')[0] + ', '); });
       });
     }
     cuerpo().innerHTML = '<p class="subtitulo">' + r.total + ' cliente(s), guardados por su celular (no se repiten).</p>' +
-      '<div class="filtros"><button class="pestana" type="button" data-f="todos" aria-selected="true">Todos</button><button class="pestana" type="button" data-f="vip" aria-selected="false">⭐ VIP</button><button class="pestana" type="button" data-f="inactivos" aria-selected="false">💤 No vuelven hace 30 días</button></div><div id="cl-lista"></div>';
+      '<div class="filtros"><button class="pestana" type="button" data-f="todos" aria-selected="true">Todos</button><button class="pestana" type="button" data-f="vip" aria-selected="false">⭐ VIP</button><button class="pestana" type="button" data-f="inactivos" aria-selected="false">💤 No vuelven hace 30 días</button><button class="pestana" type="button" data-f="promos" aria-selected="false">📣 Aceptan promos</button></div><div id="cl-lista"></div>' +
+      '<p class="ayuda">Envíe promociones solo a quienes las aceptaron (ley de protección de datos). Si un cliente pide que borren sus datos, toque 🗑.</p>';
     UI.$$('[data-f]', cuerpo()).forEach(function (b) {
       b.addEventListener('click', function () {
         filtro = b.getAttribute('data-f');
@@ -454,8 +464,22 @@
       '<div class="campo"><label for="aj-premio">Descuento del premio (%)</label><input class="entrada" id="aj-premio" name="fidelidad_descuento" inputmode="numeric" value="' + UI.esc(c.fidelidad_descuento || '50') + '"><span class="ayuda">Sobre el plato más caro del pedido.</span></div></div>' +
       '<h4>📲 Avisos</h4>' +
       '<div class="campo"><label for="aj-wa">WhatsApp del dueño (resumen del cierre de caja)</label><input class="entrada" id="aj-wa" name="whatsapp_dueno" inputmode="tel" value="' + UI.esc(c.whatsapp_dueno) + '" placeholder="0991234567"></div>' +
+      /* 3.1 */
+      '<h4>🛵 Motorizados y entrega</h4>' +
+      '<label class="interruptor"><input type="checkbox" id="aj-codigo"' + (c.codigo_entrega !== 'NO' ? ' checked' : '') + '> Código de 4 números al entregar (el cliente lo ve en «Ver cómo va»)</label>' +
+      '<label class="interruptor"><input type="checkbox" id="aj-turno"' + (c.exigir_turno === 'SI' ? ' checked' : '') + '> Solo asignar pedidos a motorizados con turno empezado</label>' +
+      '<div class="fila-campos"><div class="campo"><label for="aj-det">Alerta «detenido» (min)</label><input class="entrada" id="aj-det" name="minutos_alerta_detenido" inputmode="numeric" value="' + UI.esc(c.minutos_alerta_detenido || '10') + '"></div>' +
+      '<div class="campo"><label for="aj-sen">Alerta «sin señal» (min)</label><input class="entrada" id="aj-sen" name="minutos_alerta_senal" inputmode="numeric" value="' + UI.esc(c.minutos_alerta_senal || '5') + '"></div></div>' +
+      '<div class="fila-campos"><div class="campo"><label for="aj-meta">Meta de entregas por día</label><input class="entrada" id="aj-meta" name="meta_entregas_dia" inputmode="numeric" value="' + UI.esc(c.meta_entregas_dia || '') + '" placeholder="Ej. 15"><span class="ayuda">Vacío = sin meta.</span></div>' +
+      '<div class="campo"><label for="aj-bono">Bono por día cumplido (USD)</label><input class="entrada" id="aj-bono" name="bono_meta" inputmode="decimal" value="' + UI.esc(c.bono_meta || '') + '" placeholder="Ej. 3"></div></div>' +
+      '<h4>🕒 Formato de hora</h4>' +
+      '<div class="segmento" id="aj-hora"><button type="button" data-h="24" class="' + (c.formato_hora !== '12' ? 'activo' : '') + '">24 h (18:30)</button><button type="button" data-h="12" class="' + (c.formato_hora === '12' ? 'activo' : '') + '">12 h (6:30 p. m.)</button></div>' +
+      '<h4>🔒 Privacidad (ley de protección de datos)</h4>' +
+      '<div class="campo"><label for="aj-priv">Texto propio del aviso (opcional)</label><textarea class="entrada" id="aj-priv" name="privacidad_texto" maxlength="1500" placeholder="Ej. Responsable: Pollos Don Diego, RUC…, dirección…">' + UI.esc(c.privacidad_texto || '') + '</textarea>' +
+      '<span class="ayuda">Se muestra arriba del aviso estándar. <a href="privacidad.html" target="_blank" rel="noopener">Ver aviso</a>. Recorridos GPS y fotos de entrega se borran solos a los ' + UI.esc(c.dias_guardar_rastreo || '30') + ' días.</span></div>' +
       '<button class="btn bloque" type="submit">Guardar ajustes</button></form>';
     var nombre = c.negocio_nombre;
+    UI.$$('[data-h]', cuerpo()).forEach(function (b) { b.addEventListener('click', function () { UI.$$('[data-h]', cuerpo()).forEach(function (x) { x.classList.toggle('activo', x === b); }); }); });
     UI.$('#copiar-app').addEventListener('click', function () { UI.copiar(app); });
     UI.$$('[data-compartir]', cuerpo()).forEach(function (b) {
       b.addEventListener('click', function () { var e = enlaces[Number(b.getAttribute('data-compartir'))]; UI.compartirEnlace({ nombre: nombre, subtitulo: e[1] ? e[0] : '', enlace: e[2], logo: c.logo_url }); });
@@ -498,6 +522,11 @@
       d.dias_cerrado = UI.$$('[data-dia].activo', f).map(function (x) { return x.getAttribute('data-dia'); }).join(',');
       d.verificar_antes_salir = UI.$('#aj-verificar').checked ? 'SI' : 'NO';
       d.propinas = UI.$('#aj-propinas').checked ? 'SI' : 'NO';
+      d.codigo_entrega = UI.$('#aj-codigo').checked ? 'SI' : 'NO';
+      d.exigir_turno = UI.$('#aj-turno').checked ? 'SI' : 'NO';
+      d.formato_hora = (UI.$('[data-h].activo', f) || { getAttribute: function () { return '24'; } }).getAttribute('data-h');
+      d.meta_entregas_dia = d.meta_entregas_dia ? String(Math.max(0, Math.floor(UI.numero(d.meta_entregas_dia) || 0))) : '';
+      d.bono_meta = d.bono_meta ? String(Math.max(0, UI.numero(d.bono_meta) || 0)) : '';
       d.mesas = String(Math.max(0, Math.floor(UI.numero(d.mesas) || 0)));
       d.fidelidad_sellos = String(Math.max(0, Math.floor(UI.numero(d.fidelidad_sellos) || 0)));
       UI.trabajando(boton, async function () {

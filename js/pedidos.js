@@ -26,10 +26,11 @@
       UI.$('#btn-nuevo-pedido', cont).addEventListener('click', nuevoPedido);
       UI.$('#btn-buscar-pedido', cont).addEventListener('click', buscarPedido);
       UI.$('#btn-sonido', cont).addEventListener('click', function (e) {
-        var b = e.currentTarget, on = b.getAttribute('aria-pressed') !== 'true';
-        b.setAttribute('aria-pressed', String(on)); b.textContent = on ? '🔔' : '🔕';
-        global.APP_MEMORIA.guardar('sonido_pedidos', on);
-        if (on) { UI.sonar(); UI.aviso('Sonará cuando entre un pedido nuevo.', 'ok'); }
+        var b = e.currentTarget;
+        avisosVentana().then(function () {
+          var on = global.APP_MEMORIA.leer('sonido_pedidos') !== false;
+          b.setAttribute('aria-pressed', String(on)); b.textContent = on ? '🔔' : '🔕';
+        });
       });
       cargar().then(function () { var ver = (APP.parametros || {}).ver; if (ver) { APP.parametros = {}; abrirPorNumero(ver); } });
       vigilar();
@@ -146,7 +147,11 @@
     var t = {
       'Recibido': 'Hola ' + p.cliente_nombre + ', recibimos tu pedido ' + p.numero + ' en ' + neg + '. Total: ' + UI.dinero(p.total) + '. ¡Gracias!' + (UI.esDigital(p.forma_pago) && !p.pago_verificado ? ' Apenas confirmemos tu pago lo preparamos.' : ''),
       'Preparando': 'Hola ' + p.cliente_nombre + ', tu pedido ' + p.numero + ' ya se está preparando 👨‍🍳.' + (p.hora_estimada ? ' Hora estimada: ' + UI.hora(p.hora_estimada) + '.' : ''),
-      'En camino': 'Hola ' + p.cliente_nombre + ', tu pedido ' + p.numero + ' va en camino 🛵' + (p.motorizado ? ' con ' + p.motorizado.nombre : '') + '. Total a pagar: ' + UI.dinero(p.total) + (p.forma_pago === 'efectivo' ? ' en efectivo.' : '.'),
+      'En camino': 'Hola ' + p.cliente_nombre + ', tu pedido ' + p.numero + ' va en camino 🛵' +
+        (p.motorizado ? '\nTe lo lleva: ' + String(p.motorizado.nombre).split(/\s+/).slice(0, 2).join(' ') + (p.motorizado.placa ? '\nPlaca: ' + p.motorizado.placa : '') + (p.motorizado.moto ? '\nMoto: ' + p.motorizado.moto : '') : '') +
+        '\nTotal a pagar: ' + UI.dinero(p.total) + (p.forma_pago === 'efectivo' ? ' en efectivo.' : '.') +
+        (APP.publico && APP.publico.codigo_entrega !== 'NO' ? '\n🔢 Al recibir, dale al motorizado el código de 4 números que ves en «Ver cómo va».' : '') +
+        '\nSigue tu pedido: ' + UI.enlaceApp() + 'pedir.html',
       'Entregado': '¡Gracias por tu compra, ' + p.cliente_nombre + '! Esperamos que disfrutes tu pedido ' + p.numero + '. ' + neg
     };
     return t[p.estado] || '';
@@ -178,42 +183,97 @@
     if (ok) return guardar(boton, 'pedidoPagoVerificar', { id: p.id, verificado: true }, 'Pago verificado. Ya puede despacharlo.');
   }
 
-  /* ----- Pedido nuevo: consulta liviana cada 25 s (solo una marca de tiempo; no relee la hoja). ----- */
+  /* ----- 3.1: AVISO DE PEDIDO NUEVO (sonido + notificación del sistema) -----
+   * Vigila en TODA la app (no solo en el panel) para dueño y cajero, también con
+   * la pestaña en segundo plano. Consulta liviana: solo una marca de tiempo. */
   var vigia = null, ultimaMarca = 0;
   function vigilar() {
-    if (vigia) clearTimeout(vigia);
-    vigia = setTimeout(async function revisar() {
-      if (APP.vistaActual !== 'pedidos' || !UI.$('#pd-cuerpo')) { vigia = null; return; } // se salió del panel: se detiene
-      if (!document.hidden) {
-        try {
-          var r = await DATOS.pedir('pedidosNuevos', {});
-          if (ultimaMarca && r.ultimo > ultimaMarca) {
-            if (global.APP_MEMORIA.leer('sonido_pedidos') !== false) UI.sonar();
-            UI.vibrar([60, 60, 60]);
-            UI.aviso('🛎️ ¡Pedido nuevo!', 'ok');
-            await cargar();
-            avisoTitulo(true);
-          }
-          ultimaMarca = r.ultimo || ultimaMarca;
-        } catch (e) { /* sin red: se intenta en la próxima vuelta */ }
-      }
+    if (vigia) return;
+    async function revisar() {
+      vigia = null;
+      var s = APP.sesion;
+      if (!s || (s.rol !== 'dueno' && s.rol !== 'cajero')) return; // se detiene al salir
+      try {
+        var r = await DATOS.pedir('pedidosNuevos', {});
+        if (ultimaMarca && r.ultimo > ultimaMarca) avisarNuevo();
+        ultimaMarca = r.ultimo || ultimaMarca;
+      } catch (e) { /* sin red: se intenta en la próxima vuelta */ }
       vigia = setTimeout(revisar, 25000);
-    }, ultimaMarca ? 25000 : 1500);
+    }
+    vigia = setTimeout(revisar, 1500);
+  }
+  async function avisarNuevo() {
+    if (global.APP_MEMORIA.leer('sonido_pedidos') !== false) { UI.sonar(); setTimeout(UI.sonar, 900); }
+    UI.vibrar([80, 60, 80, 60, 80]);
+    UI.notificar('🛎️ ¡Pedido nuevo!', 'Toque para abrir el panel de pedidos.');
+    avisoTitulo(true);
+    if (APP.vistaActual === 'pedidos' && UI.$('#pd-cuerpo')) { await cargar(); UI.aviso('🛎️ ¡Pedido nuevo!', 'ok'); }
+    else {
+      var ir = await UI.ventana({ icono: '🛎️', titulo: '¡Pedido nuevo!', texto: 'Acaba de entrar un pedido.', botones: [{ texto: 'Luego', valor: false, clase: 'secundario' }, { texto: 'Ver pedidos', valor: true }] });
+      if (ir) APP.ir('pedidos');
+    }
   }
   function avisoTitulo(on) {
-    var t = document.title.replace(/^\(\d+\) /, '').replace(/^🛎️ /, '');
+    var t = document.title.replace(/^🛎️ /, '');
     document.title = on ? '🛎️ ' + t : t;
     if (on) document.addEventListener('visibilitychange', function q() { if (!document.hidden) { avisoTitulo(false); document.removeEventListener('visibilitychange', q); } });
   }
+  /* Ventana de avisos: probar sonido, activar notificaciones, silenciar. */
+  async function avisosVentana() {
+    UI.desbloquearSonido();
+    var on = global.APP_MEMORIA.leer('sonido_pedidos') !== false;
+    var permiso = UI.permisoNotificaciones();
+    var v = await UI.ventana({
+      icono: '🔔', titulo: 'Avisos de pedido nuevo',
+      texto: 'El panel revisa cada 25 segundos. Deje esta app abierta (puede estar en otra pestaña) y el volumen arriba.',
+      html: '<p class="ayuda">Sonido: <b>' + (on ? 'activado' : 'silenciado') + '</b> · Notificación en pantalla: <b>' +
+        (permiso === 'granted' ? 'activada' : permiso === 'denied' ? 'bloqueada (actívela en el candado 🔒 de la barra de dirección)' : permiso === 'no' ? 'este teléfono no la permite' : 'sin activar') + '</b></p>',
+      botones: [
+        { texto: '🔊 Probar sonido', valor: 'probar', clase: 'borde opcion-lista' },
+        { texto: '🖥️ Activar notificación en pantalla', valor: 'notif', clase: 'borde opcion-lista' },
+        { texto: on ? '🔕 Silenciar' : '🔔 Activar sonido', valor: 'cambiar', clase: 'borde opcion-lista' },
+        { texto: 'Listo', valor: null, clase: 'secundario' }
+      ]
+    });
+    if (v === 'probar') { global.APP_MEMORIA.guardar('sonido_pedidos', true); UI.sonar(); UI.notificar('🛎️ Prueba', 'Así se verá un pedido nuevo.'); return avisosVentana(); }
+    if (v === 'notif') { await UI.pedirNotificaciones(); return avisosVentana(); }
+    if (v === 'cambiar') { global.APP_MEMORIA.guardar('sonido_pedidos', !on); if (!on) UI.sonar(); }
+  }
+  /* Arranca al entrar a la app y en cada cambio de vista (si ya corre, no se duplica). */
+  document.addEventListener('DOMContentLoaded', function () {
+    var ir = APP.ir;
+    APP.ir = function () { var r = ir.apply(this, arguments); vigilar(); return r; };
+    setTimeout(vigilar, 3000); // si la sesión ya estaba abierta
+  });
 
   /* ----- Buscar / escanear el QR del pedido ----- */
+  /* 3.1: busca por número, nombre del cliente o celular (últimos 30 días). */
   async function buscarPedido() {
-    var n = await UI.pedirDato({ icono: '🔎', titulo: 'Buscar pedido', etiqueta: 'Número de pedido', ph: 'PED-0005 o solo 5', modo: 'text', boton: 'Buscar',
+    var n = await UI.pedirDato({ icono: '🔎', titulo: 'Buscar pedido', etiqueta: 'Número, nombre del cliente o celular', ph: 'PED-0005, Ana o 0987…', modo: 'text', boton: 'Buscar',
       texto: 'Si el cliente muestra el QR de su pedido, escanéelo con la cámara del teléfono: se abre aquí solo.',
-      validar: function (v) { return /^(ped-?)?\d{1,6}$/i.test(v.replace(/\s/g, '')) ? '' : 'Escriba el número, ej. PED-0005.'; } });
+      validar: function (v) { return v.replace(/\s/g, '').length >= 1 ? '' : 'Escriba algo para buscar.'; } });
     if (n === null) return;
-    var num = n.replace(/\s/g, '').toUpperCase().replace(/^PED-?/, '');
-    abrirPorNumero('PED-' + ('000' + num).slice(-Math.max(4, num.length)));
+    var limpio = n.replace(/\s/g, '');
+    if (/^(ped-?)?\d{1,6}$/i.test(limpio)) {
+      var num = limpio.toUpperCase().replace(/^PED-?/, '');
+      return abrirPorNumero('PED-' + ('000' + num).slice(-Math.max(4, num.length)));
+    }
+    try {
+      var r = await DATOS.pedir('pedidoBuscar', { texto: n });
+      var lista = r.pedidos || [];
+      if (!lista.length) return UI.error('Sin resultados', 'No hay pedidos de los últimos 30 días con «' + n + '».');
+      if (lista.length === 1) return abrirPorNumero(lista[0].numero);
+      var elegido = await UI.ventana({
+        icono: '🔎', titulo: lista.length + ' pedido(s) con «' + n + '»',
+        html: '<div class="lista">' + lista.map(function (p) {
+          return '<button class="item item-boton" type="button" data-num="' + UI.esc(p.numero) + '"><div class="item-cuerpo"><div class="item-titulo">' + UI.esc(p.numero) + ' · ' + UI.esc(p.cliente) + '</div>' +
+            '<div class="item-sub">' + UI.esc(UI.fechaHora(p.creado)) + ' · ' + UI.dinero(p.total) + '</div></div>' + UI.chipEstado(p.estado) + '</button>';
+        }).join('') + '</div>',
+        alAbrir: function (v, cerrar) { UI.$$('[data-num]', v).forEach(function (b) { b.addEventListener('click', function () { cerrar(b.getAttribute('data-num')); }); }); },
+        botones: [{ texto: 'Cerrar', valor: null, clase: 'secundario' }]
+      });
+      if (elegido) abrirPorNumero(elegido);
+    } catch (err) { UI.error('No se pudo buscar', err.message); }
   }
   async function abrirPorNumero(numero) {
     try {

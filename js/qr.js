@@ -111,21 +111,53 @@
     });
   };
 
-  /* Sonido corto (pedido nuevo) y vibración: sin archivos. */
+  /* Sonido de pedido nuevo (sin archivos). 3.1: los navegadores solo dejan sonar si
+   * antes hubo un toque en la página: se «desbloquea» con el primer toque. */
   var audio = null;
+  UI.desbloquearSonido = function () {
+    try {
+      audio = audio || new (global.AudioContext || global.webkitAudioContext)();
+      if (audio.state === 'suspended') audio.resume();
+      var o = audio.createOscillator(), g = audio.createGain(); g.gain.value = 0.0001; o.connect(g); g.connect(audio.destination); o.start(); o.stop(audio.currentTime + 0.01);
+    } catch (e) { /* sin audio */ }
+  };
+  ['pointerdown', 'keydown', 'touchend'].forEach(function (ev) {
+    document.addEventListener(ev, function una() { UI.desbloquearSonido(); document.removeEventListener(ev, una, true); }, true);
+  });
   UI.sonar = function () {
     try {
       audio = audio || new (global.AudioContext || global.webkitAudioContext)();
-      [0, 0.18].forEach(function (t, i) {
+      if (audio.state === 'suspended') audio.resume();
+      [0, 0.2, 0.4].forEach(function (t, i) {
         var o = audio.createOscillator(), g = audio.createGain();
-        o.type = 'sine'; o.frequency.value = i ? 1175 : 880;
+        o.type = 'triangle'; o.frequency.value = [880, 1175, 1568][i];
         g.gain.setValueAtTime(0.0001, audio.currentTime + t);
-        g.gain.exponentialRampToValueAtTime(0.35, audio.currentTime + t + 0.02);
-        g.gain.exponentialRampToValueAtTime(0.0001, audio.currentTime + t + 0.16);
+        g.gain.exponentialRampToValueAtTime(0.6, audio.currentTime + t + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, audio.currentTime + t + 0.18);
         o.connect(g); g.connect(audio.destination);
-        o.start(audio.currentTime + t); o.stop(audio.currentTime + t + 0.18);
+        o.start(audio.currentTime + t); o.stop(audio.currentTime + t + 0.2);
       });
     } catch (e) { /* sin sonido en este equipo */ }
+  };
+  /* Notificación del sistema (se ve aunque la app esté en otra pestaña o minimizada). */
+  UI.permisoNotificaciones = function () { return 'Notification' in global ? global.Notification.permission : 'no'; };
+  UI.pedirNotificaciones = async function () {
+    if (!('Notification' in global)) { UI.aviso('Este teléfono no permite notificaciones desde el navegador. En iPhone: instale la app en la pantalla de inicio.', 'error'); return 'no'; }
+    var p = await global.Notification.requestPermission();
+    UI.aviso(p === 'granted' ? 'Notificaciones activadas.' : 'No se activaron. Puede permitirlas en el candado 🔒 junto a la dirección.', p === 'granted' ? 'ok' : 'error');
+    return p;
+  };
+  UI.notificar = function (titulo, texto) {
+    try {
+      if (UI.permisoNotificaciones() !== 'granted') return;
+      var op = { body: texto, icon: 'iconos/icono-192.png', tag: 'pedido-nuevo', renotify: true, requireInteraction: true };
+      if (global.navigator.serviceWorker && global.navigator.serviceWorker.controller) {
+        global.navigator.serviceWorker.ready.then(function (r) { r.showNotification(titulo, op); });
+      } else {
+        var n = new global.Notification(titulo, op);
+        n.onclick = function () { global.focus(); if (global.APP) global.APP.ir('pedidos'); n.close(); };
+      }
+    } catch (e) { /* sin notificación */ }
   };
   UI.vibrar = function (ms) { try { if (global.navigator.vibrate) global.navigator.vibrate(ms || 20); } catch (e) {} };
 })(window);

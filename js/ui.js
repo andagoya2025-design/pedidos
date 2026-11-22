@@ -37,7 +37,7 @@
     var d = new Date(iso);
     if (isNaN(d.getTime())) return '—';
     try {
-      return new Intl.DateTimeFormat('es-EC', { timeZone: UI.zona, day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }).format(d);
+      return new Intl.DateTimeFormat('es-EC', { timeZone: UI.zona, day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: UI.hora12 ? UI.hora12() : false }).format(d);
     } catch (e) {
       return d.toLocaleString();
     }
@@ -157,7 +157,7 @@
       document.body.appendChild(velo);
       var foco = velo.querySelector('input, select, textarea') || velo.querySelector('.btn');
       if (foco) setTimeout(function () { foco.focus(); }, 30);
-      if (op.alAbrir) op.alAbrir(velo);
+      if (op.alAbrir) op.alAbrir(velo, cerrar); // 3.1: alAbrir puede cerrar con un valor
     });
   };
 

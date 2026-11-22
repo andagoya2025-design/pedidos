@@ -31,10 +31,12 @@
         ['🧾', 'Pedidos', 'Recibir, preparar y despachar', ['dueno', 'cajero'], 'pedidos'],
         ['🍔', 'Menú', 'Platos, precios, fotos y extras', ['dueno', 'cajero'], 'menu'],
         ['🛵', 'Motorizados', 'Fichas, entregas y efectivo', ['dueno'], 'motorizados'],
+        ['📡', 'Monitoreo', 'Motorizados en vivo y alertas', ['dueno', 'cajero'], 'monitoreo'],
         ['📍', 'Mis entregas', 'Tus pedidos asignados', ['motorizado'], 'entregas'],
         ['💵', 'Caja', 'Apertura, cobros y cierre', ['dueno', 'cajero'], 'caja'],
         ['📦', 'Inventario', 'Insumos, compras y mínimos', ['dueno', 'cajero'], 'inventario'],
-        ['📊', 'Reportes', 'Ventas, platos y horas pico', ['dueno'], 'reportes']
+        ['📊', 'Reportes', 'Ventas, platos y horas pico', ['dueno'], 'reportes'],
+        ['🏍️', 'Informe motorizados', 'Ranking, caja, pagos y recorridos', ['dueno'], 'informeMotos']
       ].filter(function (m) { return m[3].indexOf(s.rol) >= 0; });
 
       var lic = APP.publico.licencia || {};
@@ -43,6 +45,7 @@
         (lic.estado === 'suspendida' ? '<div class="banda error">⛔ <span>La licencia está suspendida' + (lic.vencida ? ' (venció el ' + UI.esc(lic.vence) + ')' : '') + '. No se recibirán pedidos nuevos; sus datos están a salvo.</span></div>' : '') +
         '<div class="tarjeta bienvenida"><h2>Hola, ' + UI.esc(s.nombre.split(' ')[0]) + ' 👋</h2>' +
         '<p>' + UI.esc(APP.nombreRol(s.rol)) + ' · ' + UI.esc(APP.nombreLocal(APP.local)) + '</p></div>' +
+        (s.rol !== 'motorizado' ? '<button class="btn bloque btn-enlace-clientes" type="button" id="btn-enlace-clientes"><span>📤</span><span><b>Enlace para clientes</b><small>Compártelo por WhatsApp, Instagram o QR para que pidan</small></span></button>' : '') +
         (s.rol === 'dueno' ? '<div id="guia-inicio"></div>' : '') +
         '<h3 style="margin:22px 0 10px">Módulos</h3>' +
         '<div class="rejilla r3">' + modulos.map(function (m) {
@@ -51,6 +54,11 @@
             '<div style="flex:1;min-width:0"><h3>' + UI.esc(m[1]) + '</h3><p>' + UI.esc(m[2]) + '</p></div>' +
             (lista ? '<span aria-hidden="true" style="font-size:22px;color:var(--texto-2)">›</span>' : '<span class="etiqueta">Próximamente</span>') + '</div>';
         }).join('') + '</div>';
+      var be = UI.$('#btn-enlace-clientes', cont);
+      if (be) be.addEventListener('click', function () {
+        var p = APP.publico || {};
+        UI.compartirEnlace({ nombre: p.negocio_nombre || 'Haz tu pedido', subtitulo: APP.local && APP.local !== 'TODOS' ? APP.nombreLocal(APP.local) : '', enlace: UI.enlacePedir(APP.local && APP.local !== 'TODOS' ? { local: APP.local } : {}), logo: p.logo_url });
+      });
       UI.$$('[data-ir]', cont).forEach(function (el) {
         el.addEventListener('click', function () { APP.ir(el.getAttribute('data-ir')); });
         el.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); APP.ir(el.getAttribute('data-ir')); } });

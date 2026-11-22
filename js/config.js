@@ -29,7 +29,7 @@
     url: valida(URL_SCRIPT) ? String(URL_SCRIPT).trim() : '',
     configurada: valida(URL_SCRIPT),
     versionPantalla: '3.0.0',
-    versionScriptMinima: 30000, // 3.0.0 — si el script es más viejo, no se guarda nada
+    versionScriptMinima: 30100, // 3.1.0 — si el script es más viejo, no se guarda nada
     tiempoEsperaMs: 25000
   });
 })(window);

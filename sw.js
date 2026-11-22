@@ -8,7 +8,9 @@
  * - Nunca guarda datos del negocio: los pedidos van siempre al servidor.
  * ============================================================
  */
-var VERSION = 'app-3.0.0';
+var VERSION = 'app-3.1.0';
+var FOTOS = 'fotos-1';      // 3.1: fotos de platos y mapas (sobrevive a las actualizaciones)
+var MAX_FOTOS = 150;
 
 var ARCHIVOS = [
   './',
@@ -34,6 +36,19 @@ var ARCHIVOS = [
   'js/caja.js',
   'js/inventario.js',
   'js/reportes.js',
+  'js/rastreo.js',
+  'js/monitoreo.js',
+  'js/informe_motorizados.js',
+  'privacidad.html',
+  'img/platos/pollo.svg',
+  'img/platos/bebida.svg',
+  'img/platos/postre.svg',
+  'img/platos/desayuno.svg',
+  'img/platos/hamburguesa.svg',
+  'img/platos/pizza.svg',
+  'img/platos/almuerzo.svg',
+  'img/platos/general.svg',
+  'img/platos/portada.svg',
   'iconos/icono-180.png',
   'iconos/icono-192.png',
   'iconos/icono-512.png',
@@ -70,6 +85,20 @@ self.addEventListener('fetch', function (e) {
     return;
   }
 
+  // 3.1: fotos (Drive) y cuadros del mapa: se muestra la guardada al instante y se renueva por detrás.
+  if (req.destination === 'image' && /(^|\.)(drive\.google\.com|googleusercontent\.com|tile\.openstreetmap\.org)$/.test(url.hostname)) {
+    e.respondWith(caches.open(FOTOS).then(function (c) {
+      return c.match(req).then(function (guardada) {
+        var nueva = fetch(req).then(function (resp) {
+          if (resp && (resp.ok || resp.type === 'opaque')) { c.put(req, resp.clone()).then(function () { recortar(c); }); }
+          return resp;
+        }).catch(function () { return guardada; });
+        return guardada || nueva;
+      });
+    }));
+    return;
+  }
+
   if (url.origin !== self.location.origin) return;
 
   // Pantalla de la app: primero la copia guardada (rápido); si no está, internet.
@@ -84,4 +113,19 @@ self.addEventListener('fetch', function (e) {
       });
     })
   );
+});
+
+function recortar(c) {
+  c.keys().then(function (k) { if (k.length > MAX_FOTOS) return Promise.all(k.slice(0, k.length - MAX_FOTOS).map(function (x) { return c.delete(x); })); });
+}
+
+/* 3.1: al tocar la notificación de pedido nuevo, abre (o enfoca) el panel de pedidos. */
+self.addEventListener('notificationclick', function (e) {
+  e.notification.close();
+  e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (lista) {
+    for (var i = 0; i < lista.length; i++) {
+      if (lista[i].url.indexOf('pedir.html') < 0 && 'focus' in lista[i]) { lista[i].navigate(self.registration.scope + '#pedidos'); return lista[i].focus(); }
+    }
+    return self.clients.openWindow(self.registration.scope + '#pedidos');
+  }));
 });

@@ -18,8 +18,8 @@
  * ============================================================
  */
 
-var APP_VERSION = '3.0.0';
-var APP_VERSION_NUM = 30000; // 3.0.0 -> 30000 (la pantalla compara con su mínimo)
+var APP_VERSION = '3.1.0';
+var APP_VERSION_NUM = 30100; // 3.1.0 -> 30100 (la pantalla compara con su mínimo)
 var SESION_SEGUNDOS = 21600;  // 6 h; se renueva con cada uso
 var ROLES = ['dueno', 'cajero', 'motorizado'];
 
@@ -36,12 +36,15 @@ var HOJAS = {
     /* 3.0 */ ['etiquetas', 't'], ['sugerido', 'b']],
   pedidos: [['id', 't'], ['numero', 't'], ['op_id', 't'], ['local_id', 't'], ['dia_trabajo', 'f'], ['cliente_id', 't'], ['cliente_nombre', 't'], ['telefono', 't'], ['direccion', 't'], ['referencia', 't'], ['lat', 'n'], ['lng', 'n'], ['zona_id', 't'], ['forma_pago', 't'], ['subtotal', 'm'], ['envio', 'm'], ['descuento', 'm'], ['total', 'm'], ['cupon', 't'], ['estado', 't'], ['motorizado_id', 't'], ['creado', 'd'], ['preparando', 'd'], ['en_camino', 'd'], ['entregado', 'd'], ['anulado', 'd'], ['motivo_anulacion', 't'], ['usuario', 't'],
     /* fase 2-7 (agregadas al final) */ ['hora_estimada', 'd'], ['ubicacion_enlace', 't'], ['notas', 't'], ['sali_lat', 'n'], ['sali_lng', 'n'], ['entrega_lat', 'n'], ['entrega_lng', 'n'], ['foto_entrega', 't'], ['pago_verificado', 'b'], ['liquidacion_id', 't'], ['inventario_descontado', 'b'],
-    /* 3.0 (agregadas al final) */ ['tipo_entrega', 't'], ['mesa', 't'], ['hora_llegada', 'd'], ['origen', 't'], ['propina', 'm'], ['base_iva', 'm'], ['iva', 'm'], ['ubicacion_fuente', 't'], ['cliente_nuevo', 'b'], ['calificacion', 'n'], ['comentario', 't'], ['premio', 'm'], ['disp_id', 't']],
+    /* 3.0 (agregadas al final) */ ['tipo_entrega', 't'], ['mesa', 't'], ['hora_llegada', 'd'], ['origen', 't'], ['propina', 'm'], ['base_iva', 'm'], ['iva', 'm'], ['ubicacion_fuente', 't'], ['cliente_nuevo', 'b'], ['calificacion', 'n'], ['comentario', 't'], ['premio', 'm'], ['disp_id', 't'],
+    /* 3.1 */ ['codigo_entrega', 't'], ['ultima_senal', 'd']],
   pedido_detalle: [['id', 't'], ['pedido_id', 't'], ['plato_id', 't'], ['nombre', 't'], ['precio', 'm'], ['cantidad', 'n'], ['extras', 't'], ['total_linea', 'm']],
   clientes: [['id', 't'], ['telefono', 't'], ['nombre', 't'], ['direccion', 't'], ['referencia', 't'], ['lat', 'n'], ['lng', 'n'], ['pedidos', 'n'], ['total_gastado', 'm'], ['ultimo_pedido', 'd'], ['creado', 'd'],
-    /* 3.0 */ ['entregados', 'n'], ['sellos', 'n']],
+    /* 3.0 */ ['entregados', 'n'], ['sellos', 'n'],
+    /* 3.1 */ ['acepta_promos', 'b'], ['anonimizado', 'b']],
   motorizados: [['id', 't'], ['nombre', 't'], ['cedula', 't'], ['celular', 't'], ['direccion', 't'], ['placa', 't'], ['foto_url', 't'], ['usuario_id', 't'], ['activo', 'b'], ['creado', 'd'],
-    /* fase 4 */ ['local_id', 't']],
+    /* fase 4 */ ['local_id', 't'],
+    /* 3.1 */ ['color_moto', 't'], ['modelo_moto', 't'], ['licencia_vence', 'f'], ['matricula_vence', 'f'], ['forma_pago', 't'], ['tarifa', 'm']],
   insumos: [['id', 't'], ['local_id', 't'], ['nombre', 't'], ['unidad', 't'], ['stock', 'n'], ['minimo', 'n'], ['activo', 'b'], ['creado', 'd']],
   movimientos_inventario: [['id', 't'], ['fecha', 'd'], ['local_id', 't'], ['insumo_id', 't'], ['tipo', 't'], ['cantidad', 'n'], ['motivo', 't'], ['local_destino', 't'], ['usuario', 't']],
   recetas_plato: [['id', 't'], ['plato_id', 't'], ['insumo_id', 't'], ['cantidad', 'n']],
@@ -51,7 +54,10 @@ var HOJAS = {
   zonas_envio: [['id', 't'], ['local_id', 't'], ['nombre', 't'], ['costo', 'm'], ['minutos', 'n'], ['activo', 'b'], ['creado', 'd']],
   caja_movimientos: [['id', 't'], ['caja_id', 't'], ['fecha', 'd'], ['tipo', 't'], ['monto', 'm'], ['forma', 't'], ['motivo', 't'], ['pedido_id', 't'], ['motorizado_id', 't'], ['usuario', 't']],
   liquidaciones_motorizado: [['id', 't'], ['caja_id', 't'], ['motorizado_id', 't'], ['fecha', 'd'], ['fondo', 'm'], ['efectivo_cobrado', 'm'], ['entregado', 'm'], ['diferencia', 'm'], ['recibido_por', 't']],
-  cupones: [['id', 't'], ['codigo', 't'], ['tipo', 't'], ['valor', 'n'], ['vence', 'f'], ['usos_max', 'n'], ['usos', 'n'], ['activo', 'b'], ['creado', 'd']]
+  cupones: [['id', 't'], ['codigo', 't'], ['tipo', 't'], ['valor', 'n'], ['vence', 'f'], ['usos_max', 'n'], ['usos', 'n'], ['activo', 'b'], ['creado', 'd']],
+  /* 3.1: hojas nuevas (el instalador y asegurarHojas_ las crean solas) */
+  turnos: [['id', 't'], ['motorizado_id', 't'], ['dia_trabajo', 'f'], ['inicio', 'd'], ['fin', 'd'], ['inicio_lat', 'n'], ['inicio_lng', 'n'], ['fin_lat', 'n'], ['fin_lng', 'n']],
+  rastreo: [['id', 't'], ['pedido_id', 't'], ['motorizado_id', 't'], ['fecha', 'd'], ['lat', 'n'], ['lng', 'n'], ['precision', 'n']]
 };
 
 /* Configuración por defecto (todo se cambia desde la pantalla). */
@@ -86,12 +92,22 @@ var CONFIG_DEFECTO = {
   propinas: 'SI',
   envio_para: 'local',       // local | motorizado (a quién le queda el envío)
   verificar_antes_salir: 'SI',
-  mesas: '0'                 // cuántas mesas con QR (0 = no se come en el local)
+  mesas: '0',                // cuántas mesas con QR (0 = no se come en el local)
+  /* 3.1 */
+  codigo_entrega: 'SI',      // el cliente dice 4 números al motorizado para marcar «Entregado»
+  exigir_turno: 'NO',        // SI = no se asigna pedido a un motorizado sin turno abierto
+  minutos_alerta_detenido: '10',
+  minutos_alerta_senal: '5',
+  dias_guardar_rastreo: '30',
+  privacidad_texto: '',      // vacío = texto por defecto (privacidad.html)
+  formato_hora: '24',        // 24 | 12
+  meta_entregas_dia: '',     // 3.1: meta diaria de entregas por motorizado (vacío = sin meta)
+  bono_meta: ''              // 3.1: bono en USD por cada día que cumple la meta
 };
 
 /* Campos de configuración que puede ver cualquiera (sin sesión). */
 var CONFIG_PUBLICA = ['negocio_nombre', 'logo_url', 'color_primario', 'color_acento', 'whatsapp', 'pais_codigo', 'ciudad', 'moneda', 'zona_horaria', 'mensaje_bienvenida',
-  /* 3.0 */ 'horario_apertura', 'horario_cierre', 'dias_cerrado', 'deuna_qr_url', 'fidelidad_sellos', 'fidelidad_descuento', 'propinas', 'mesas', 'verificar_antes_salir', 'precios_incluyen_iva'];
+  /* 3.0 */ 'horario_apertura', 'horario_cierre', 'dias_cerrado', 'deuna_qr_url', 'fidelidad_sellos', 'fidelidad_descuento', 'propinas', 'mesas', 'verificar_antes_salir', 'precios_incluyen_iva', 'codigo_entrega', 'privacidad_texto', 'formato_hora'];
 
 /* Acciones: quién puede usarlas. 'publica' = sin sesión. */
 var ACCIONES = {
@@ -153,7 +169,16 @@ var ACCIONES = {
   pedidoBuscar:       { tipo: 'sesion',  roles: ['dueno', 'cajero'], fn: accionPedidoBuscar_ },
   menuEjemplo:        { tipo: 'dueno',   fn: accionMenuEjemplo_ },
   motorizadoCrearTodo:{ tipo: 'dueno',   fn: accionMotorizadoCrearTodo_ },
-  exportar:           { tipo: 'dueno',   fn: accionExportar_ }
+  exportar:           { tipo: 'dueno',   fn: accionExportar_ },
+  /* ---- 3.1 (sección 13) ---- */
+  turnoIniciar:       { tipo: 'sesion',  roles: ['motorizado'], fn: accionTurnoIniciar_ },
+  turnoTerminar:      { tipo: 'sesion',  roles: ['motorizado'], fn: accionTurnoTerminar_ },
+  rastreoPunto:       { tipo: 'sesion',  roles: ['motorizado'], fn: accionRastreoPunto_ },
+  monitoreo:          { tipo: 'sesion',  roles: ['dueno', 'cajero'], fn: accionMonitoreo_ },
+  informeMotorizados: { tipo: 'dueno',   fn: accionInformeMotorizados_ },
+  rutaPedido:         { tipo: 'dueno',   fn: accionRutaPedido_ },
+  clienteAnonimizar:  { tipo: 'dueno',   fn: accionClienteAnonimizar_ },
+  privacidadPublica:  { tipo: 'publica', fn: accionPrivacidadPublica_ }
 };
 
 /* ============================================================
@@ -448,6 +473,12 @@ function accionConfigGuardar_(data, ctx) {
     if ((k === 'propinas' || k === 'verificar_antes_salir') && ['SI', 'NO'].indexOf(v) < 0) throw fallo_('Valor no válido.');
     if (k === 'envio_para' && ['local', 'motorizado'].indexOf(v) < 0) throw fallo_('Valor no válido.');
     if (k === 'deuna_qr_url' || k === 'logo_url') v = enlaceImagen_(v);
+    /* 3.1 */
+    if ((k === 'codigo_entrega' || k === 'exigir_turno') && ['SI', 'NO'].indexOf(v) < 0) throw fallo_('Valor no válido.');
+    if ((k === 'minutos_alerta_detenido' || k === 'minutos_alerta_senal') && !(Number(v) >= 1 && Number(v) <= 120)) throw fallo_('Minutos de alerta no válidos (1 a 120).');
+    if (k === 'dias_guardar_rastreo' && !(Number(v) >= 1 && Number(v) <= 365)) throw fallo_('Días no válidos (1 a 365).');
+    if (k === 'formato_hora' && ['12', '24'].indexOf(v) < 0) throw fallo_('Formato de hora no válido.');
+    if ((k === 'meta_entregas_dia' || k === 'bono_meta') && v !== '' && !(Number(v) >= 0 && Number(v) <= 1000)) throw fallo_('Meta o bono no válidos.');
     limpio[k] = v;
   });
 
@@ -909,6 +940,8 @@ function pedidoSalida_(r, detalle) {
     o[c[0]] = v instanceof Date ? (c[1] === 'f' ? Utilities.formatDate(v, zona_(leerConfig_()), 'yyyy-MM-dd') : v.toISOString()) : (c[1] === 'b' ? v === true : (c[1] === 'm' || c[1] === 'n') ? (v === '' ? '' : Number(v)) : String(v == null ? '' : v));
   });
   if (detalle) o.detalle = detalle;
+  o.pide_codigo = String(r.codigo_entrega || '') !== 'NO'; // 3.1
+  o.codigo_entrega = ''; // 3.1: solo lo ve el cliente (pedidoConsultar), nunca el personal
   return o;
 }
 
@@ -1006,6 +1039,9 @@ function accionPedidoCrear_(data, ctx) {
   var items = Array.isArray(data.items) ? data.items.slice(0, 60) : [];
   if (!items.length) throw fallo_('Su pedido está vacío.');
   var origen = limpiarTexto_(data.origen, 30).toLowerCase().replace(/[^a-z0-9_-]/g, '');
+  // 3.1: la pantalla nueva manda la aceptación del aviso de privacidad (la vieja no: se acepta igual).
+  if (!ses && Object.prototype.hasOwnProperty.call(data, 'acepta_privacidad') && data.acepta_privacidad !== true) throw fallo_('Para enviar tu pedido, acepta el aviso de privacidad.', 'PRIVACIDAD');
+  var aceptaPromos = data.acepta_promos === true;
   var dispId = limpiarTexto_(data.disp_id, 60).replace(/[^A-Za-z0-9_-]/g, '');
 
   // Horario: si está cerrado, solo se acepta un pedido programado para cuando abra.
@@ -1111,16 +1147,18 @@ function accionPedidoCrear_(data, ctx) {
         if (lat !== '') { cambiosCli.lat = lat; cambiosCli.lng = lng; }
       }
       if (premio) cambiosCli.sellos = Math.max(0, numero_(cFila.sellos) - nSellos);
+      if (aceptaPromos && cFila.acepta_promos !== true) cambiosCli.acepta_promos = true;
       actualizarCampos_('clientes', cFila._fila, cFila, cambiosCli);
     } else {
       clienteId = nuevoId_('CLI');
-      agregarFilas_('clientes', [[clienteId, telefono, nombre, direccion, referencia, lat, lng, 1, 0, ahora, ahora, 0, 0]]);
+      agregarFilas_('clientes', [[clienteId, telefono, nombre, direccion, referencia, lat, lng, 1, 0, ahora, ahora, 0, 0, aceptaPromos, false]]);
     }
 
     var fila = [id, numero, opId, localId, fechaDia_(diaTrabajo_(ahora, cfg), cfg), clienteId, nombre, telefono, direccion, referencia, lat, lng, zonaId, forma,
       subtotal, envio, descuento, total, codigo, 'Recibido', '', ahora, '', '', '', '', '', ses ? ses.usuario : 'cliente',
       horaEst, enlaceUbic, limpiarTexto_(data.notas, 300), '', '', '', '', '', false, '', false,
-      tipo, mesa, llegada || '', origen, propina, baseIva, iva, fuente, nuevo, '', '', premio, dispId];
+      tipo, mesa, llegada || '', origen, propina, baseIva, iva, fuente, nuevo, '', '', premio, dispId,
+      ses ? 'NO' : '', '']; // 3.1: pedido tomado por el personal (teléfono/mostrador): sin código, el cliente no tiene la pantalla
     agregarFilas_('pedidos', [fila]);
     agregarFilas_('pedido_detalle', detalleFilas.map(function (d) { return [nuevoId_('DET'), id, d.plato_id, d.nombre, d.precio, d.cantidad, d.extras, d.total_linea]; }));
     if (cuponFila) actualizarCampos_('cupones', cuponFila._fila, cuponFila, { usos: numero_(cuponFila.usos) + 1 });
@@ -1157,7 +1195,10 @@ function accionPedidoConsultar_(data) {
   var cli = leerTabla_('clientes').filter(function (c) { return String(c.id) === String(p.cliente_id); })[0];
   return { ok: true, data: { numero: String(p.numero), estado: String(p.estado), creado: iso_(p.creado), preparando: iso_(p.preparando), en_camino: iso_(p.en_camino), entregado: iso_(p.entregado), hora_estimada: iso_(p.hora_estimada), total: redondear_(p.total),
     tipo_entrega: tipoEntrega_(p), mesa: String(p.mesa || ''), calificacion: numero_(p.calificacion) || '', motivo_anulacion: String(p.estado) === 'Anulado' ? String(p.motivo_anulacion) : '',
-    sellos: cli ? numero_(cli.sellos) : 0, sellos_meta: numero_(cfgC.fidelidad_sellos) } };
+    sellos: cli ? numero_(cli.sellos) : 0, sellos_meta: numero_(cfgC.fidelidad_sellos),
+    /* 3.1: tarjeta del motorizado y código de entrega — solo mientras va en camino */
+    motorizado: String(p.estado) === 'En camino' ? tarjetaMotorizado_(p) : null,
+    codigo_entrega: String(p.estado) === 'En camino' && siNo_(cfgC.codigo_entrega) && String(p.codigo_entrega || '') !== 'NO' ? String(p.codigo_entrega || '') : '' } };
 }
 
 /* ---------- 11.3 Menú (administración) ---------- */
@@ -1204,7 +1245,7 @@ function accionCategoriaGuardar_(data, ctx) {
   return accionMenuListar_({ local_id: 'TODOS' }, ctx);
 }
 
-function accionPlatoGuardar_(data, ctx) {
+function accionPlatoGuardarBase_(data, ctx) {
   var id = limpiarTexto_(data.id, 40), nombre = limpiarTexto_(data.nombre, 80);
   var localId = limpiarTexto_(data.local_id, 40) || 'TODOS', catId = limpiarTexto_(data.categoria_id, 40);
   var precio = Number(data.precio);
@@ -1282,7 +1323,8 @@ function guardarFoto_(base64, nombreArchivo, carpeta, publica) {
 }
 
 function accionFotoSubir_(data, ctx) {
-  var url = guardarFoto_(data.foto, 'plato-' + Utilities.formatDate(new Date(), zona_(leerConfig_()), 'yyyyMMdd-HHmmss'), 'Fotos del menú', true);
+  var moto = data.tipo === 'motorizado'; // 3.1: fotos de motorizados en su propia carpeta
+  var url = guardarFoto_(data.foto, (moto ? 'motorizado-' : 'plato-') + Utilities.formatDate(new Date(), zona_(leerConfig_()), 'yyyyMMdd-HHmmss'), moto ? 'Fotos de motorizados' : 'Fotos del menú', true);
   bitacora_(ctx.sesion, 'MENU', 'SUBIR_FOTO', '', ctx.dispositivo);
   return { ok: true, data: { url: url } };
 }
@@ -1432,7 +1474,8 @@ function accionClientesListar_() {
   var hace30 = Date.now() - 30 * 24 * 3600 * 1000;
   var lista = leerTabla_('clientes').map(function (c) {
     var ult = c.ultimo_pedido instanceof Date ? c.ultimo_pedido : null;
-    return { id: String(c.id), telefono: String(c.telefono), nombre: String(c.nombre), direccion: String(c.direccion), pedidos: numero_(c.pedidos), total_gastado: redondear_(c.total_gastado), ultimo_pedido: iso_(ult), inactivo: !!ult && ult.getTime() < hace30 };
+    return { id: String(c.id), telefono: String(c.telefono), nombre: String(c.nombre), direccion: String(c.direccion), pedidos: numero_(c.pedidos), total_gastado: redondear_(c.total_gastado), ultimo_pedido: iso_(ult), inactivo: !!ult && ult.getTime() < hace30,
+      acepta_promos: c.acepta_promos === true, anonimizado: c.anonimizado === true }; // 3.1
   }).sort(function (a, b) { return b.total_gastado - a.total_gastado; });
   var corte = lista.length ? lista[Math.max(0, Math.ceil(lista.length * 0.1) - 1)].total_gastado : 0;
   lista.forEach(function (c) { c.vip = c.pedidos >= 5 || (c.total_gastado > 0 && c.total_gastado >= corte && lista.length >= 10); });
@@ -1454,7 +1497,7 @@ function accionPedidosListar_(data, ctx) {
   });
   var det = detallePorPedido_(lista.map(function (p) { return String(p.id); }));
   var motos = {};
-  leerTabla_('motorizados').forEach(function (m) { motos[String(m.id)] = { nombre: String(m.nombre), celular: String(m.celular) }; });
+  leerTabla_('motorizados').forEach(function (m) { motos[String(m.id)] = motoCorto_(m); });
   return { ok: true, data: {
     dia: dia, hoy: hoy, ahora: new Date().toISOString(), minutos_atraso: numero_(cfg.minutos_atraso) || 45,
     pedidos: lista.map(function (p) {
@@ -1486,6 +1529,7 @@ function accionPedidoEstado_(data, ctx) {
     if (a === 'Entregado' && String(p.estado) === 'Preparando' && (p.zona_id || p.motorizado_id)) throw fallo_('Este pedido es a domicilio: primero debe salir «En camino».');
     if (a === 'En camino' || (a === 'Entregado' && String(p.estado) === 'Preparando')) exigirPagoVerificado_(p);
     var cambios = { estado: a };
+    if (a === 'En camino' && !String(p.codigo_entrega || '')) cambios.codigo_entrega = nuevoCodigoEntrega_();
     cambios[{ 'Preparando': 'preparando', 'En camino': 'en_camino', 'Entregado': 'entregado' }[a]] = new Date();
     actualizarCampos_('pedidos', p._fila, p, cambios);
     if (a === 'Entregado') sumarEntregaCliente_(p, 1);
@@ -1496,6 +1540,7 @@ function accionPedidoEstado_(data, ctx) {
 }
 
 function accionPedidoAsignar_(data, ctx) {
+  exigirTurnoAbierto_(data.motorizado_id); // 3.1 (solo si el dueño lo activó)
   var motoId = limpiarTexto_(data.motorizado_id, 40);
   var lock = candado_();
   var p, m;
@@ -1578,7 +1623,8 @@ function accionPedidoPagoVerificar_(data, ctx) {
 /* ---------- 11.6 Motorizados y «Mis entregas» ---------- */
 
 function motorizadoSalida_(m) {
-  return { id: String(m.id), nombre: String(m.nombre), cedula: String(m.cedula), celular: String(m.celular), direccion: String(m.direccion), placa: String(m.placa), foto_url: String(m.foto_url), usuario_id: String(m.usuario_id), local_id: String(m.local_id || 'TODOS'), activo: m.activo === true };
+  return { id: String(m.id), nombre: String(m.nombre), cedula: String(m.cedula), celular: String(m.celular), direccion: String(m.direccion), placa: String(m.placa), foto_url: String(m.foto_url), usuario_id: String(m.usuario_id), local_id: String(m.local_id || 'TODOS'), activo: m.activo === true,
+    /* 3.1 */ color_moto: String(m.color_moto || ''), modelo_moto: String(m.modelo_moto || ''), licencia_vence: ymd_(m.licencia_vence), matricula_vence: ymd_(m.matricula_vence), forma_pago: String(m.forma_pago || ''), tarifa: m.tarifa === '' || m.tarifa == null ? '' : Number(m.tarifa) };
 }
 
 function accionMotorizadosListar_(data, ctx) {
@@ -1615,7 +1661,12 @@ function accionMotorizadoGuardar_(data, ctx) {
   var celular = normalizarTelefono_(data.celular, cfg.pais_codigo);
   if (!celular) throw fallo_('Escriba el celular.');
   if (placa && !/^[A-Z0-9-]{4,10}$/.test(placa)) throw fallo_('Placa no válida.');
+  var fotoAntes = '';
+  if (id) { var ma = leerTabla_('motorizados').filter(function (x) { return String(x.id) === id; })[0]; fotoAntes = ma ? String(ma.foto_url || '') : ''; }
+  if (fotoAntes && fotoAntes !== enlaceImagen_(data.foto_url)) botarFotoVieja_(fotoAntes, 'Fotos de motorizados'); // 3.1
   var cambios = { nombre: nombre, cedula: cedula, celular: celular, direccion: limpiarTexto_(data.direccion, 200), placa: placa, foto_url: enlaceImagen_(data.foto_url), usuario_id: usuarioId, activo: data.activo !== false, local_id: localId };
+  /* 3.1: datos justos de la moto y del pago (solo los que vengan) */
+  datosExtraMoto_(data, cambios);
   var lock = candado_();
   try {
     validarLocalOTodos_(localId);
@@ -1635,7 +1686,8 @@ function accionMotorizadoGuardar_(data, ctx) {
       if (!actual) throw fallo_('Ese motorizado ya no existe. Toque Actualizar.', 'NO_EXISTE');
       if (actualizarCampos_('motorizados', actual._fila, actual, cambios)) bitacora_(ctx.sesion, 'MOTORIZADOS', cambios.activo ? 'EDITAR' : 'DESACTIVAR', nombre, ctx.dispositivo);
     } else {
-      agregarFilas_('motorizados', [[nuevoId_('MOT'), nombre, cedula, celular, cambios.direccion, placa, cambios.foto_url, usuarioId, cambios.activo, new Date(), localId]]);
+      agregarFilas_('motorizados', [[nuevoId_('MOT'), nombre, cedula, celular, cambios.direccion, placa, cambios.foto_url, usuarioId, cambios.activo, new Date(), localId,
+        cambios.color_moto || '', cambios.modelo_moto || '', cambios.licencia_vence || '', cambios.matricula_vence || '', cambios.forma_pago || '', cambios.tarifa === undefined ? '' : cambios.tarifa]]);
       bitacora_(ctx.sesion, 'MOTORIZADOS', 'CREAR', nombre, ctx.dispositivo);
     }
   } finally { lock.releaseLock(); }
@@ -1685,7 +1737,9 @@ function accionMisEntregas_(data, ctx) {
   return { ok: true, data: {
     motorizado: { id: String(m.id), nombre: String(m.nombre) },
     pedidos: mios.map(function (p) { return pedidoSalida_(p, det[String(p.id)] || []); }).sort(function (a, b) { return a.creado < b.creado ? -1 : 1; }),
-    debe: { fondo: deuda.fondo, efectivo: deuda.efectivo, total: deuda.total }
+    debe: { fondo: deuda.fondo, efectivo: deuda.efectivo, total: deuda.total },
+    turno: turnoSalida_(turnoAbierto_(String(m.id))), // 3.1
+    exigir_turno: siNo_(cfg.exigir_turno), codigo_entrega: siNo_(cfg.codigo_entrega)
   } };
 }
 
@@ -1705,6 +1759,8 @@ function accionEntregaSali_(data, ctx) {
     p = pedidoDeMotorizado_(data, ctx);
     if (String(p.estado) !== 'Preparando' && String(p.estado) !== 'Recibido') throw fallo_('Este pedido está «' + p.estado + '». Toque Actualizar.', 'CAMBIO');
     exigirPagoVerificado_(p);
+    if (!String(p.codigo_entrega || '')) actualizarCampos_('pedidos', p._fila, p, { codigo_entrega: nuevoCodigoEntrega_() });
+    p = buscarPedido_(data.id, null);
     actualizarCampos_('pedidos', p._fila, p, { estado: 'En camino', en_camino: new Date(), sali_lat: coord_(data.lat, -90, 90), sali_lng: coord_(data.lng, -180, 180), preparando: p.preparando instanceof Date ? p.preparando : new Date() });
     p = buscarPedido_(data.id, null);
   } finally { lock.releaseLock(); }
@@ -1720,6 +1776,7 @@ function accionEntregaEntregado_(data, ctx) {
   try {
     p = pedidoDeMotorizado_(data, ctx);
     if (String(p.estado) !== 'En camino') throw fallo_('Primero toque «Salí». Este pedido está «' + p.estado + '».', 'CAMBIO');
+    exigirCodigoEntrega_(p, data.codigo);
     var cambios = { estado: 'Entregado', entregado: new Date(), entrega_lat: coord_(data.lat, -90, 90), entrega_lng: coord_(data.lng, -180, 180) };
     if (foto) cambios.foto_entrega = foto;
     actualizarCampos_('pedidos', p._fila, p, cambios);
@@ -2246,13 +2303,14 @@ function accionPedidosNuevos_() {
 
 /* Al escanear el QR del pedido: lo busca por número. */
 function accionPedidoBuscar_(data, ctx) {
+  if (data.texto !== undefined) return buscarPedidosTexto_(data, ctx); // 3.1: por nombre, celular o número
   var numero = limpiarTexto_(data.numero, 20).toUpperCase();
   var p = leerTabla_('pedidos').filter(function (x) { return String(x.numero) === numero; })[0];
   if (!p) throw fallo_('No existe el pedido ' + numero + '.', 'NO_EXISTE');
   if (!puedeVerLocal_(ctx, p.local_id)) throw fallo_('Ese pedido es de otro local.', 'PERMISO');
   var o = pedidoSalida_(p, detallePorPedido_([String(p.id)])[String(p.id)] || []);
   var m = leerTabla_('motorizados').filter(function (x) { return String(x.id) === o.motorizado_id; })[0];
-  o.motorizado = m ? { nombre: String(m.nombre), celular: String(m.celular) } : null;
+  o.motorizado = m ? motoCorto_(m) : null;
   return { ok: true, data: { pedido: o } };
 }
 
@@ -2396,5 +2454,378 @@ function accionExportar_(data, ctx) {
  * Google pide permiso para leer enlaces de mapas (UrlFetch). */
 function autorizarPermisos() {
   UrlFetchApp.fetch('https://www.google.com/generate_204', { muteHttpExceptions: true });
+  instalarLimpiezaDiaria(); // 3.1: borra recorridos y fotos de entrega viejos cada madrugada
   console.log('Permisos listos.');
+}
+
+/* ============================================================
+ * 13. VERSIÓN 3.1 — control del motorizado (turnos, rastreo,
+ * alertas, código de entrega), monitoreo, informe de motorizados,
+ * buscador de pedidos, privacidad (LOPDP) y limpieza a los 30 días.
+ * ============================================================ */
+
+/* ---------- 13.1 Ayudas ---------- */
+function datosExtraMoto_(data, cambios) {
+  if (data.color_moto !== undefined) cambios.color_moto = limpiarTexto_(data.color_moto, 30);
+  if (data.modelo_moto !== undefined) cambios.modelo_moto = limpiarTexto_(data.modelo_moto, 40);
+  ['licencia_vence', 'matricula_vence'].forEach(function (k) {
+    if (data[k] === undefined) return;
+    var v = String(data[k] || '');
+    if (v && !/^\d{4}-\d{2}-\d{2}$/.test(v)) throw fallo_('Fecha no válida.');
+    cambios[k] = v ? fechaDesdeTexto_(v) : '';
+  });
+  if (data.forma_pago !== undefined) {
+    var f = String(data.forma_pago || '');
+    if (['', 'entrega', 'dia', 'sueldo'].indexOf(f) < 0) throw fallo_('Forma de pago no válida.');
+    cambios.forma_pago = f;
+  }
+  if (data.tarifa !== undefined) {
+    var t = data.tarifa === '' ? '' : Number(data.tarifa);
+    if (t !== '' && !(t >= 0 && t <= 5000)) throw fallo_('Tarifa no válida.');
+    cambios.tarifa = t;
+  }
+}
+
+function nuevoCodigoEntrega_() { return ('000' + Math.floor(Math.random() * 10000)).slice(-4); }
+
+function exigirCodigoEntrega_(p, codigo) {
+  if (!siNo_(leerConfig_().codigo_entrega)) return;
+  var c = String(p.codigo_entrega || '');
+  if (c === 'NO') return; // pedido tomado por el personal
+  if (c && String(codigo || '').replace(/\D/g, '') !== c) throw fallo_('El código no coincide. Pídale al cliente los 4 números que ve en su pantalla.', 'CODIGO');
+}
+
+function turnoAbierto_(motoId) {
+  return leerTabla_('turnos').filter(function (t) { return String(t.motorizado_id) === motoId && !(t.fin instanceof Date); })[0] || null;
+}
+function turnoSalida_(t) { return t ? { id: String(t.id), inicio: iso_(t.inicio) } : null; }
+
+function exigirTurnoAbierto_(motoId) {
+  if (!siNo_(leerConfig_().exigir_turno) || !motoId) return;
+  if (!turnoAbierto_(String(motoId))) throw fallo_('Ese motorizado no ha empezado su turno. Pídale que toque «Empezar turno».', 'SIN_TURNO');
+}
+
+/* Lo que ve el cliente del motorizado: nombre, foto, placa y moto. NUNCA cédula ni su celular. */
+function tarjetaMotorizado_(p) {
+  var m = leerTabla_('motorizados').filter(function (x) { return String(x.id) === String(p.motorizado_id); })[0];
+  if (!m) return null;
+  var l = leerTabla_('locales').filter(function (x) { return String(x.id) === String(p.local_id); })[0];
+  var partes = String(m.nombre).trim().split(/\s+/);
+  return { nombre: partes[0] + (partes[1] ? ' ' + partes[1] : ''), foto_url: String(m.foto_url || ''), placa: String(m.placa || ''),
+    moto: [String(m.modelo_moto || ''), String(m.color_moto || '')].filter(String).join(' · '),
+    salio: iso_(p.en_camino), telefono_local: l ? String(l.telefono || '') : '' };
+}
+
+function distanciaM_(a, b) {
+  var R = 6371000, r = Math.PI / 180;
+  var dLat = (b.lat - a.lat) * r, dLng = (b.lng - a.lng) * r;
+  var x = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  return 2 * R * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
+}
+
+/* Solo las últimas filas de rastreo (rápido aunque la hoja crezca). */
+function rastreoReciente_(n) {
+  var sh = hoja_('rastreo'), ult = sh.getLastRow();
+  if (ult < 2) return [];
+  var desde = Math.max(2, ult - n + 1);
+  var cols = HOJAS.rastreo;
+  return sh.getRange(desde, 1, ult - desde + 1, cols.length).getValues().map(function (f) {
+    var o = {}; cols.forEach(function (c, i) { o[c[0]] = f[i]; }); return o;
+  });
+}
+
+/* ---------- 13.2 Turnos ---------- */
+function accionTurnoIniciar_(data, ctx) {
+  var m = miMotorizado_(ctx), cfg = leerConfig_();
+  var lock = candado_();
+  try {
+    if (!turnoAbierto_(String(m.id))) {
+      agregarFilas_('turnos', [[nuevoId_('TUR'), String(m.id), fechaDia_(diaTrabajo_(new Date(), cfg), cfg), new Date(), '', coord_(data.lat, -90, 90), coord_(data.lng, -180, 180), '', '']]);
+      bitacora_(ctx.sesion, 'MOTORIZADOS', 'TURNO_INICIO', String(m.nombre), ctx.dispositivo);
+    }
+  } finally { lock.releaseLock(); }
+  return accionMisEntregas_({}, ctx);
+}
+
+function accionTurnoTerminar_(data, ctx) {
+  var m = miMotorizado_(ctx);
+  var lock = candado_();
+  try {
+    var enCamino = leerTabla_('pedidos').filter(function (p) { return String(p.motorizado_id) === String(m.id) && String(p.estado) === 'En camino'; });
+    if (enCamino.length) throw fallo_('Todavía tiene pedidos en camino (' + enCamino.map(function (p) { return p.numero; }).join(', ') + '). Entréguelos primero.');
+    var t = turnoAbierto_(String(m.id));
+    if (t) {
+      actualizarCampos_('turnos', t._fila, t, { fin: new Date(), fin_lat: coord_(data.lat, -90, 90), fin_lng: coord_(data.lng, -180, 180) });
+      bitacora_(ctx.sesion, 'MOTORIZADOS', 'TURNO_FIN', String(m.nombre), ctx.dispositivo);
+    }
+  } finally { lock.releaseLock(); }
+  return accionMisEntregas_({}, ctx);
+}
+
+/* ---------- 13.3 Rastreo: SOLO con pedido «En camino» (privacidad) ---------- */
+function accionRastreoPunto_(data, ctx) {
+  var m = miMotorizado_(ctx);
+  var lat = coord_(data.lat, -90, 90), lng = coord_(data.lng, -180, 180);
+  if (lat === '' || lng === '') throw fallo_('Ubicación no válida.');
+  var cache = CacheService.getScriptCache(), k = 'RASTREO_' + m.id;
+  if (cache.get(k)) return { ok: true, data: { guardado: false } }; // máximo 1 punto cada 40 s
+  var p = leerTabla_('pedidos').filter(function (x) { return String(x.id) === limpiarTexto_(data.pedido_id, 40); })[0];
+  if (!p || String(p.motorizado_id) !== String(m.id) || String(p.estado) !== 'En camino') return { ok: true, data: { guardado: false, motivo: 'sin_pedido_en_camino' } };
+  cache.put(k, '1', 40);
+  agregarFilas_('rastreo', [[nuevoId_('RAS'), String(p.id), String(m.id), new Date(), lat, lng, Math.round(numero_(data.precision))]]);
+  actualizarCampos_('pedidos', p._fila, p, { ultima_senal: new Date() });
+  return { ok: true, data: { guardado: true } };
+}
+
+function accionRutaPedido_(data) {
+  var id = limpiarTexto_(data.pedido_id, 40);
+  var puntos = leerTabla_('rastreo').filter(function (r) { return String(r.pedido_id) === id; }).map(function (r) {
+    return { fecha: iso_(r.fecha), lat: Number(r.lat), lng: Number(r.lng) };
+  });
+  return { ok: true, data: { puntos: puntos } };
+}
+
+/* ---------- 13.4 Monitoreo (dueño y cajero) ---------- */
+function accionMonitoreo_(data, ctx) {
+  var cfg = leerConfig_(), ahora = new Date(), hoy = diaTrabajo_(ahora, cfg);
+  var local = localDeSesion_(ctx, data.local_id);
+  var minDet = numero_(cfg.minutos_alerta_detenido) || 10, minSen = numero_(cfg.minutos_alerta_senal) || 5;
+  var motos = leerTabla_('motorizados').filter(function (m) { return m.activo === true && (local === 'TODOS' || String(m.local_id) === 'TODOS' || String(m.local_id) === local); });
+  var pedidos = leerTabla_('pedidos');
+  var turnos = leerTabla_('turnos');
+  var rastreo = rastreoReciente_(3000);
+  var cajas = leerTabla_('caja').filter(function (c) { return String(c.estado) === 'abierta'; });
+  var lista = motos.map(function (m) {
+    var id = String(m.id);
+    var mios = pedidos.filter(function (p) { return String(p.motorizado_id) === id; });
+    var abiertos = mios.filter(function (p) { return ['Recibido', 'Preparando', 'En camino'].indexOf(String(p.estado)) >= 0; });
+    var hoyEnt = mios.filter(function (p) { return String(p.estado) === 'Entregado' && ymd_(p.dia_trabajo, cfg) === hoy; });
+    var mins = hoyEnt.filter(function (p) { return p.en_camino instanceof Date && p.entregado instanceof Date; }).map(function (p) { return (p.entregado - p.en_camino) / 60000; });
+    var cal = hoyEnt.filter(function (p) { return numero_(p.calificacion) > 0; }).map(function (p) { return numero_(p.calificacion); });
+    var t = turnos.filter(function (x) { return String(x.motorizado_id) === id && !(x.fin instanceof Date); })[0];
+    var puntos = rastreo.filter(function (r) { return String(r.motorizado_id) === id; });
+    var ultimo = puntos.length ? puntos[puntos.length - 1] : null;
+    // también cuentan «Salí» y «Entregado» como señal
+    mios.forEach(function (p) {
+      [['en_camino', 'sali_lat', 'sali_lng'], ['entregado', 'entrega_lat', 'entrega_lng']].forEach(function (k) {
+        if (p[k[0]] instanceof Date && p[k[1]] !== '' && (!ultimo || p[k[0]] > ultimo.fecha)) ultimo = { fecha: p[k[0]], lat: Number(p[k[1]]), lng: Number(p[k[2]]) };
+      });
+    });
+    var alertas = [];
+    abiertos.filter(function (p) { return String(p.estado) === 'En camino'; }).forEach(function (p) {
+      var senal = p.ultima_senal instanceof Date ? p.ultima_senal : p.en_camino;
+      if (p.hora_estimada instanceof Date && ahora > p.hora_estimada) alertas.push({ tipo: 'atraso', texto: p.numero + ': atrasado ' + Math.round((ahora - p.hora_estimada) / 60000) + ' min' });
+      if (senal instanceof Date && (ahora - senal) / 60000 > minSen) alertas.push({ tipo: 'senal', texto: p.numero + ': sin señal hace ' + Math.round((ahora - senal) / 60000) + ' min' });
+      var recientes = puntos.filter(function (r) { return String(r.pedido_id) === String(p.id) && r.fecha instanceof Date && (ahora - r.fecha) / 60000 <= minDet + 1; });
+      if (recientes.length >= 3 && (recientes[recientes.length - 1].fecha - recientes[0].fecha) / 60000 >= minDet - 1 &&
+        recientes.every(function (r) { return distanciaM_({ lat: Number(r.lat), lng: Number(r.lng) }, { lat: Number(recientes[0].lat), lng: Number(recientes[0].lng) }) < 60; })) {
+        alertas.push({ tipo: 'detenido', texto: p.numero + ': detenido ' + minDet + '+ min en el mismo lugar' });
+      }
+    });
+    var estado = abiertos.some(function (p) { return String(p.estado) === 'En camino'; }) ? 'en_camino' : abiertos.length ? 'asignado' : t ? 'libre' : 'fuera';
+    return {
+      id: id, nombre: String(m.nombre), placa: String(m.placa), foto_url: String(m.foto_url || ''), celular: String(m.celular),
+      estado: estado, turno_inicio: t ? iso_(t.inicio) : '',
+      pedidos: abiertos.map(function (p) { return { id: String(p.id), numero: String(p.numero), estado: String(p.estado), cliente: String(p.cliente_nombre), total: redondear_(p.total), forma_pago: String(p.forma_pago), en_camino: iso_(p.en_camino), hora_estimada: iso_(p.hora_estimada), lat: p.lat === '' ? '' : Number(p.lat), lng: p.lng === '' ? '' : Number(p.lng), ubicacion_enlace: String(p.ubicacion_enlace || '') }; }),
+      ultimo_punto: ultimo ? { fecha: iso_(ultimo.fecha), lat: Number(ultimo.lat), lng: Number(ultimo.lng) } : null,
+      debe: deudaMotorizado_(id, cajas, pedidos).total,
+      hoy: { entregas: hoyEnt.length, minutos: mins.length ? Math.round(mins.reduce(function (a, b) { return a + b; }, 0) / mins.length) : null, estrellas: cal.length ? Math.round(cal.reduce(function (a, b) { return a + b; }, 0) / cal.length * 10) / 10 : null },
+      alertas: alertas
+    };
+  });
+  var orden = { en_camino: 0, asignado: 1, libre: 2, fuera: 3 };
+  lista.sort(function (a, b) { return (b.alertas.length - a.alertas.length) || (orden[a.estado] - orden[b.estado]) || (a.nombre < b.nombre ? -1 : 1); });
+  return { ok: true, data: { motorizados: lista, ahora: iso_(ahora), alertas: lista.reduce(function (s, m) { return s + m.alertas.length; }, 0) } };
+}
+
+/* ---------- 13.5 Informe de motorizados (solo dueño) ---------- */
+function accionInformeMotorizados_(data, ctx) {
+  var cfg = leerConfig_();
+  var hasta = /^\d{4}-\d{2}-\d{2}$/.test(String(data.hasta || '')) ? String(data.hasta) : diaTrabajo_(new Date(), cfg);
+  var desde = /^\d{4}-\d{2}-\d{2}$/.test(String(data.desde || '')) ? String(data.desde) : hasta;
+  if (desde > hasta) throw fallo_('La fecha «desde» es posterior a «hasta».');
+  var dias = Math.round((Utilities.parseDate(hasta, zona_(cfg), 'yyyy-MM-dd') - Utilities.parseDate(desde, zona_(cfg), 'yyyy-MM-dd')) / 86400000) + 1;
+  var antHasta = Utilities.formatDate(new Date(Utilities.parseDate(desde, zona_(cfg), 'yyyy-MM-dd').getTime() - 86400000), zona_(cfg), 'yyyy-MM-dd');
+  var antDesde = Utilities.formatDate(new Date(Utilities.parseDate(desde, zona_(cfg), 'yyyy-MM-dd').getTime() - dias * 86400000), zona_(cfg), 'yyyy-MM-dd');
+  var local = localDeSesion_(ctx, data.local_id);
+  var motos = leerTabla_('motorizados');
+  var pedidos = leerTabla_('pedidos').filter(function (p) { return local === 'TODOS' || String(p.local_id) === local; });
+  var turnos = leerTabla_('turnos'), liqs = leerTabla_('liquidaciones_motorizado'), rastreo = leerTabla_('rastreo');
+  var zonas = {}; leerTabla_('zonas_envio').forEach(function (z) { zonas[String(z.id)] = String(z.nombre); });
+  function enRango(d, a, b) { var y = ymd_(d, cfg); return y >= a && y <= b; }
+  function calcular(m, a, b, detalle) {
+    var id = String(m.id);
+    var ent = pedidos.filter(function (p) { return String(p.motorizado_id) === id && String(p.estado) === 'Entregado' && enRango(p.dia_trabajo, a, b); });
+    var anulEnCamino = pedidos.filter(function (p) { return String(p.motorizado_id) === id && String(p.estado) === 'Anulado' && p.en_camino instanceof Date && enRango(p.dia_trabajo, a, b); }).length;
+    var mins = [], puntuales = 0, conHora = 0, cal = [], malas = 0, efectivo = 0, propinas = 0, porZona = {};
+    ent.forEach(function (p) {
+      if (p.en_camino instanceof Date && p.entregado instanceof Date) mins.push((p.entregado - p.en_camino) / 60000);
+      if (p.hora_estimada instanceof Date && p.entregado instanceof Date) { conHora++; if (p.entregado <= new Date(p.hora_estimada.getTime() + 5 * 60000)) puntuales++; }
+      if (numero_(p.calificacion) > 0) { cal.push(numero_(p.calificacion)); if (numero_(p.calificacion) <= 2) malas++; }
+      if (String(p.forma_pago) === 'efectivo') efectivo += numero_(p.total) - numero_(p.propina);
+      propinas += numero_(p.propina);
+      var z = zonas[String(p.zona_id)] || 'Sin zona'; porZona[z] = (porZona[z] || 0) + 1;
+    });
+    var horas = 0, diasTurno = {};
+    turnos.forEach(function (t) {
+      if (String(t.motorizado_id) !== id || !(t.inicio instanceof Date) || !enRango(t.dia_trabajo, a, b)) return;
+      var fin = t.fin instanceof Date ? t.fin : new Date();
+      horas += (fin - t.inicio) / 3600000; diasTurno[ymd_(t.dia_trabajo, cfg)] = true;
+    });
+    var dif = 0, entregado = 0;
+    liqs.forEach(function (l) { if (String(l.motorizado_id) === id && l.fecha instanceof Date && enRango(l.fecha, a, b)) { dif += numero_(l.diferencia); entregado += numero_(l.entregado); } });
+    var km = 0, porPedido = {};
+    if (detalle !== 'rapido') {
+      rastreo.forEach(function (r) { if (String(r.motorizado_id) === id && r.fecha instanceof Date && enRango(r.fecha, a, b)) (porPedido[String(r.pedido_id)] = porPedido[String(r.pedido_id)] || []).push({ lat: Number(r.lat), lng: Number(r.lng) }); });
+      Object.keys(porPedido).forEach(function (k) { var ps = porPedido[k]; for (var i = 1; i < ps.length; i++) km += distanciaM_(ps[i - 1], ps[i]) / 1000; });
+    }
+    var forma = String(m.forma_pago || ''), tarifa = numero_(m.tarifa);
+    var gano = forma === 'entrega' ? tarifa * ent.length : forma === 'dia' ? tarifa * Object.keys(diasTurno).length : forma === 'sueldo' ? tarifa : null;
+    var prom = function (l) { return l.length ? Math.round(l.reduce(function (x, y) { return x + y; }, 0) / l.length * 10) / 10 : null; };
+    var o = {
+      id: id, nombre: String(m.nombre), placa: String(m.placa), activo: m.activo === true,
+      entregas: ent.length, minutos: prom(mins) === null ? null : Math.round(prom(mins)), puntualidad: conHora ? Math.round(puntuales / conHora * 100) : null,
+      estrellas: prom(cal), calificaciones: cal.length, malas: malas, anulados_en_camino: anulEnCamino,
+      efectivo: redondear_(efectivo), entregado_caja: redondear_(entregado), diferencia: redondear_(dif), propinas: redondear_(propinas),
+      horas: Math.round(horas * 10) / 10, dias_trabajados: Object.keys(diasTurno).length, km: Math.round(km * 10) / 10,
+      forma_pago: forma, tarifa: tarifa, gano: gano === null ? null : redondear_(gano),
+      costo_por_entrega: gano !== null && ent.length ? redondear_(gano / ent.length) : null,
+      por_zona: Object.keys(porZona).map(function (z) { return { zona: z, entregas: porZona[z] }; }).sort(function (x, y) { return y.entregas - x.entregas; })
+    };
+    /* 3.1: meta diaria y bono (si el dueño los puso en Ajustes) */
+    var meta = numero_(cfg.meta_entregas_dia), bono = numero_(cfg.bono_meta);
+    if (meta > 0) {
+      var porDia = {};
+      ent.forEach(function (p) { var d = ymd_(p.dia_trabajo, cfg); porDia[d] = (porDia[d] || 0) + 1; });
+      o.dias_meta = Object.keys(porDia).filter(function (d) { return porDia[d] >= meta; }).length;
+      o.bono = bono > 0 ? redondear_(o.dias_meta * bono) : 0;
+    } else { o.dias_meta = null; o.bono = 0; }
+    if (detalle === 'completo') {
+      o.detalle = ent.map(function (p) {
+        return { id: String(p.id), numero: String(p.numero), dia: ymd_(p.dia_trabajo, cfg), salio: iso_(p.en_camino), entrego: iso_(p.entregado),
+          minutos: p.en_camino instanceof Date && p.entregado instanceof Date ? Math.round((p.entregado - p.en_camino) / 60000) : null,
+          a_tiempo: p.hora_estimada instanceof Date && p.entregado instanceof Date ? p.entregado <= new Date(p.hora_estimada.getTime() + 5 * 60000) : null,
+          total: redondear_(p.total), forma_pago: String(p.forma_pago), propina: numero_(p.propina), estrellas: numero_(p.calificacion) || null, comentario: String(p.comentario || ''),
+          zona: zonas[String(p.zona_id)] || '', con_ruta: !!porPedido[String(p.id)] };
+      }).sort(function (x, y) { return x.salio < y.salio ? 1 : -1; });
+    }
+    return o;
+  }
+  var soloUno = limpiarTexto_(data.motorizado_id, 40);
+  var lista = motos.filter(function (m) { return !soloUno || String(m.id) === soloUno; }).map(function (m) {
+    var o = calcular(m, desde, hasta, soloUno ? 'completo' : 'normal');
+    var ant = calcular(m, antDesde, antHasta, 'rapido');
+    o.anterior = { entregas: ant.entregas, minutos: ant.minutos, estrellas: ant.estrellas };
+    // semáforo: verde = puntual y bien calificado; rojo = diferencias de caja, malas notas o muy impuntual
+    o.semaforo = (o.diferencia < 0 || o.malas >= 2 || (o.puntualidad !== null && o.puntualidad < 60)) ? 'rojo' : ((o.puntualidad !== null && o.puntualidad < 85) || (o.estrellas !== null && o.estrellas < 4.3) || o.anulados_en_camino) ? 'amarillo' : 'verde';
+    return o;
+  }).filter(function (o) { return soloUno || o.activo || o.entregas; });
+  lista.sort(function (a, b) { return (b.entregas - a.entregas) || ((b.estrellas || 0) - (a.estrellas || 0)); });
+  bitacora_(ctx.sesion, 'REPORTES', 'INFORME_MOTORIZADOS', desde + ' a ' + hasta, ctx.dispositivo);
+  return { ok: true, data: { desde: desde, hasta: hasta, hoy: diaTrabajo_(new Date(), cfg), meta_entregas_dia: numero_(cfg.meta_entregas_dia) || null, bono_meta: numero_(cfg.bono_meta) || 0, anterior: { desde: antDesde, hasta: antHasta }, motorizados: lista } };
+}
+
+/* ---------- 13.6 Buscador de pedidos por nombre, celular o número ---------- */
+function buscarPedidosTexto_(data, ctx) {
+  var t = limpiarTexto_(data.texto, 60);
+  var clave = claveComparar_(t), digitos = t.replace(/\D/g, '');
+  var num = /^(ped-?)?\d{1,6}$/i.test(t.replace(/\s/g, '')) ? Number(digitos) : null;
+  if (num === null && t.replace(/\s/g, '').length < 2) throw fallo_('Escriba al menos 2 letras o el número del pedido.');
+  var cfg = leerConfig_();
+  var desde = Utilities.formatDate(new Date(Date.now() - 30 * 86400000), zona_(cfg), 'yyyy-MM-dd');
+  var res = leerTabla_('pedidos').filter(function (p) {
+    if (!puedeVerLocal_(ctx, p.local_id) || ymd_(p.dia_trabajo, cfg) < desde) return false;
+    if (num !== null && Number(String(p.numero).replace(/\D/g, '')) === num) return true;
+    if (digitos.length >= 4 && String(p.telefono).replace(/\D/g, '').indexOf(digitos.replace(/^0/, '')) >= 0) return true;
+    return clave.length >= 2 && claveComparar_(p.cliente_nombre).indexOf(clave) >= 0;
+  }).sort(function (a, b) { return a.creado < b.creado ? 1 : -1; }).slice(0, 25);
+  return { ok: true, data: { pedidos: res.map(function (p) { return { id: String(p.id), numero: String(p.numero), cliente: String(p.cliente_nombre), telefono: String(p.telefono), estado: String(p.estado), total: redondear_(p.total), creado: iso_(p.creado), tipo_entrega: tipoEntrega_(p), mesa: String(p.mesa || '') }; }) } };
+}
+
+/* ---------- 13.7 Privacidad (LOPDP) ---------- */
+function accionPrivacidadPublica_() {
+  var cfg = leerConfig_();
+  return { ok: true, data: { negocio: String(cfg.negocio_nombre), whatsapp: String(cfg.whatsapp || ''), ciudad: String(cfg.ciudad || ''), texto: String(cfg.privacidad_texto || '') } };
+}
+
+/* El dueño borra los datos personales de un cliente (quedan los totales para la contabilidad). */
+function accionClienteAnonimizar_(data, ctx) {
+  var id = limpiarTexto_(data.id, 40);
+  var lock = candado_(), nombre;
+  try {
+    var c = leerTabla_('clientes').filter(function (x) { return String(x.id) === id; })[0];
+    if (!c) throw fallo_('Ese cliente no existe.', 'NO_EXISTE');
+    if (c.anonimizado === true) throw fallo_('Ese cliente ya fue anonimizado.', 'DUPLICADO');
+    nombre = String(c.nombre);
+    var anon = 'ANON-' + id.slice(-6);
+    actualizarCampos_('clientes', c._fila, c, { nombre: 'Cliente anónimo', telefono: anon, direccion: '', referencia: '', lat: '', lng: '', acepta_promos: false, anonimizado: true });
+    var suyos = {};
+    leerTabla_('pedidos').filter(function (p) { return String(p.cliente_id) === id; }).forEach(function (p) {
+      suyos[String(p.id)] = true;
+      actualizarCampos_('pedidos', p._fila, p, { cliente_nombre: 'Cliente anónimo', telefono: anon, direccion: '', referencia: '', lat: '', lng: '', ubicacion_enlace: '', notas: '', comentario: '', entrega_lat: '', entrega_lng: '' });
+    });
+    // su recorrido también se borra
+    borrarFilasRastreo_(function (r) { return suyos[String(r.pedido_id)] === true; });
+  } finally { lock.releaseLock(); }
+  bitacora_(ctx.sesion, 'PRIVACIDAD', 'ANONIMIZAR_CLIENTE', id, ctx.dispositivo); // sin el nombre (ya se borró)
+  return { ok: true, data: { anonimizado: true } };
+}
+
+function borrarFilasRastreo_(condicion) {
+  var sh = hoja_('rastreo'), filas = leerTabla_('rastreo');
+  var borrar = filas.filter(condicion).map(function (r) { return r._fila; }).sort(function (a, b) { return b - a; });
+  borrar.forEach(function (f) { sh.deleteRow(f); });
+  return borrar.length;
+}
+
+/* Cada madrugada: borra recorridos y fotos de entrega de más de N días (por defecto 30). */
+function limpiarDatosViejos() {
+  if (!estaInstalado_()) return;
+  var cfg = leerConfig_(), dias = numero_(cfg.dias_guardar_rastreo) || 30;
+  var limite = new Date(Date.now() - dias * 86400000);
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) return;
+  try {
+    var n = borrarFilasRastreo_(function (r) { return r.fecha instanceof Date && r.fecha < limite; });
+    var fotos = 0;
+    leerTabla_('pedidos').forEach(function (p) {
+      if (!String(p.foto_entrega) || !(p.entregado instanceof Date) || p.entregado >= limite) return;
+      var m = /\/d\/([A-Za-z0-9_-]{20,})/.exec(String(p.foto_entrega)) || /id=([A-Za-z0-9_-]{20,})/.exec(String(p.foto_entrega));
+      try { if (m) DriveApp.getFileById(m[1]).setTrashed(true); } catch (e) { console.error('foto: ' + e); }
+      actualizarCampos_('pedidos', p._fila, p, { foto_entrega: '' });
+      fotos++;
+    });
+    bitacora_({ usuario: 'sistema', rol: '', local_id: 'TODOS' }, 'PRIVACIDAD', 'LIMPIEZA', n + ' puntos de recorrido y ' + fotos + ' fotos de entrega (más de ' + dias + ' días)', '');
+  } finally { lock.releaseLock(); }
+}
+
+function instalarLimpiezaDiaria() {
+  var ya = ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === 'limpiarDatosViejos'; });
+  if (!ya) ScriptApp.newTrigger('limpiarDatosViejos').timeBased().everyDays(1).atHour(4).create();
+}
+
+/* ---------- 13.8 Foto vieja del plato a la papelera (solo si la creó este sistema) ---------- */
+function accionPlatoGuardar_(data, ctx) {
+  var id = limpiarTexto_(data.id, 40), antes = '';
+  if (id) { var a = leerTabla_('platos').filter(function (p) { return String(p.id) === id; })[0]; antes = a ? String(a.foto_url || '') : ''; }
+  var r = accionPlatoGuardarBase_(data, ctx);
+  if (antes && antes !== enlaceImagen_(data.foto_url)) botarFotoVieja_(antes, 'Fotos del menú');
+  return r;
+}
+
+/* 3.1: manda a la papelera la foto anterior, SOLO si está en la carpeta de esta app. */
+function botarFotoVieja_(url, carpetaNombre) {
+  try {
+    var m = /[?&]id=([A-Za-z0-9_-]{20,})/.exec(String(url || ''));
+    var carpeta = PropertiesService.getScriptProperties().getProperty('CARPETA_' + carpetaNombre);
+    if (!m || !carpeta) return;
+    var f = DriveApp.getFileById(m[1]), padres = f.getParents(), nuestra = false;
+    while (padres.hasNext()) if (padres.next().getId() === carpeta) nuestra = true;
+    if (nuestra) f.setTrashed(true);
+  } catch (e) { console.error('foto vieja: ' + e); }
+}
+
+/* 3.1: lo que el personal necesita del motorizado en la lista de pedidos (sin cédula). */
+function motoCorto_(m) {
+  return { nombre: String(m.nombre), celular: String(m.celular), placa: String(m.placa || ''), moto: [String(m.modelo_moto || ''), String(m.color_moto || '')].filter(function (x) { return x; }).join(' · ') };
 }

@@ -35,6 +35,49 @@
     }
   }
 
+  /* 3.1: aviso de licencia o matrícula vencida o por vencer (30 días). */
+  function avisoVence(m) {
+    var hoy = UI.hoy(), en30 = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10), out = '';
+    [['licencia_vence', 'Licencia'], ['matricula_vence', 'Matrícula']].forEach(function (k) {
+      var v = m[k[0]];
+      if (!v) return;
+      if (v < hoy) out += '<div class="item-sub" style="color:var(--error)">⛔ ' + k[1] + ' vencida (' + UI.esc(v) + ')</div>';
+      else if (v <= en30) out += '<div class="item-sub" style="color:var(--aviso)">⚠️ ' + k[1] + ' vence el ' + UI.esc(v) + '</div>';
+    });
+    return out;
+  }
+  var PAGO_MOTO = { entrega: 'por entrega', dia: 'por día', sueldo: 'sueldo mensual' };
+  function camposExtra(m) {
+    return '<h4 style="margin:6px 0">🏍️ Moto (lo ve el cliente: modelo, color y placa)</h4>' +
+      '<div class="fila-campos"><div class="campo"><label for="mx-modelo">Marca / modelo</label><input class="entrada" id="mx-modelo" name="modelo_moto" maxlength="40" placeholder="Honda Wave" value="' + UI.esc(m.modelo_moto || '') + '"></div>' +
+      '<div class="campo"><label for="mx-color">Color</label><input class="entrada" id="mx-color" name="color_moto" maxlength="30" placeholder="Roja" value="' + UI.esc(m.color_moto || '') + '"></div></div>' +
+      '<h4 style="margin:6px 0">📄 Documentos (solo los ve el dueño)</h4>' +
+      '<div class="fila-campos"><div class="campo"><label for="mx-lic">Licencia vence</label><input class="entrada" id="mx-lic" name="licencia_vence" type="date" value="' + UI.esc(m.licencia_vence || '') + '"></div>' +
+      '<div class="campo"><label for="mx-mat">Matrícula vence</label><input class="entrada" id="mx-mat" name="matricula_vence" type="date" value="' + UI.esc(m.matricula_vence || '') + '"></div></div>' +
+      '<h4 style="margin:6px 0">💵 Pago</h4>' +
+      '<div class="fila-campos"><div class="campo"><label for="mx-pago">Se le paga</label><select class="entrada" id="mx-pago" name="forma_pago"><option value="">Sin definir</option>' +
+      Object.keys(PAGO_MOTO).map(function (k) { return '<option value="' + k + '"' + (m.forma_pago === k ? ' selected' : '') + '>' + PAGO_MOTO[k] + '</option>'; }).join('') + '</select></div>' +
+      '<div class="campo"><label for="mx-tarifa">Valor (USD)</label><input class="entrada" id="mx-tarifa" name="tarifa" inputmode="decimal" value="' + UI.esc(m.tarifa === '' || m.tarifa == null ? '' : m.tarifa) + '"></div></div>' +
+      '<div class="campo"><label for="mx-foto-archivo">📷 Foto del motorizado (la ve el cliente al recibir)</label><input class="entrada" id="mx-foto-archivo" type="file" accept="image/*" capture="user"><input type="hidden" name="foto_url" id="mx-foto" value="' + UI.esc(m.foto_url || '') + '"><span class="ayuda" id="mx-foto-estado">' + (m.foto_url ? '✅ Tiene foto.' : 'Opcional. De frente, con casco o sin él.') + '</span></div>';
+  }
+  function conectarFoto(v) {
+    UI.$('#mx-foto-archivo', v).addEventListener('change', async function (e) {
+      var archivo = e.target.files[0]; if (!archivo) return;
+      var est = UI.$('#mx-foto-estado', v);
+      try {
+        est.textContent = 'Subiendo foto…';
+        var base64 = await UI.leerFoto(archivo, 600, { cuadrado: true });
+        var r = await DATOS.pedir('fotoSubir', { foto: base64, tipo: 'motorizado' }, { guardar: true });
+        UI.$('#mx-foto', v).value = r.url;
+        est.textContent = '✅ Foto lista.';
+      } catch (err) { est.textContent = '⚠️ ' + err.message; }
+    });
+  }
+  function limpiarExtra(d) {
+    d.tarifa = d.tarifa === '' ? '' : UI.numero(d.tarifa);
+    delete d['']; return d;
+  }
+
   function pintar() {
     var c = UI.$('#mo-cuerpo');
     if (!c) return;
@@ -42,7 +85,8 @@
       var u = usuarios.filter(function (x) { return x.id === m.usuario_id; })[0];
       return '<div class="tarjeta"><div class="plato-admin"><div class="miniatura" aria-hidden="true">' + (m.foto_url ? '<img src="' + UI.esc(m.foto_url) + '" alt="" referrerpolicy="no-referrer" onerror="this.parentNode.textContent=\'🛵\'">' : '🛵') + '</div>' +
         '<div class="item-cuerpo"><div class="item-titulo">' + UI.esc(m.nombre) + ' ' + '<span class="etiqueta ' + (m.activo ? 'ok' : 'mal') + '">' + (m.activo ? 'Activo' : 'Inactivo') + '</span></div>' +
-        '<div class="item-sub">CI ' + UI.esc(m.cedula) + (m.placa ? ' · ' + UI.esc(m.placa) : '') + '</div>' +
+        '<div class="item-sub">CI ' + UI.esc(m.cedula) + (m.placa ? ' · ' + UI.esc(m.placa) : '') + (m.modelo_moto || m.color_moto ? ' · ' + UI.esc([m.modelo_moto, m.color_moto].filter(Boolean).join(' ')) : '') + '</div>' +
+        avisoVence(m) +
         '<div class="item-sub">' + UI.esc(m.celular) + ' · ' + UI.esc(m.local_id === 'TODOS' ? 'Todos los locales' : APP.nombreLocal(m.local_id)) + '</div>' +
         '<div class="item-sub">' + (u ? 'Usuario: @' + UI.esc(u.usuario) : '⚠️ Sin usuario para «Mis entregas»') + '</div>' +
         (m.ultimo_punto ? '<div class="item-sub">Último punto: ' + UI.esc(UI.fechaHora(m.ultimo_punto.fecha)) + '</div>' : '') + '</div></div>' +
@@ -86,14 +130,15 @@
         '<div class="campo"><label for="mo-placa">Placa</label><input class="entrada" id="mo-placa" name="placa" maxlength="10" autocapitalize="characters" value="' + UI.esc(m.placa) + '"></div>' +
         '<div class="campo"><label for="mo-local">Local</label><select class="entrada" id="mo-local" name="local_id"><option value="TODOS"' + (m.local_id === 'TODOS' ? ' selected' : '') + '>Todos los locales</option>' +
         APP.locales.filter(function (l) { return l.activo || l.id === m.local_id; }).map(function (l) { return '<option value="' + UI.esc(l.id) + '"' + (l.id === m.local_id ? ' selected' : '') + '>' + UI.esc(l.nombre) + '</option>'; }).join('') + '</select></div></div>' +
-        '<div class="campo"><label for="mo-dir">Dirección</label><input class="entrada" id="mo-dir" name="direccion" maxlength="200" value="' + UI.esc(m.direccion) + '"></div>' +
-        '<div class="campo"><label for="mo-foto">Foto (enlace, opcional)</label><input class="entrada" id="mo-foto" name="foto_url" value="' + UI.esc(m.foto_url) + '" placeholder="https://…"></div>' +
+        camposExtra(m) +
+        '<div class="campo"><label for="mo-dir">Dirección (opcional, solo la ve el dueño)</label><input class="entrada" id="mo-dir" name="direccion" maxlength="200" value="' + UI.esc(m.direccion) + '"><span class="ayuda">Pida solo lo necesario (ley de protección de datos).</span></div>' +
         '<div class="campo"><label for="mo-usuario">Usuario para «Mis entregas»</label><select class="entrada" id="mo-usuario" name="usuario_id"><option value="">Sin usuario</option>' +
         libres.map(function (u) { return '<option value="' + UI.esc(u.id) + '"' + (u.id === m.usuario_id ? ' selected' : '') + '>@' + UI.esc(u.usuario) + ' · ' + UI.esc(u.nombre) + '</option>'; }).join('') +
         '</select><span class="ayuda">' + (libres.length ? 'Sin esto, el motorizado ve «Su usuario aún no está unido a una ficha».' : '⚠️ No hay usuarios de rol «Motorizado» libres: créelo primero en Configuración → Usuarios.') + '</span></div>' +
         '<label class="interruptor"><input type="checkbox" name="activo"' + (m.activo ? ' checked' : '') + '> Activo</label></form>',
+      alAbrir: conectarFoto,
       botones: [{ texto: 'Cancelar', valor: false, clase: 'secundario' }, { texto: 'Guardar', valor: true, antes: function (v) {
-        enviar = UI.leerFormulario(UI.$('#form-moto', v));
+        enviar = limpiarExtra(UI.leerFormulario(UI.$('#form-moto', v)));
         var malo = !enviar.nombre ? 'Escriba el nombre.' : !enviar.cedula ? 'Escriba la cédula.' : UI.digitos(enviar.celular).length < 7 ? 'Escriba el celular.' : '';
         if (malo) { UI.aviso(malo, 'error'); return false; }
         return true;
@@ -124,6 +169,7 @@
         '<div class="campo"><label for="mn-placa">Placa</label><input class="entrada" id="mn-placa" name="placa" maxlength="10" autocapitalize="characters"></div>' +
         '<div class="campo"><label for="mn-local">Local</label><select class="entrada" id="mn-local" name="local_id">' +
         APP.locales.filter(function (l) { return l.activo; }).map(function (l) { return '<option value="' + UI.esc(l.id) + '"' + (l.id === APP.local ? ' selected' : '') + '>' + UI.esc(l.nombre) + '</option>'; }).join('') + '<option value="TODOS">Todos los locales</option></select></div></div>' +
+        camposExtra({}) +
         '<h4 style="margin:6px 0">🔑 Acceso a «Mis entregas»</h4>' +
         '<div class="fila-campos"><div class="campo"><label for="mn-usuario">Usuario</label><input class="entrada" id="mn-usuario" name="usuario" maxlength="30" autocapitalize="none" spellcheck="false"></div>' +
         '<div class="campo"><label for="mn-clave">Clave (mín. 6)</label><input class="entrada" id="mn-clave" name="clave" maxlength="40"></div></div>' +
@@ -133,9 +179,10 @@
         u.addEventListener('input', function () { tocado = true; });
         n.addEventListener('input', function () { if (!tocado) u.value = sugerirUsuario(n.value); });
         k.value = String(Math.floor(100000 + Math.random() * 900000));
+        conectarFoto(v);
       },
       botones: [{ texto: 'Cancelar', valor: false, clase: 'secundario' }, { texto: 'Crear motorizado', valor: true, antes: function (v) {
-        enviar = UI.leerFormulario(UI.$('#form-moto-nuevo', v));
+        enviar = limpiarExtra(UI.leerFormulario(UI.$('#form-moto-nuevo', v)));
         var malo = !enviar.nombre ? 'Escriba el nombre.' : !/^\d{10}$/.test(enviar.cedula.replace(/\s/g, '')) ? 'La cédula debe tener 10 dígitos.' : UI.digitos(enviar.celular).length < 7 ? 'Escriba el celular.' : !enviar.usuario ? 'Escriba el usuario.' : enviar.clave.length < 6 ? 'La clave debe tener al menos 6 caracteres.' : '';
         if (malo) { UI.aviso(malo, 'error'); return false; }
         return true;
@@ -178,7 +225,11 @@
     if (!c) return;
     var abiertos = mias.pedidos.filter(function (p) { return p.estado !== 'Entregado'; });
     var hechos = mias.pedidos.filter(function (p) { return p.estado === 'Entregado'; });
+    var enCamino = abiertos.filter(function (p) { return p.estado === 'En camino'; });
+    if (global.RASTREO) global.RASTREO.actualizar(enCamino.map(function (p) { return p.id; }));
     c.innerHTML =
+      turnoHtml() +
+      '<div class="banda" id="banda-rastreo" hidden></div>' +
       '<h3 style="margin:6px 0 10px">Por entregar (' + abiertos.length + ')</h3>' +
       (abiertos.length ? '<div class="lista">' + abiertos.map(tarjetaEntrega).join('') + '</div>' : UI.vacio('🛵', 'No tienes pedidos asignados ahora.')) +
       (hechos.length ? '<h3 style="margin:20px 0 10px">Entregados hoy (' + hechos.length + ')</h3><div class="lista">' + hechos.map(function (p) {
@@ -188,6 +239,41 @@
       '<div class="item-sub">Al terminar, entregas en caja</div><div class="monto">' + UI.dinero(mias.debe.total) + '</div>' +
       '<div class="item-sub">Fondo recibido ' + UI.dinero(mias.debe.fondo) + ' + efectivo cobrado ' + UI.dinero(mias.debe.efectivo) + ' (tus propinas son tuyas)</div></div></div>';
     UI.$$('[data-e]', c).forEach(function (b) { b.addEventListener('click', function () { accionEntrega(b, b.getAttribute('data-e'), b.getAttribute('data-id')); }); });
+    var tb = UI.$('#btn-turno', c); if (tb) tb.addEventListener('click', function () { cambiarTurno(tb); });
+    var gm = UI.$('#btn-ubic-vivo', c); if (gm) gm.addEventListener('click', guiaUbicacionVivo);
+    if (global.RASTREO) global.RASTREO.actualizar(enCamino.map(function (p) { return p.id; }));
+  }
+
+  /* 3.1: turno del motorizado (hora y lugar de inicio y fin). */
+  function turnoHtml() {
+    var t = mias.turno;
+    return '<div class="tarjeta turno ' + (t ? 'abierto' : '') + '"><div style="flex:1;min-width:0"><b>' + (t ? '🟢 Turno desde las ' + UI.esc(UI.hora(t.inicio)) : '⚪ Turno sin empezar') + '</b>' +
+      '<div class="item-sub">' + (t ? 'Al terminar tu jornada, toca «Terminar turno».' : (mias.exigir_turno ? 'Empieza tu turno para recibir pedidos.' : 'Empieza tu turno al llegar al local.')) + '</div></div>' +
+      '<button class="btn ' + (t ? 'secundario' : '') + ' chico" type="button" id="btn-turno">' + (t ? 'Terminar turno' : '▶ Empezar turno') + '</button></div>' +
+      '<button class="btn secundario chico" type="button" id="btn-ubic-vivo" style="margin:-4px 0 12px">📍 Compartir ubicación en vivo (Google Maps)</button>';
+  }
+  async function cambiarTurno(boton) {
+    var terminar = !!mias.turno;
+    if (terminar && !(await UI.confirmar('¿Terminar tu turno?', 'Se guarda la hora de salida. Entrega antes el efectivo en caja.', 'Sí, terminar'))) return;
+    UI.trabajando(boton, async function () {
+      var pos = await UI.ubicacion(8000);
+      try {
+        mias = await DATOS.pedir(terminar ? 'turnoTerminar' : 'turnoIniciar', { lat: pos ? pos.lat : '', lng: pos ? pos.lng : '' }, { guardar: true });
+        UI.aviso(terminar ? 'Turno terminado. ¡Buen descanso!' : '¡Turno iniciado! Buen trabajo 🛵', 'ok');
+        pintarMias();
+      } catch (err) { UI.error('No se guardó', err.message); }
+    });
+  }
+  function guiaUbicacionVivo() {
+    UI.ventana({
+      icono: '📍', titulo: 'Ubicación en vivo con Google Maps',
+      html: '<p>Así el local ve dónde estás aunque bloquees el teléfono. <b>Solo durante tu turno.</b></p><ol class="pasos-lista">' +
+        '<li>Abre <b>Google Maps</b>.</li><li>Toca tu foto (arriba a la derecha) → <b>Compartir ubicación</b>.</li>' +
+        '<li>Elige <b>«Hasta que desactives esta opción»</b> o el tiempo de tu turno.</li><li>Elige la cuenta del dueño del local → <b>Compartir</b>.</li>' +
+        '<li>Al terminar el turno: mismo lugar → <b>Dejar de compartir</b>.</li></ol>' +
+        '<p class="ayuda">Además, mientras llevas un pedido, esta app avisa tu ubicación cada minuto si la dejas abierta.</p>',
+      botones: [{ texto: 'Abrir Google Maps', valor: 'maps' }, { texto: 'Cerrar', valor: null, clase: 'secundario' }]
+    }).then(function (v) { if (v === 'maps') global.open('https://www.google.com/maps', '_blank', 'noopener'); });
   }
 
   function tarjetaEntrega(p) {
@@ -275,10 +361,17 @@
         botones: [{ texto: 'Cancelar', valor: false, clase: 'secundario' }, { texto: p.forma_pago === 'efectivo' ? 'Sí, cobré y entregué' : 'Sí, entregado', valor: true }]
       });
       if (!ok) return;
+      var codigo = '';
+      var pedidoE = (mias.pedidos || []).filter(function (x) { return x.id === id; })[0] || {};
+      if (mias.codigo_entrega && pedidoE.pide_codigo !== false) {
+        codigo = await UI.pedirDato({ icono: '🔢', titulo: 'Código de entrega', etiqueta: 'Los 4 números que el cliente ve en su pantalla', modo: 'numeric', max: 4, ph: '0000', boton: 'Confirmar entrega',
+          texto: 'Pídele al cliente su código (lo ve en «Ver cómo va»). Si no lo tiene, llama al local: desde el panel lo pueden marcar entregado.', validar: function (v) { return /^\d{4}$/.test(v) ? '' : 'Son 4 números.'; } });
+        if (codigo === null) return;
+      }
       return UI.trabajando(boton, async function () {
         var pos = await UI.ubicacion(8000);
         try {
-          mias = await DATOS.pedir('entregaEntregado', { id: id, lat: pos ? pos.lat : '', lng: pos ? pos.lng : '', foto: foto }, { guardar: true });
+          mias = await DATOS.pedir('entregaEntregado', { id: id, lat: pos ? pos.lat : '', lng: pos ? pos.lng : '', foto: foto, codigo: codigo }, { guardar: true });
           UI.vibrar([30, 40, 30]); UI.aviso('¡Entrega registrada! 🎉', 'ok');
           pintarMias();
         } catch (err) { UI.error('No se guardó', err.message); if (err.codigo === 'CAMBIO') cargarMias(); }
