@@ -39,13 +39,22 @@
 
   function cuerpo() { return UI.$('#pd-cuerpo'); }
 
-  async function cargar() {
+  async function cargar(silencioso) {
     var r = await Promise.allSettled([
       DATOS.pedir('pedidosListar', { local_id: APP.local, dia: est.diaEntregado || UI.hoy() }),
       DATOS.pedir('motorizadosListar', { local_id: APP.local })
     ]);
     if (!cuerpo()) return; // se cambió de pantalla mientras cargaba
-    if (r[0].status !== 'fulfilled') { cuerpo().innerHTML = '<div class="banda error">⚠️ <span>' + UI.esc(r[0].reason.message) + '</span></div>'; return; }
+    if (r[0].status !== 'fulfilled') {
+      // Si falla la consulta automática se conserva el tablero anterior.
+      if (!silencioso || !est.datos) cuerpo().innerHTML = '<div class="banda error">⚠️ <span>' + UI.esc(r[0].reason.message) + '</span></div>';
+      else if (!UI.$('#pd-sin-conexion')) {
+        var aviso = document.createElement('div'); aviso.className = 'banda aviso'; aviso.id = 'pd-sin-conexion';
+        aviso.textContent = '⚠️ Sin conexión reciente: estos estados pueden estar desactualizados.';
+        cuerpo().insertBefore(aviso, cuerpo().firstChild);
+      }
+      return;
+    }
     est.datos = r[0].value;
     est.motos = r[1].status === 'fulfilled' ? r[1].value.motorizados || [] : [];
     est.cargadoEn = Date.now();
@@ -239,7 +248,7 @@
         if (ultimaMarca && r.ultimo > ultimaMarca) avisarNuevo();
         // Fase 1: pedidos que cambia el motorizado también se reflejan en el local.
         // Al refrescar se consulta el estado real de Sheets, no el último estado local.
-        if (APP.vistaActual === 'pedidos' && est.datos && !document.hidden && Date.now() - est.cargadoEn >= 60000) await cargar();
+        if (APP.vistaActual === 'pedidos' && est.datos && !document.hidden && Date.now() - est.cargadoEn >= 60000) await cargar(true);
         else if (APP.vistaActual === 'pedidos' && est.datos) alertarRecibidos();
         ultimaMarca = r.ultimo || ultimaMarca;
       } catch (e) { /* sin red: se intenta en la próxima vuelta */ }
