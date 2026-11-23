@@ -928,7 +928,7 @@
   /* Fase 1: seguimiento sincronizado con el estado CONFIRMADO por Apps Script.
    * No se intenta enviar mensajes de WhatsApp ni modificar pedidos desde aquí.
    * Consulta cada 60 segundos solo con la pantalla visible y conexión. */
-  var relojSeguimiento = null, sincronizandoSeguimiento = false;
+  var relojSeguimiento = null, sincronizandoSeguimiento = false, secuenciaSeguimiento = 0;
   function refrescarSeguimientoAutomatico() {
     if (sincronizandoSeguimiento || !M || document.hidden || (global.navigator && global.navigator.onLine === false) || !misPedidos().some(activo)) return;
     sincronizandoSeguimiento = true;
@@ -959,6 +959,7 @@
   function activo(x) { return FINALES.indexOf(x.e) < 0 || (x.e === 'Entregado' && !x.cal && Date.now() - (x.fe || x.f || 0) < 6 * 3600000); }
 
   async function pintarSeguimiento(abrir) {
+    var numeroConsulta = ++secuenciaSeguimiento;
     var cont = $('#seguimiento');
     if (!cont) return;
     var lista = misPedidos();
@@ -974,12 +975,15 @@
         r.pedidos.forEach(function (p, k) { res[conClave[k].n] = p; });
         for (var j = 0; j < act.length; j++) { // pedidos viejos sin clave: número + celular
           var x = act[j]; if (x.s || res[x.n]) continue;
-          try { res[x.n] = await DATOS.pedir('pedidoConsultar', { numero: x.n, telefono: x.tel || (MEM.leer('cliente') || {}).telefono || '' }); } catch (e) { res[x.n] = { no_existe: true }; }
+          try { res[x.n] = await DATOS.pedir('pedidoConsultar', { numero: x.n, telefono: x.tel || (MEM.leer('cliente') || {}).telefono || '' }); } catch (e) { res[x.n] = { error_consulta: true }; }
         }
+        // Evita regresar visualmente a un estado anterior por respuestas fuera de orden.
+        if (numeroConsulta !== secuenciaSeguimiento) return;
         var cambio2 = false;
         lista.forEach(function (x) {
           var p = res[x.n]; if (!p) return;
-          if (p.no_existe) { x.e = 'Anulado'; cambio2 = true; return; }
+          // No encontrar el enlace o fallar la red NO equivale a una anulación real.
+          if (p.no_existe || p.error_consulta) return;
           if (p.estado !== x.e) { x.e = p.estado; if (p.estado === 'Entregado') x.fe = Date.now(); cambio2 = true; }
           if (p.total && !x.t) { x.t = p.total; cambio2 = true; }
           if (p.seguimiento && !x.s) { x.s = p.seguimiento; cambio2 = true; }
@@ -988,6 +992,7 @@
         if (cambio2) guardarMisPedidos(lista);
         act = lista.filter(activo); hist = lista.filter(function (x) { return !activo(x); });
       } catch (err) {
+        if (numeroConsulta !== secuenciaSeguimiento) return;
         // Una desconexión NO anula ni cambia el pedido: conservar último estado visible.
         if (sincronizandoSeguimiento && cont.querySelector('.seg-caja')) {
           if (!$('#seg-sin-conexion')) {
@@ -1002,7 +1007,11 @@
         return;
       }
     }
-    cont.innerHTML = act.map(function (x) { return res[x.n] && !res[x.n].no_existe ? tarjetaSeguimiento(res[x.n], x) : ''; }).join('') +
+    cont.innerHTML = act.map(function (x) {
+      var estado = res[x.n];
+      return estado && !estado.no_existe && !estado.error_consulta ? tarjetaSeguimiento(estado, x) :
+        '<div class="seg-caja"><b>Tu pedido ' + UI.esc(x.n) + '</b><p class="item-sub">⚠️ No pudimos verificar el estado actual. Esto no significa que tu pedido esté anulado. Toca Actualizar para volver a consultar.</p></div>';
+    }).join('') +
       (hist.length ? '<details class="seg-caja mis-pedidos"' + (act.length ? '' : ' open') + '><summary><b>🧾 Mis pedidos anteriores</b> <small>(' + hist.length + ')</small></summary>' +
         '<div class="lista">' + hist.map(function (x) {
           var fecha = new Date(x.f || Date.now());
