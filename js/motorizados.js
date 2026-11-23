@@ -231,6 +231,18 @@
   var mias = null;
   var firmaEntregas = '', relojEntregas = null, consultaEntregasEnCurso = false;
 
+  function avisoConexionEntregas(texto) {
+    if (APP.vistaActual !== 'entregas') return;
+    var c = UI.$('#en-cuerpo'); if (!c) return;
+    var aviso = UI.$('#en-sin-conexion', c);
+    if (!texto) { if (aviso) aviso.remove(); return; }
+    if (!aviso) {
+      aviso = document.createElement('div'); aviso.id = 'en-sin-conexion'; aviso.className = 'banda aviso';
+      c.insertBefore(aviso, c.firstChild);
+    }
+    aviso.textContent = texto;
+  }
+
   /* Una sola fuente: respuesta confirmada del servidor. Sin mensajes ficticios,
    * sin abrir WhatsApp por su cuenta y sin borrar la lista cuando falle la red. */
   function firmaEstadoEntregas(r) {
@@ -252,7 +264,10 @@
       var firma = firmaEstadoEntregas(nuevo);
       mias = nuevo;
       if (firma !== firmaEntregas) { firmaEntregas = firma; pintarMias(); }
-    } catch (e) { /* mantener el último estado visible, sin afirmar un estado nuevo */ }
+      avisoConexionEntregas('');
+    } catch (e) {
+      avisoConexionEntregas('⚠️ Sin conexión: los estados mostrados son los últimos consultados. Pulsa Actualizar al recuperar internet.');
+    }
     finally { consultaEntregasEnCurso = false; }
   }
   function activarSincronizacionEntregas() {
@@ -260,6 +275,7 @@
     relojEntregas = global.setInterval(refrescarEntregasAutomaticamente, 60000);
     document.addEventListener('visibilitychange', function () { if (!document.hidden) refrescarEntregasAutomaticamente(); });
     global.addEventListener('online', refrescarEntregasAutomaticamente);
+    global.addEventListener('offline', function () { avisoConexionEntregas('⚠️ Sin conexión: las entregas mostradas pueden haber cambiado.'); });
   }
 
   APP.vistas.entregas = {
@@ -277,9 +293,10 @@
       mias = await DATOS.pedir('misEntregas', {});
       firmaEntregas = firmaEstadoEntregas(mias);
       pintarMias();
+      avisoConexionEntregas('');
     } catch (err) {
       if (UI.$('#en-cuerpo') && !mias) UI.$('#en-cuerpo').innerHTML = '<div class="banda error">⚠️ <span>' + UI.esc(err.message) + '</span></div>';
-      else UI.aviso('No se pudo actualizar Mis entregas. Comprueba la conexión.', 'error');
+      else { avisoConexionEntregas('⚠️ No se pudo actualizar Mis entregas: se muestra la última información recibida.'); UI.aviso('No se pudo actualizar Mis entregas. Comprueba la conexión.', 'error'); }
     }
   }
 
