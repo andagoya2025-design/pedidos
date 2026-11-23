@@ -1010,7 +1010,7 @@ function accionMenuPublico_() {
   pub.datos_transferencia = cfg.datos_transferencia || '';
   pub.minutos_preparacion = numero_(cfg.minutos_preparacion) || 20;
   var locales = leerTabla_('locales').filter(function (l) { return l.activo === true; }).map(function (l) {
-    return { id: String(l.id), nombre: String(l.nombre), direccion: String(l.direccion), telefono: String(l.telefono) };
+    return { id: String(l.id), nombre: String(l.nombre), direccion: String(l.direccion), telefono: String(l.telefono), lat: l.lat === '' ? '' : numero_(l.lat), lng: l.lng === '' ? '' : numero_(l.lng), pausado: l.pausado === true, mensaje_pausa: String(l.mensaje_pausa || ''), minimo_domicilio: l.minimo_domicilio === '' ? '' : redondear_(l.minimo_domicilio) };
   });
   var data = {
     config: pub,
@@ -1019,8 +1019,9 @@ function accionMenuPublico_() {
       return { id: String(c.id), local_id: String(c.local_id), nombre: String(c.nombre), orden: numero_(c.orden) };
     }).sort(function (a, b) { return a.orden - b.orden; }),
     platos: leerTabla_('platos').filter(function (p) { return p.activo === true; }).map(platoPublico_),
+    populares: masPedidos30_(),
     zonas: leerTabla_('zonas_envio').filter(function (z) { return z.activo === true; }).map(function (z) {
-      return { id: String(z.id), local_id: String(z.local_id), nombre: String(z.nombre), costo: redondear_(z.costo), minutos: numero_(z.minutos) };
+      return { id: String(z.id), local_id: String(z.local_id), nombre: String(z.nombre), costo: redondear_(z.costo), minutos: numero_(z.minutos), lat: z.lat === '' ? '' : numero_(z.lat), lng: z.lng === '' ? '' : numero_(z.lng), radio_km: numero_(z.radio_km), minimo_domicilio: z.minimo_domicilio === '' ? '' : redondear_(z.minimo_domicilio) };
     })
   };
   /* 3.1.3: platos sin insumos suficientes en cada local (agotado automático) */
@@ -1033,6 +1034,18 @@ function accionMenuPublico_() {
   if (texto.length < 90000) cache.put('MENU_PUBLICO', texto, 120);
   data.abierto = estaAbierto_(cfg, new Date());
   return { ok: true, data: data };
+}
+
+/* Platos más pedidos en los últimos 30 días, agregado por ID y cacheado 300 s. */
+function masPedidos30_() {
+  var cache = CacheService.getScriptCache(), k = 'POPULAR_30', g = cache.get(k);
+  if (g) return JSON.parse(g);
+  var desde = Date.now() - 30 * 86400000, mapa = {}, cnt = {};
+  leerTabla_('pedidos').forEach(function (p) { if (p.creado instanceof Date && p.creado.getTime() >= desde && String(p.estado) !== 'Anulado') mapa[String(p.id)] = true; });
+  leerTabla_('pedido_detalle').forEach(function (d) { if (mapa[String(d.pedido_id)]) cnt[String(d.plato_id)] = (cnt[String(d.plato_id)] || 0) + numero_(d.cantidad); });
+  var lista = Object.keys(cnt).sort(function (a, b) { return cnt[b] - cnt[a]; }).slice(0, 10);
+  cache.put(k, JSON.stringify(lista), 300);
+  return lista;
 }
 
 /*
@@ -1094,13 +1107,14 @@ function accionPedidoCrear_(data, ctx) {
   // Horario: si está cerrado, solo se acepta un pedido programado para cuando abra.
   var ahora = new Date();
   var llegada = '';
+  if (data.hora_llegada && !siNo_(cfg.permitir_programar)) throw fallo_('Este negocio no tiene pedidos programados activados.');
   if (data.hora_llegada) {
     llegada = horaDeHoy_(String(data.hora_llegada), cfg, ahora);
     if (!llegada) throw fallo_('Hora no válida.');
     if (llegada.getTime() < ahora.getTime() + 10 * 60000) throw fallo_('Elija una hora al menos 10 minutos más tarde.');
   }
   var abierto = estaAbierto_(cfg, llegada || ahora);
-  if (!abierto.abierto) throw fallo_(abierto.mensaje, 'CERRADO');
+  if (!abierto.abierto && !(cfg.recibir_cerrado === 'SI' && !llegada)) throw fallo_(abierto.mensaje, 'CERRADO');
 
   // Freno contra pedidos en cadena (sin sesión): por teléfono y por dispositivo.
   var cache = CacheService.getScriptCache();
@@ -1118,6 +1132,7 @@ function accionPedidoCrear_(data, ctx) {
 
     var local = leerTabla_('locales').filter(function (l) { return String(l.id) === localId && l.activo === true; })[0];
     if (!local) throw fallo_('Elija un local disponible.');
+    if (local.pausado === true && (!ses || data.canal === 'cliente')) throw fallo_(String(local.mensaje_pausa || 'Este local pausó los pedidos. Vuelve pronto.'), 'PAUSADO');
     if (ses && ses.rol !== 'dueno' && ses.local_id !== localId) throw fallo_('Solo puede tomar pedidos de su local.', 'PERMISO');
 
     var platos = {};
@@ -1140,23 +1155,22 @@ function accionPedidoCrear_(data, ctx) {
       detalleFilas.push({ plato_id: String(p.id), nombre: String(p.nombre), precio: unitario, cantidad: cant, extras: extras.map(function (x) { return x.nombre; }).join(', '), total_linea: totalLinea });
     });
 
-    var envio = 0, minutos = 0;
+    var envio = 0, minutos = 0, zona = null;
     if (zonaId) {
-      var zona = leerTabla_('zonas_envio').filter(function (z) { return String(z.id) === zonaId && z.activo === true; })[0];
+      zona = leerTabla_('zonas_envio').filter(function (z) { return String(z.id) === zonaId && z.activo === true; })[0];
       if (!zona || (String(zona.local_id) !== 'TODOS' && String(zona.local_id) !== localId)) throw fallo_('Elija una zona de envío disponible.');
       envio = redondear_(zona.costo);
       minutos = numero_(zona.minutos);
     }
 
+    var distancia = tipo === 'domicilio' && tienePunto_(local) && lat !== '' && lng !== '' ? distanciaKm_(local, { lat: lat, lng: lng }) : '';
+    if (distancia !== '' && numero_(cfg.cobertura_km) > 0 && distancia > numero_(cfg.cobertura_km) && cfg.cobertura_modo === 'bloquear') throw fallo_('La dirección indicada está fuera de la cobertura. Puede cambiarla o elegir Retiro.', 'COBERTURA');
+    // Los mínimos de pedido se comunican, sin impedir la venta.
     var descuento = 0, cuponFila = null, codigo = limpiarTexto_(data.cupon, 30).toUpperCase();
     if (codigo) {
-      cuponFila = leerTabla_('cupones').filter(function (c) { return claveComparar_(c.codigo) === claveComparar_(codigo); })[0];
-      var hoy = Utilities.formatDate(ahora, zona_(cfg), 'yyyy-MM-dd');
-      if (!cuponFila || cuponFila.activo !== true) throw fallo_('El cupón «' + codigo + '» no existe.', 'CUPON');
-      if (cuponFila.vence instanceof Date && ymd_(cuponFila.vence, cfg) < hoy) throw fallo_('El cupón «' + codigo + '» ya venció.', 'CUPON');
-      if (numero_(cuponFila.usos_max) > 0 && numero_(cuponFila.usos) >= numero_(cuponFila.usos_max)) throw fallo_('El cupón «' + codigo + '» ya se usó el máximo de veces.', 'CUPON');
-      descuento = String(cuponFila.tipo) === 'porcentaje' ? redondear_(subtotal * numero_(cuponFila.valor) / 100) : redondear_(cuponFila.valor);
-      descuento = Math.min(descuento, subtotal);
+      var cupValidado = validarCupon316_(codigo, localId, telefono, subtotal, pedidos);
+      cuponFila = cupValidado.fila;
+      descuento = cupValidado.descuento;
     }
 
     // Cliente: uno por teléfono (no se repite).
@@ -1188,7 +1202,7 @@ function accionPedidoCrear_(data, ctx) {
     var numero = 'PED-' + ('000' + (mayor + 1)).slice(-Math.max(4, String(mayor + 1).length));
     var id = nuevoId_('PED');
     var base = llegada && llegada.getTime() > ahora.getTime() ? llegada : ahora;
-    var horaEst = llegada || new Date(base.getTime() + (numero_(cfg.minutos_preparacion) + minutos) * 60000);
+    var horaEst = !abierto.abierto && !llegada ? '' : (llegada || new Date(base.getTime() + (numero_(cfg.minutos_preparacion) + minutos) * 60000));
 
     var clienteId, nuevo = !cFila || numero_(cFila.entregados) + numero_(cFila.pedidos) === 0;
     if (cFila) {
@@ -1213,10 +1227,12 @@ function accionPedidoCrear_(data, ctx) {
       subtotal, envio, descuento, total, codigo, 'Recibido', '', ahora, '', '', '', '', '', ses ? ses.usuario : 'cliente',
       horaEst, enlaceUbic, limpiarTexto_(data.notas, 300), '', '', '', '', '', false, '', false,
       tipo, mesa, llegada || '', origen, propina, baseIva, iva, fuente, nuevo, '', '', premio, dispId,
-      ses && data.canal !== 'cliente' ? 'NO' : '', '', nuevaClaveSeguimiento_(), esDigital_(forma) ? limpiarTexto_(data.cuenta_pago, 80) : '', '']; // 3.1: pedido tomado por el personal (teléfono/mostrador): sin código. 3.1.1: si se hizo desde la página del cliente, sí lleva código
+      ses && data.canal !== 'cliente' ? 'NO' : '', '', nuevaClaveSeguimiento_(), esDigital_(forma) ? limpiarTexto_(data.cuenta_pago, 80) : '', '',
+      distancia, llegada ? new Date(llegada.getTime() + numero_(cfg.ventana_minutos) * 60000) : '', '', '']; // 3.1: pedido tomado por el personal (teléfono/mostrador): sin código. 3.1.1: si se hizo desde la página del cliente, sí lleva código
     agregarFilas_('pedidos', [fila]);
     agregarFilas_('pedido_detalle', detalleFilas.map(function (d) { return [nuevoId_('DET'), id, d.plato_id, d.nombre, d.precio, d.cantidad, d.extras, d.total_linea]; }));
     if (cuponFila) actualizarCampos_('cupones', cuponFila._fila, cuponFila, { usos: numero_(cuponFila.usos) + 1 });
+    CacheService.getScriptCache().remove('POPULAR_30');
 
     var descontado = descontarInventario_(id, numero, localId, detalleFilas, 1, ses ? ses.usuario : 'cliente');
     if (descontado) {
@@ -1268,9 +1284,24 @@ function accionPedidoConsultar_(data) {
     preparando: iso_(p.preparando), en_camino: iso_(p.en_camino), entregado: iso_(p.entregado), hora_estimada: iso_(p.hora_estimada), total: redondear_(p.total),
     tipo_entrega: tipoEntrega_(p), mesa: String(p.mesa || ''), calificacion: numero_(p.calificacion) || '', motivo_anulacion: String(p.estado) === 'Anulado' ? String(p.motivo_anulacion) : '',
     sellos: cli ? numero_(cli.sellos) : 0, sellos_meta: numero_(cfgC.fidelidad_sellos),
+    tiempo_preparacion: numero_(cfgC.minutos_preparacion) || 20,
+    tiempo_zona: numero_((leerTabla_('zonas_envio').filter(function (z) { return String(z.id) === String(p.zona_id); })[0] || {}).minutos),
+    ventana_fin: iso_(p.hora_ventana_fin),
+    eta_moto: etaMoto316_(p, cfgC),
     /* 3.1: tarjeta del motorizado y código de entrega — solo mientras va en camino */
     motorizado: String(p.estado) === 'En camino' ? tarjetaMotorizado_(p) : null,
     codigo_entrega: String(p.estado) === 'En camino' && siNo_(cfgC.codigo_entrega) && String(p.codigo_entrega || '') !== 'NO' ? String(p.codigo_entrega || '') : '' } };
+}
+
+/* ETA aproximado: último punto GPS del motorizado de ESTE pedido, sin mostrar las coordenadas. */
+function etaMoto316_(p, cfg) {
+  if (String(p.estado) !== 'En camino' || !tienePunto_(p)) return null;
+  var puntos = leerTabla_('rastreo').filter(function (r) { return String(r.pedido_id) === String(p.id) && String(r.motorizado_id) === String(p.motorizado_id) && tienePunto_(r) && p.en_camino instanceof Date && r.fecha instanceof Date && r.fecha >= p.en_camino; });
+  var ultimo = puntos.length ? puntos[puntos.length - 1] : null;
+  if (!ultimo && p.sali_lat !== '' && p.sali_lng !== '') ultimo = { lat: p.sali_lat, lng: p.sali_lng };
+  if (!ultimo) return null;
+  var n = distanciaKm_(ultimo, p) * 1.4 / Math.max(5, numero_(cfg.velocidad_moto_kmh) || 20) * 60;
+  return { desde: Math.max(2, Math.floor(n * 0.85)), hasta: Math.max(6, Math.ceil(n * 1.35 + 3)) };
 }
 
 /* ---------- 11.3 Menú (administración) ---------- */
