@@ -1284,7 +1284,7 @@ function accionMenuListar_(data, ctx) {
     }).sort(function (a, b) { return a.orden - b.orden; }),
     platos: leerTabla_('platos').filter(function (p) { return sirve(p.local_id); }).map(platoPublico_),
     zonas: leerTabla_('zonas_envio').filter(function (z) { return sirve(z.local_id); }).map(function (z) {
-      return { id: String(z.id), local_id: String(z.local_id), nombre: String(z.nombre), costo: redondear_(z.costo), minutos: numero_(z.minutos), activo: z.activo === true };
+      return { id: String(z.id), local_id: String(z.local_id), nombre: String(z.nombre), costo: redondear_(z.costo), minutos: numero_(z.minutos), activo: z.activo === true, lat: z.lat === '' ? '' : numero_(z.lat), lng: z.lng === '' ? '' : numero_(z.lng), radio_km: numero_(z.radio_km), minimo_domicilio: z.minimo_domicilio === '' ? '' : redondear_(z.minimo_domicilio) };
     })
   } };
 }
@@ -1416,7 +1416,11 @@ function accionZonaGuardar_(data, ctx) {
   if (!nombre) throw fallo_('Escriba el nombre de la zona.');
   if (!(costo >= 0 && costo <= 500)) throw fallo_('Costo de envío no válido.');
   if (!(minutos >= 0 && minutos <= 300)) throw fallo_('Minutos no válidos.');
-  var cambios = { nombre: nombre, local_id: localId, costo: redondear_(costo), minutos: minutos, activo: data.activo !== false };
+  var punto = puntoConfig_(data), radio = data.radio_km === '' || data.radio_km == null ? 0 : Number(data.radio_km);
+  var minimo = data.minimo_domicilio === '' || data.minimo_domicilio == null ? '' : Number(data.minimo_domicilio);
+  if (!(radio >= 0 && radio <= 1000)) throw fallo_('Radio no válido (0 a 1000 km).');
+  if (minimo !== '' && !(minimo >= 0 && minimo <= 10000)) throw fallo_('Pedido mínimo no válido.');
+  var cambios = { nombre: nombre, local_id: localId, costo: redondear_(costo), minutos: minutos, activo: data.activo !== false, lat: punto.lat, lng: punto.lng, radio_km: radio, minimo_domicilio: minimo };
   var lock = candado_();
   try {
     validarLocalOTodos_(localId);
@@ -1428,7 +1432,7 @@ function accionZonaGuardar_(data, ctx) {
       if (!actual) throw fallo_('Esa zona ya no existe. Toque Actualizar.', 'NO_EXISTE');
       if (actualizarCampos_('zonas_envio', actual._fila, actual, cambios)) bitacora_(ctx.sesion, 'MENU', 'EDITAR_ZONA', nombre, ctx.dispositivo);
     } else {
-      agregarFilas_('zonas_envio', [[nuevoId_('ZON'), localId, nombre, cambios.costo, minutos, cambios.activo, new Date()]]);
+      agregarFilas_('zonas_envio', [[nuevoId_('ZON'), localId, nombre, cambios.costo, minutos, cambios.activo, new Date(), punto.lat, punto.lng, radio, minimo]]);
       bitacora_(ctx.sesion, 'MENU', 'CREAR_ZONA', nombre, ctx.dispositivo);
     }
     limpiarMenuCache_();
@@ -1439,7 +1443,7 @@ function accionZonaGuardar_(data, ctx) {
 function accionCuponesListar_() {
   var cfg = leerConfig_();
   return { ok: true, data: { cupones: leerTabla_('cupones').map(function (c) {
-    return { id: String(c.id), codigo: String(c.codigo), tipo: String(c.tipo), valor: numero_(c.valor), vence: c.vence instanceof Date ? ymd_(c.vence, cfg) : '', usos_max: numero_(c.usos_max), usos: numero_(c.usos), activo: c.activo === true };
+    return { id: String(c.id), codigo: String(c.codigo), tipo: String(c.tipo), valor: numero_(c.valor), vence: c.vence instanceof Date ? ymd_(c.vence, cfg) : '', usos_max: numero_(c.usos_max), usos: numero_(c.usos), activo: c.activo === true, local_id: String(c.local_id || 'TODOS'), un_uso_cliente: c.un_uso_cliente === true, compra_minima: numero_(c.compra_minima) };
   }) } };
 }
 
@@ -1452,9 +1456,12 @@ function accionCuponGuardar_(data, ctx) {
   if (!(valor > 0) || (tipo === 'porcentaje' && valor > 100) || valor > 1000) throw fallo_('Valor del descuento no válido.');
   if (vence && !/^\d{4}-\d{2}-\d{2}$/.test(vence)) throw fallo_('Fecha de vencimiento no válida.');
   if (!(usosMax >= 0)) throw fallo_('Usos máximos no válidos.');
-  var cambios = { codigo: codigo, tipo: tipo, valor: valor, vence: vence ? fechaDia_(vence) : '', usos_max: usosMax, activo: data.activo !== false };
+  var localId = limpiarTexto_(data.local_id, 40) || 'TODOS', compraMin = Number(data.compra_minima || 0);
+  if (!(compraMin >= 0 && compraMin <= 10000)) throw fallo_('Compra mínima no válida.');
+  var cambios = { codigo: codigo, tipo: tipo, valor: valor, vence: vence ? fechaDia_(vence) : '', usos_max: usosMax, activo: data.activo !== false, local_id: localId, un_uso_cliente: data.un_uso_cliente === true, compra_minima: redondear_(compraMin) };
   var lock = candado_();
   try {
+    validarLocalOTodos_(localId);
     var filas = leerTabla_('cupones');
     var rep = filas.filter(function (r) { return String(r.id) !== id && claveComparar_(r.codigo) === claveComparar_(codigo); })[0];
     if (rep) throw fallo_('El cupón «' + codigo + '» ya existe.', 'DUPLICADO');
@@ -1463,11 +1470,43 @@ function accionCuponGuardar_(data, ctx) {
       if (!actual) throw fallo_('Ese cupón ya no existe.', 'NO_EXISTE');
       if (actualizarCampos_('cupones', actual._fila, actual, cambios)) bitacora_(ctx.sesion, 'MENU', 'EDITAR_CUPON', codigo, ctx.dispositivo);
     } else {
-      agregarFilas_('cupones', [[nuevoId_('CUP'), codigo, tipo, valor, cambios.vence, usosMax, 0, cambios.activo, new Date()]]);
+      agregarFilas_('cupones', [[nuevoId_('CUP'), codigo, tipo, valor, cambios.vence, usosMax, 0, cambios.activo, new Date(), localId, cambios.un_uso_cliente, cambios.compra_minima]]);
       bitacora_(ctx.sesion, 'MENU', 'CREAR_CUPON', codigo, ctx.dispositivo);
     }
   } finally { lock.releaseLock(); }
   return accionCuponesListar_();
+}
+
+/* Validación única del cupón: consulta pública y creación usan las mismas reglas. */
+function validarCupon316_(codigo, localId, telefono, subtotal, pedidos) {
+  if (!codigo) return { descuento: 0, fila: null };
+  var c = leerTabla_('cupones').filter(function (x) { return claveComparar_(x.codigo) === claveComparar_(codigo); })[0];
+  var hoy = Utilities.formatDate(new Date(), zona_(leerConfig_()), 'yyyy-MM-dd');
+  if (!c || c.activo !== true) throw fallo_('Ese cupón no está disponible.', 'CUPON');
+  if (c.vence instanceof Date && ymd_(c.vence, leerConfig_()) < hoy) throw fallo_('Este cupón ya venció.', 'CUPON');
+  if (numero_(c.usos_max) > 0 && numero_(c.usos) >= numero_(c.usos_max)) throw fallo_('Este cupón alcanzó el máximo de usos.', 'CUPON');
+  if (String(c.local_id || 'TODOS') !== 'TODOS' && String(c.local_id) !== localId) throw fallo_('Este cupón es para otro local.', 'CUPON');
+  if (subtotal < numero_(c.compra_minima)) throw fallo_('Este cupón es para compras desde ' + UI_dinero_(c.compra_minima) + '.', 'CUPON');
+  if (c.un_uso_cliente === true && telefono && pedidos.some(function (p) { return String(p.telefono) === telefono && claveComparar_(p.cupon) === claveComparar_(codigo) && String(p.estado) !== 'Anulado'; })) throw fallo_('Este cupón ya se utilizó con ese número.', 'CUPON');
+  var d = String(c.tipo) === 'porcentaje' ? redondear_(subtotal * numero_(c.valor) / 100) : redondear_(c.valor);
+  return { descuento: Math.min(subtotal, d), fila: c };
+}
+function accionCuponValidar_(data) {
+  var localId = limpiarTexto_(data.local_id, 40), codigo = limpiarTexto_(data.cupon, 30).toUpperCase();
+  if (!codigo) throw fallo_('Escriba un cupón.', 'CUPON');
+  var tel = data.telefono ? normalizarTelefono_(data.telefono, leerConfig_().pais_codigo) : '';
+  var productos = {}; leerTabla_('platos').forEach(function (p) { productos[String(p.id)] = p; });
+  var subtotal = 0;
+  (Array.isArray(data.items) ? data.items : []).slice(0, 60).forEach(function (it) {
+    var p = productos[String(it.plato_id)], n = Math.floor(numero_(it.cantidad));
+    if (!p || p.activo !== true || !(n >= 1 && n <= 50) || (String(p.local_id) !== 'TODOS' && String(p.local_id) !== localId)) throw fallo_('Revise los platos del carrito.', 'PLATO');
+    var extras = (Array.isArray(it.extras) ? it.extras : []).map(claveComparar_);
+    var extra = leerExtras_(p.extras_json).filter(function (x) { return extras.indexOf(claveComparar_(x.nombre)) >= 0; }).reduce(function (s, x) { return s + x.precio; }, 0);
+    subtotal = redondear_(subtotal + redondear_((numero_(p.precio) + extra) * n));
+  });
+  if (!subtotal) throw fallo_('Agregue platos antes de aplicar un cupón.', 'CUPON');
+  var r = validarCupon316_(codigo, localId, tel, subtotal, leerTabla_('pedidos'));
+  return { ok: true, data: { codigo: codigo, descuento: r.descuento, subtotal: subtotal } };
 }
 
 /* Receta de un plato: qué insumos descuenta cada unidad vendida. */
@@ -1575,7 +1614,10 @@ function accionPedidosListar_(data, ctx) {
     if (local !== 'TODOS' && String(p.local_id) !== local) return false;
     var d = ymd_(p.dia_trabajo, cfg);
     var abierto = ['Entregado', 'Anulado'].indexOf(String(p.estado)) < 0;
-    return d === dia || (dia === hoy && abierto); // hoy + los que quedaron abiertos de antes
+    // Abiertos: siempre visibles; entregados: por fecha REAL de entrega; anulados: conservan día contable.
+    if (abierto) return true;
+    if (String(p.estado) === 'Entregado') return fechaCalendario_(p.entregado, cfg) === dia || (!p.entregado && d === dia);
+    return d === dia;
   });
   /* 3.1.3: pedidos de antes de la 3.1.3 reciben su clave de seguimiento la primera vez que se listan */
   var sinClave = lista.filter(function (p) { return !String(p.clave_seguimiento || ''); });
@@ -1599,7 +1641,7 @@ function accionPedidosListar_(data, ctx) {
   }
   filasCli.forEach(function (c) { clis[String(c.id)] = String(c.clave_cliente || ''); });
   return { ok: true, data: {
-    dia: dia, hoy: hoy, ahora: new Date().toISOString(), minutos_atraso: numero_(cfg.minutos_atraso) || 45,
+    dia: dia, hoy: fechaCalendario_(new Date(), cfg), ahora: new Date().toISOString(), minutos_atraso: numero_(cfg.minutos_atraso) || 45, minutos_alerta_pedido: numero_(cfg.minutos_alerta_pedido) || 15,
     pedidos: lista.map(function (p) {
       var o = pedidoSalida_(p, det[String(p.id)] || []);
       o.motorizado = motos[o.motorizado_id] || null;
@@ -1643,20 +1685,37 @@ function accionPedidoEstado_(data, ctx) {
 
 function accionPedidoAsignar_(data, ctx) {
   exigirTurnoAbierto_(data.motorizado_id); // 3.1 (solo si el dueño lo activó)
+  var motivoCambio = limpiarTexto_(data.motivo, 200);
   var motoId = limpiarTexto_(data.motorizado_id, 40);
   var lock = candado_();
   var p, m;
   try {
     p = buscarPedido_(data.id, ctx);
-    if (['Recibido', 'Preparando'].indexOf(String(p.estado)) < 0) throw fallo_('Solo se asigna motorizado antes de que el pedido salga.');
+    if (['Recibido', 'Preparando', 'En camino'].indexOf(String(p.estado)) < 0) throw fallo_('Este pedido ya no admite cambio de motorizado.');
+    if (String(p.estado) === 'En camino' && motivoCambio.length < 3) throw fallo_('Escriba el motivo del cambio de motorizado.');
     if (!p.zona_id) throw fallo_('Este pedido es para retirar en el local.');
     m = leerTabla_('motorizados').filter(function (x) { return String(x.id) === motoId; })[0];
     if (!m || m.activo !== true) throw fallo_('Ese motorizado no está activo.');
     if (m.local_id && String(m.local_id) !== 'TODOS' && String(m.local_id) !== String(p.local_id)) throw fallo_('Ese motorizado es de otro local.');
-    actualizarCampos_('pedidos', p._fila, p, { motorizado_id: motoId });
+    if (String(p.motorizado_id) !== motoId) actualizarCampos_('pedidos', p._fila, p, { motorizado_id: motoId, incidencia_motivo: motivoCambio, ultima_senal: '', sali_lat: String(p.estado) === 'En camino' ? '' : p.sali_lat, sali_lng: String(p.estado) === 'En camino' ? '' : p.sali_lng });
     p = buscarPedido_(data.id, ctx);
   } finally { lock.releaseLock(); }
-  bitacora_(ctx.sesion, 'PEDIDOS', 'ASIGNAR', p.numero + ' → ' + m.nombre, ctx.dispositivo);
+  bitacora_(ctx.sesion, 'PEDIDOS', 'ASIGNAR', p.numero + ' → ' + m.nombre + (motivoCambio ? ' · Motivo: ' + motivoCambio : ''), ctx.dispositivo);
+  return { ok: true, data: { pedido: pedidoSalida_(p) } };
+}
+
+/* Reingreso al local: conservamos repartidor y código; invalidamos salida y ETA previos. */
+function accionPedidoRegresar_(data, ctx) {
+  var motivo = limpiarTexto_(data.motivo, 200);
+  if (motivo.length < 3) throw fallo_('Escriba el motivo del regreso.');
+  var lock = candado_(), p;
+  try {
+    p = buscarPedido_(data.id, ctx);
+    if (String(p.estado) !== 'En camino') throw fallo_('Solo un pedido En camino puede regresar al local.', 'CAMBIO');
+    actualizarCampos_('pedidos', p._fila, p, { estado: 'Preparando', en_camino: '', sali_lat: '', sali_lng: '', ultima_senal: '', incidencia_motivo: motivo });
+    p = buscarPedido_(data.id, ctx);
+  } finally { lock.releaseLock(); }
+  bitacora_(ctx.sesion, 'PEDIDOS', 'REGRESO', p.numero + ' · ' + motivo, ctx.dispositivo);
   return { ok: true, data: { pedido: pedidoSalida_(p) } };
 }
 
@@ -1672,7 +1731,7 @@ function accionPedidoAnular_(data, ctx) {
     if (String(p.estado) === 'Entregado' && ctx.sesion.rol !== 'dueno') throw fallo_('Un pedido entregado solo lo anula el dueño.', 'PERMISO');
     if (p.liquidacion_id) throw fallo_('El efectivo de este pedido ya se liquidó en caja: no se puede anular.');
     var eraEntregado = String(p.estado) === 'Entregado';
-    actualizarCampos_('pedidos', p._fila, p, { estado: 'Anulado', anulado: new Date(), motivo_anulacion: motivo });
+    actualizarCampos_('pedidos', p._fila, p, { estado: 'Anulado', anulado: new Date(), motivo_anulacion: motivo, anulado_por: ctx.sesion.usuario });
     var c = leerTabla_('clientes').filter(function (x) { return String(x.id) === String(p.cliente_id); })[0];
     if (c) actualizarCampos_('clientes', c._fila, c, { pedidos: Math.max(0, numero_(c.pedidos) - 1) });
     if (eraEntregado) sumarEntregaCliente_(p, -1);
@@ -1687,6 +1746,7 @@ function accionPedidoAnular_(data, ctx) {
     }
     p = buscarPedido_(data.id, ctx);
   } finally { lock.releaseLock(); }
+  CacheService.getScriptCache().remove('POPULAR_30');
   bitacora_(ctx.sesion, 'PEDIDOS', 'ANULAR', p.numero + ' · ' + motivo, ctx.dispositivo);
   return { ok: true, data: { pedido: pedidoSalida_(p) } };
 }
@@ -1831,7 +1891,7 @@ function accionMisEntregas_(data, ctx) {
   var mios = pedidos.filter(function (p) {
     if (String(p.motorizado_id) !== String(m.id)) return false;
     var abierto = ['Recibido', 'Preparando', 'En camino'].indexOf(String(p.estado)) >= 0;
-    return abierto || (String(p.estado) === 'Entregado' && ymd_(p.dia_trabajo, cfg) === hoy);
+    return abierto || (String(p.estado) === 'Entregado' && fechaCalendario_(p.entregado, cfg) === fechaCalendario_(new Date(), cfg));
   });
   var det = detallePorPedido_(mios.map(function (p) { return String(p.id); }));
   var cajas = leerTabla_('caja').filter(function (c) { return String(c.estado) === 'abierta'; });
@@ -2263,8 +2323,11 @@ function accionCajaCerrar_(data, ctx) {
   var nombreLocal = (leerTabla_('locales').filter(function (l) { return String(l.id) === local; })[0] || {}).nombre || local;
   var r = res.resumen, mon = cfg.moneda || 'USD';
   function f(n) { return mon + ' ' + redondear_(n).toFixed(2); }
+  var pedidosDia = leerTabla_('pedidos').filter(function (p) { return String(p.local_id) === local && ymd_(p.dia_trabajo, cfg) === ymd_(c.dia_trabajo, cfg); });
+  var anulDia = pedidosDia.filter(function (p) { return String(p.estado) === 'Anulado'; }).length;
+  var propDia = pedidosDia.filter(function (p) { return String(p.estado) !== 'Anulado'; }).reduce(function (sum, p) { return sum + numero_(p.propina); }, 0);
   var texto = '*Cierre de caja — ' + nombreLocal + '*\nDía: ' + ymd_(c.dia_trabajo, cfg) + '\nCerró: ' + ctx.sesion.nombre +
-    '\n\nPedidos: ' + r.pedidos + ' · Ventas: ' + f(r.ventas) +
+    '\n\nPedidos: ' + r.pedidos + ' · Anulados: ' + anulDia + ' · Propinas: ' + f(propDia) + ' · Ventas: ' + f(r.ventas) +
     '\nFondo inicial: ' + f(r.fondo) + '\nEfectivo de motorizados: ' + f(r.liquidado) + '\nEfectivo en el local: ' + f(r.efectivo_local) +
     '\nEntradas: ' + f(r.entradas) + '\nSalidas: ' + f(r.salidas) + '\nFondos a motorizados: ' + f(r.fondos_motorizado) +
     '\nTransferencias verificadas: ' + f(r.transferencias) + (r.transferencias_pendientes ? '\n⚠️ Transferencias sin verificar: ' + f(r.transferencias_pendientes) : '') +
@@ -2537,6 +2600,29 @@ function accionReportes_(data, ctx) {
   d.por_tipo = Object.keys(porTipo).map(function (k) { return { tipo: k, pedidos: porTipo[k].pedidos, total: redondear_(porTipo[k].total) }; });
   d.por_origen = Object.keys(porOrigen).map(function (k) { var o = porOrigen[k]; o.total = redondear_(o.total); return o; }).sort(function (a, b) { return b.pedidos - a.pedidos; });
   d.comentarios = comentarios.slice(-20).reverse();
+  /* 3.1.6: informes adicionales separados, no recalculan caja ni ventas. */
+  var anulaciones = {}, tiempos = {}, zonas = {}, motos = {}, locales = {};
+  leerTabla_('zonas_envio').forEach(function (z) { zonas[String(z.id)] = numero_(z.minutos); });
+  leerTabla_('motorizados').forEach(function (m) { motos[String(m.id)] = String(m.nombre); });
+  leerTabla_('locales').forEach(function (l) { locales[String(l.id)] = String(l.nombre); });
+  leerTabla_('pedidos').forEach(function (p) {
+    var dia = ymd_(p.dia_trabajo, cfg), lid = String(p.local_id);
+    if (dia < d.desde || dia > d.hasta || (local !== 'TODOS' && lid !== local)) return;
+    if (String(p.estado) === 'Anulado') {
+      var motivo = String(p.motivo_anulacion || 'Sin motivo'), caj = String(p.anulado_por || 'Sin registro anterior'), mot = String(p.motorizado_id || 'Sin motorizado');
+      var k = [lid, motivo, caj, mot].join('|');
+      anulaciones[k] = anulaciones[k] || { local: locales[lid] || lid, motivo: motivo, cajero: caj, motorizado: motos[mot] || mot, cantidad: 0 };
+      anulaciones[k].cantidad++;
+    }
+    if (String(p.estado) === 'Entregado' && p.creado instanceof Date && p.entregado instanceof Date && p.zona_id) {
+      var real = (p.entregado - p.creado) / 60000, previsto = numero_(cfg.minutos_preparacion) + (zonas[String(p.zona_id)] || 0);
+      if (!(real >= 0 && real <= 10080)) return;
+      var claves = ['LOCAL:' + lid, 'MOTO:' + String(p.motorizado_id || '')];
+      claves.forEach(function (k) { if (k === 'MOTO:') return; tiempos[k] = tiempos[k] || { tipo: k.indexOf('LOCAL:') === 0 ? 'Local' : 'Motorizado', nombre: k.indexOf('LOCAL:') === 0 ? (locales[lid] || lid) : (motos[String(p.motorizado_id)] || String(p.motorizado_id)), total_real: 0, total_previsto: 0, cantidad: 0 }; tiempos[k].cantidad++; tiempos[k].total_real += real; tiempos[k].total_previsto += previsto; });
+    }
+  });
+  d.anulaciones = Object.keys(anulaciones).map(function (k) { return anulaciones[k]; }).sort(function (a, b) { return b.cantidad - a.cantidad; });
+  d.tiempos_reales = Object.keys(tiempos).map(function (k) { var t = tiempos[k]; return { tipo: t.tipo, nombre: t.nombre, cantidad: t.cantidad, real: Math.round(t.total_real / t.cantidad), previsto: Math.round(t.total_previsto / t.cantidad) }; });
   return r;
 }
 
