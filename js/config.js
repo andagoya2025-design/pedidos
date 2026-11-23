@@ -13,7 +13,7 @@
   'use strict';
 
   /* ===== ÚNICA LÍNEA A CONFIGURAR EN CADA CLIENTE ===== */
-  var URL_SCRIPT = ''; // LABORATORIO: use SOLO el Apps Script y Google Sheet de PRUEBAS.
+  var URL_SCRIPT = 'https://script.google.com/macros/s/AKfycbzI4P-BPCPBWjmITTQ9eVHcK26odpjLHYpCMNCRphleF6PFpPGu3sNbtL3dn0Uo-RM/exec'; // Conexión original del negocio; requiere Apps Script 3.1.7 publicado.
   /* ===================================================== */
 
   function valida(url) {
