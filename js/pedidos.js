@@ -237,7 +237,10 @@
       try {
         var r = await DATOS.pedir('pedidosNuevos', {});
         if (ultimaMarca && r.ultimo > ultimaMarca) avisarNuevo();
-      if (APP.vistaActual === 'pedidos' && est.datos) { alertarRecibidos(); pintar(); }
+        // Fase 1: pedidos que cambia el motorizado también se reflejan en el local.
+        // Al refrescar se consulta el estado real de Sheets, no el último estado local.
+        if (APP.vistaActual === 'pedidos' && est.datos && !document.hidden && Date.now() - est.cargadoEn >= 60000) await cargar();
+        else if (APP.vistaActual === 'pedidos' && est.datos) alertarRecibidos();
         ultimaMarca = r.ultimo || ultimaMarca;
       } catch (e) { /* sin red: se intenta en la próxima vuelta */ }
       vigia = setTimeout(revisar, 25000);
