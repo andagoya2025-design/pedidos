@@ -304,13 +304,22 @@
   }
 
   function repetir(lista) {
+    var agregados = 0, omitidos = 0;
     lista.forEach(function (i) {
       var p = plato(i.plato_id);
-      var extras = (i.extras || []).filter(function (n) { return p.extras.some(function (x) { return x.nombre === n; }); });
+      var cantidad = Math.floor(Number(i.cantidad));
+      if (!p || p.agotado || (p.local_id !== 'TODOS' && p.local_id !== localId) || !isFinite(cantidad) || cantidad < 1) { omitidos++; return; }
+      var extras = (Array.isArray(i.extras) ? i.extras : []).filter(function (n) {
+        return (p.extras || []).some(function (x) { return x.nombre === n; });
+      });
       var k = claveItem(p, extras);
-      carrito[k] = { plato: p, extras: extras, cantidad: Math.min(50, i.cantidad) };
+      var anterior = carrito[k] ? Number(carrito[k].cantidad) || 0 : 0;
+      carrito[k] = { plato: p, extras: extras, cantidad: Math.min(50, anterior + cantidad) };
+      agregados++;
     });
-    cambio(); UI.vibrar(); UI.aviso('Listo: tu último pedido está en el carrito.', 'ok');
+    if (!agregados) return UI.aviso('Los productos de ese pedido ya no están disponibles.', 'error');
+    cambio(); UI.vibrar();
+    UI.aviso(omitidos ? 'Agregamos los productos disponibles; algunos ya no están en el menú.' : 'Listo: los productos están en tu carrito.', 'ok');
     pintarPlatos(); pintarBarra(true);
   }
 
