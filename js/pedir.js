@@ -997,7 +997,7 @@
     UI.$$('[data-seg-act]', cont).forEach(function (b) { b.addEventListener('click', function (e) { UI.trabajando(e.currentTarget, function () { return pintarSeguimiento(true); }); }); });
     UI.$$('[data-calificar]', cont).forEach(function (b) { b.addEventListener('click', function () { var x = lista.filter(function (y) { return y.n === b.getAttribute('data-calificar'); })[0]; if (x) calificar({ numero: x.n, telefono: x.tel || (MEM.leer('cliente') || {}).telefono || '', s: x.s }); }); });
     UI.$$('[data-comprobante]', cont).forEach(function (b) { b.addEventListener('click', function () { var p = res[b.getAttribute('data-comprobante')]; if (p) UI.abrirWhatsApp(cfg().whatsapp, 'Hola, envío el comprobante del pedido *' + p.numero + '* por ' + UI.dinero(p.total) + (p.cuenta_pago ? ' (a ' + p.cuenta_pago + ')' : '') + '. 👇'); }); });
-    UI.$('[data-escribir]', cont).forEach(function (b) { b.addEventListener('click', function () {
+    UI.$$('[data-escribir]', cont).forEach(function (b) { b.addEventListener('click', function () {
       var numero = b.getAttribute('data-escribir');
       var pedido = res[numero];
       var estado = pedido && pedido.estado || (lista.filter(function (x) { return x.n === numero; })[0] || {}).e;
