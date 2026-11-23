@@ -166,10 +166,28 @@
           '<div class="item-titulo">' + UI.esc(l.nombre) + '</div>' +
           '<div class="item-sub">' + UI.esc(l.direccion || 'Sin dirección') + (l.telefono ? ' · ' + UI.esc(l.telefono) : '') + '</div></div>' +
           '<span class="etiqueta ' + (l.activo ? 'ok' : 'mal') + '">' + (l.activo ? 'Activo' : 'Inactivo') + '</span>' +
-          '<button class="btn secundario chico" type="button" data-editar="' + UI.esc(l.id) + '">Editar</button></div>';
+          '<button class="btn secundario chico" type="button" data-editar="' + UI.esc(l.id) + '">Editar</button>' +
+          '<button class="btn secundario chico" type="button" data-pausar="' + UI.esc(l.id) + '">' + (l.pausado ? '▶ Reanudar pedidos' : '⏸ Pausar pedidos') + '</button></div>';
       }).join('') + '</div>' : UI.vacio('📍', 'Aún no hay locales.'));
 
     UI.$('#btn-nuevo-local').addEventListener('click', function () { editarLocal(null); });
+    UI.$$('[data-pausar]', cuerpo()).forEach(function (b) { b.addEventListener('click', function () {
+      UI.trabajando(b, async function () {
+        var l = APP.locales.filter(function (x) { return x.id === b.getAttribute('data-pausar'); })[0];
+        if (!l) return;
+        var mensaje = '';
+        if (!l.pausado) {
+          mensaje = await UI.pedirDato({ titulo: '⏸ Pausar ' + l.nombre, etiqueta: '¿Qué verá el cliente?', ph: 'Hoy cerramos temprano', max: 160 });
+          if (mensaje === null) return;
+        }
+        try {
+          var r = await DATOS.pedir('localPausar', { id: l.id, mensaje: mensaje }, { guardar: true });
+          APP.locales = r.locales || [];
+          UI.aviso(l.pausado ? 'Local reanudado.' : 'Local pausado.', 'ok');
+          pintarLocales(false);
+        } catch (err) { UI.error('No se pudo cambiar el estado del local', err.message); }
+      });
+    }); });
     UI.$$('[data-editar]', cuerpo()).forEach(function (b) {
       b.addEventListener('click', function () {
         editarLocal(APP.locales.filter(function (l) { return l.id === b.getAttribute('data-editar'); })[0]);
@@ -178,7 +196,7 @@
   }
 
   async function editarLocal(local) {
-    local = local || { id: '', nombre: '', direccion: '', telefono: '', activo: true };
+    local = local || { id: '', nombre: '', direccion: '', telefono: '', activo: true, lat: '', lng: '', minimo_domicilio: '' };
     var datos = null;
     var ok = await UI.ventana({
       icono: '📍', titulo: local.id ? 'Editar local' : 'Nuevo local',
@@ -186,12 +204,25 @@
         '<div class="campo"><label for="lo-nombre">Nombre</label><input class="entrada" id="lo-nombre" name="nombre" value="' + UI.esc(local.nombre) + '" placeholder="Ej. Local 1 – Norte" maxlength="60"></div>' +
         '<div class="campo"><label for="lo-dir">Dirección</label><input class="entrada" id="lo-dir" name="direccion" value="' + UI.esc(local.direccion) + '"></div>' +
         '<div class="campo"><label for="lo-tel">Teléfono</label><input class="entrada" id="lo-tel" name="telefono" inputmode="tel" value="' + UI.esc(local.telefono) + '"></div>' +
+        '<div class="campo"><label for="lo-min">Pedido mínimo a domicilio (opcional)</label><input class="entrada" id="lo-min" name="minimo_domicilio" inputmode="decimal" placeholder="Sin mínimo" value="' + UI.esc(local.minimo_domicilio || '') + '"></div>' +
+        '<div class="campo"><label>📍 Ubicación del local</label><button class="btn secundario chico" type="button" id="lo-gps">📍 Marcar con mi ubicación</button>' +
+        '<input type="hidden" name="lat" id="lo-lat" value="' + UI.esc(local.lat === '' ? '' : local.lat) + '"><input type="hidden" name="lng" id="lo-lng" value="' + UI.esc(local.lng === '' ? '' : local.lng) + '">' +
+        '<input class="entrada" name="enlace" id="lo-enlace" placeholder="O pega enlace de Google Maps" style="margin-top:8px"><span class="ayuda" id="lo-pos">' + (local.lat !== '' && local.lat != null ? 'Punto marcado: ' + UI.esc(local.lat) + ', ' + UI.esc(local.lng) : 'Sin punto: el local sigue funcionando normalmente') + '</span></div>' +
         '<label class="interruptor"><input type="checkbox" name="activo"' + (local.activo ? ' checked' : '') + '> Local activo</label></form>',
+      alAbrir: function (v) {
+        UI.$('#lo-gps', v).addEventListener('click', function (e) { UI.trabajando(e.currentTarget, async function () {
+          var pt = await UI.ubicacion(); if (!pt) return UI.aviso('No encontramos tu GPS. También puedes pegar un enlace de Maps.', 'error');
+          UI.$('#lo-lat', v).value = pt.lat; UI.$('#lo-lng', v).value = pt.lng;
+          UI.$('#lo-enlace', v).value = ''; UI.$('#lo-pos', v).textContent = 'Punto marcado: ' + pt.lat + ', ' + pt.lng;
+        }); });
+        UI.$('#lo-enlace', v).addEventListener('input', function () { UI.$('#lo-lat', v).value = ''; UI.$('#lo-lng', v).value = ''; });
+      },
       botones: [
         { texto: 'Cancelar', valor: false, clase: 'secundario' },
         { texto: 'Guardar', valor: true, antes: function (v) {
           datos = UI.leerFormulario(UI.$('#form-local', v));
           if (!datos.nombre) { UI.$('#lo-nombre', v).setAttribute('aria-invalid', 'true'); UI.aviso('Escriba el nombre del local.', 'error'); return false; }
+          if (datos.minimo_domicilio && !(Number(datos.minimo_domicilio) >= 0)) { UI.aviso('Revise el pedido mínimo.', 'error'); return false; }
           return true;
         } }
       ]
