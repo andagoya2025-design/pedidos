@@ -951,8 +951,18 @@
       if (!cont.innerHTML) cont.innerHTML = '<div class="seg-caja"><b>Mis pedidos</b><span class="item-sub">Consultando…</span></div>';
       try {
         var conClave = act.filter(function (x) { return x.s; });
-        var r = conClave.length ? await DATOS.pedir('pedidosSeguir', { s: conClave.map(function (x) { return x.s; }) }) : { pedidos: [] };
-        r.pedidos.forEach(function (p, k) { res[conClave[k].n] = p; });
+        // El servidor admite máximo diez claves por consulta: procesar por lotes.
+        for (var lote = 0; lote < conClave.length; lote += 10) {
+          var grupo = conClave.slice(lote, lote + 10);
+          try {
+            var r = await DATOS.pedir('pedidosSeguir', { s: grupo.map(function (x) { return x.s; }) });
+            grupo.forEach(function (x, k) {
+              res[x.n] = r.pedidos && r.pedidos[k] ? r.pedidos[k] : { consulta_error: true };
+            });
+          } catch (e) {
+            grupo.forEach(function (x) { res[x.n] = { consulta_error: true }; });
+          }
+        }
         for (var j = 0; j < act.length; j++) { // pedidos viejos sin clave: número + celular
           var x = act[j]; if (x.s || res[x.n]) continue;
           try { res[x.n] = await DATOS.pedir('pedidoConsultar', { numero: x.n, telefono: x.tel || (MEM.leer('cliente') || {}).telefono || '' }); } catch (e) { res[x.n] = { consulta_error: true }; }
