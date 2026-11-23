@@ -3268,7 +3268,7 @@ function accionPedidosSeguir_(data) {
   var claves = (Array.isArray(data.s) ? data.s : []).slice(0, 10);
   var lista = [];
   claves.forEach(function (k) {
-    try { var r = accionPedidoConsultar_({ s: k }); if (r.ok) lista.push(r.data); } catch (e) { lista.push({ seguimiento: String(k), no_existe: true }); }
+    try { var r = accionPedidoConsultar_({ s: k }); if (r.ok) lista.push(r.data); } catch (e) { lista.push({ seguimiento: String(k), consulta_error: true }); }
   });
   return { ok: true, data: { pedidos: lista } };
 }
