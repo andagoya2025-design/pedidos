@@ -237,7 +237,11 @@
       try {
         var r = await DATOS.pedir('pedidosNuevos', {});
         if (ultimaMarca && r.ultimo > ultimaMarca) avisarNuevo();
-      if (APP.vistaActual === 'pedidos' && est.datos) { alertarRecibidos(); pintar(); }
+        // La marca de pedido nuevo no cambia cuando solo cambia un estado.
+        // Actualizar el tablero desde el servidor sin generar una nueva notificación.
+        if (APP.vistaActual === 'pedidos' && est.datos && document.visibilityState === 'visible') {
+          try { await cargar(); } catch (e) { /* conservar tablero anterior si falla la red */ }
+        }
         ultimaMarca = r.ultimo || ultimaMarca;
       } catch (e) { /* sin red: se intenta en la próxima vuelta */ }
       vigia = setTimeout(revisar, 25000);
