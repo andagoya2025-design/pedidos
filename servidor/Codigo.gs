@@ -18,8 +18,8 @@
  * ============================================================
  */
 
-var APP_VERSION = '3.1.5';
-var APP_VERSION_NUM = 30105; // 3.1.0 -> 30100 (la pantalla compara con su mínimo)
+var APP_VERSION = '3.1.6';
+var APP_VERSION_NUM = 30106; // 3.1.0 -> 30100 (la pantalla compara con su mínimo)
 var SESION_SEGUNDOS = 21600;  // 6 h; se renueva con cada uso
 var ROLES = ['dueno', 'cajero', 'motorizado'];
 
@@ -30,7 +30,7 @@ var ROLES = ['dueno', 'cajero', 'motorizado'];
  * ============================================================ */
 var HOJAS = {
   configuracion: [['clave', 't'], ['valor', 't'], ['actualizado', 'd'], ['actualizado_por', 't']],
-  locales: [['id', 't'], ['nombre', 't'], ['direccion', 't'], ['telefono', 't'], ['activo', 'b'], ['creado', 'd'], ['creado_por', 't']],
+  locales: [['id', 't'], ['nombre', 't'], ['direccion', 't'], ['telefono', 't'], ['activo', 'b'], ['creado', 'd'], ['creado_por', 't'], /* 3.1.6 */ ['lat', 'n'], ['lng', 'n'], ['pausado', 'b'], ['mensaje_pausa', 't'], ['minimo_domicilio', 'm']],
   categorias: [['id', 't'], ['local_id', 't'], ['nombre', 't'], ['orden', 'n'], ['activo', 'b'], ['creado', 'd']],
   platos: [['id', 't'], ['local_id', 't'], ['categoria_id', 't'], ['nombre', 't'], ['descripcion', 't'], ['precio', 'm'], ['foto_url', 't'], ['extras_json', 't'], ['agotado', 'b'], ['activo', 'b'], ['creado', 'd'],
     /* 3.0 */ ['etiquetas', 't'], ['sugerido', 'b']],
@@ -39,7 +39,8 @@ var HOJAS = {
     /* 3.0 (agregadas al final) */ ['tipo_entrega', 't'], ['mesa', 't'], ['hora_llegada', 'd'], ['origen', 't'], ['propina', 'm'], ['base_iva', 'm'], ['iva', 'm'], ['ubicacion_fuente', 't'], ['cliente_nuevo', 'b'], ['calificacion', 'n'], ['comentario', 't'], ['premio', 'm'], ['disp_id', 't'],
     /* 3.1 */ ['codigo_entrega', 't'], ['ultima_senal', 'd'],
     /* 3.1.3 */ ['clave_seguimiento', 't'],
-    /* 3.1.5 */ ['cuenta_pago', 't'], ['pago_verificado_fecha', 'd']],
+    /* 3.1.5 */ ['cuenta_pago', 't'], ['pago_verificado_fecha', 'd'],
+    /* 3.1.6 */ ['distancia_km', 'n'], ['hora_ventana_fin', 'd'], ['incidencia_motivo', 't'], ['anulado_por', 't']],
   pedido_detalle: [['id', 't'], ['pedido_id', 't'], ['plato_id', 't'], ['nombre', 't'], ['precio', 'm'], ['cantidad', 'n'], ['extras', 't'], ['total_linea', 'm']],
   clientes: [['id', 't'], ['telefono', 't'], ['nombre', 't'], ['direccion', 't'], ['referencia', 't'], ['lat', 'n'], ['lng', 'n'], ['pedidos', 'n'], ['total_gastado', 'm'], ['ultimo_pedido', 'd'], ['creado', 'd'],
     /* 3.0 */ ['entregados', 'n'], ['sellos', 'n'],
@@ -55,10 +56,10 @@ var HOJAS = {
   caja: [['id', 't'], ['local_id', 't'], ['dia_trabajo', 'f'], ['apertura', 'd'], ['fondo', 'm'], ['abierta_por', 't'], ['cierre', 'd'], ['esperado', 'm'], ['contado', 'm'], ['diferencia', 'm'], ['cerrada_por', 't'], ['estado', 't']],
   usuarios: [['id', 't'], ['usuario', 't'], ['nombre', 't'], ['rol', 't'], ['local_id', 't'], ['hash', 't'], ['sal', 't'], ['activo', 'b'], ['creado', 'd'], ['ultimo_acceso', 'd']],
   bitacora: [['fecha', 'd'], ['usuario', 't'], ['rol', 't'], ['local_id', 't'], ['modulo', 't'], ['accion', 't'], ['detalle', 't'], ['dispositivo', 't']],
-  zonas_envio: [['id', 't'], ['local_id', 't'], ['nombre', 't'], ['costo', 'm'], ['minutos', 'n'], ['activo', 'b'], ['creado', 'd']],
+  zonas_envio: [['id', 't'], ['local_id', 't'], ['nombre', 't'], ['costo', 'm'], ['minutos', 'n'], ['activo', 'b'], ['creado', 'd'], /* 3.1.6 */ ['lat', 'n'], ['lng', 'n'], ['radio_km', 'n'], ['minimo_domicilio', 'm']],
   caja_movimientos: [['id', 't'], ['caja_id', 't'], ['fecha', 'd'], ['tipo', 't'], ['monto', 'm'], ['forma', 't'], ['motivo', 't'], ['pedido_id', 't'], ['motorizado_id', 't'], ['usuario', 't']],
   liquidaciones_motorizado: [['id', 't'], ['caja_id', 't'], ['motorizado_id', 't'], ['fecha', 'd'], ['fondo', 'm'], ['efectivo_cobrado', 'm'], ['entregado', 'm'], ['diferencia', 'm'], ['recibido_por', 't']],
-  cupones: [['id', 't'], ['codigo', 't'], ['tipo', 't'], ['valor', 'n'], ['vence', 'f'], ['usos_max', 'n'], ['usos', 'n'], ['activo', 'b'], ['creado', 'd']],
+  cupones: [['id', 't'], ['codigo', 't'], ['tipo', 't'], ['valor', 'n'], ['vence', 'f'], ['usos_max', 'n'], ['usos', 'n'], ['activo', 'b'], ['creado', 'd'], /* 3.1.6 */ ['local_id', 't'], ['un_uso_cliente', 'b'], ['compra_minima', 'm']],
   /* 3.1: hojas nuevas (el instalador y asegurarHojas_ las crean solas) */
   turnos: [['id', 't'], ['motorizado_id', 't'], ['dia_trabajo', 'f'], ['inicio', 'd'], ['fin', 'd'], ['inicio_lat', 'n'], ['inicio_lng', 'n'], ['fin_lat', 'n'], ['fin_lng', 'n']],
   rastreo: [['id', 't'], ['pedido_id', 't'], ['motorizado_id', 't'], ['fecha', 'd'], ['lat', 'n'], ['lng', 'n'], ['precision', 'n']]
@@ -120,14 +121,18 @@ var CONFIG_DEFECTO = {
   minutos_alerta_pago: '30',   // aviso en el panel si el pago lleva más de N minutos sin verificar
   dias_historial_cliente: '30', // días que el teléfono del cliente guarda su historial de pedidos
   anos_limpieza_clientes: '2', // años sin pedir → se borran solos los datos personales del cliente (0 = nunca)
-  politicas_texto: ''          // «Cómo funciona tu pedido» (vacío = texto por defecto)
+  politicas_texto: '',         // «Cómo funciona tu pedido»
+  /* 3.1.6 */
+  cobertura_km: '', cobertura_modo: 'avisar', permitir_programar: 'NO', ventana_minutos: '30',
+  velocidad_moto_kmh: '20', minutos_alerta_pedido: '15', recibir_cerrado: 'SI'
 };
 
 /* Campos de configuración que puede ver cualquiera (sin sesión). */
 var CONFIG_PUBLICA = ['minutos_alerta_pago', 'anos_limpieza_clientes', 'negocio_nombre', 'logo_url', 'color_primario', 'color_acento', 'whatsapp', 'pais_codigo', 'ciudad', 'moneda', 'zona_horaria', 'mensaje_bienvenida',
   /* 3.0 */ 'horario_apertura', 'horario_cierre', 'dias_cerrado', 'deuna_qr_url', 'fidelidad_sellos', 'fidelidad_descuento', 'propinas', 'mesas', 'verificar_antes_salir', 'precios_incluyen_iva', 'codigo_entrega', 'privacidad_texto', 'formato_hora',
   /* 3.1.3 */ 'efectivo_permitido', 'efectivo_maximo', 'red_instagram', 'red_facebook', 'red_tiktok', 'pagina_web',
-  /* 3.1.5 */ 'iva_porcentaje', 'cuentas_bancarias', 'verificar_antes_preparar', 'dias_historial_cliente', 'politicas_texto'];
+  /* 3.1.5 */ 'iva_porcentaje', 'cuentas_bancarias', 'verificar_antes_preparar', 'dias_historial_cliente', 'politicas_texto',
+  /* 3.1.6 */ 'cobertura_km', 'cobertura_modo', 'permitir_programar', 'ventana_minutos', 'velocidad_moto_kmh', 'minutos_alerta_pedido', 'minutos_preparacion', 'recibir_cerrado'];
 
 /* Acciones: quién puede usarlas. 'publica' = sin sesión. */
 var ACCIONES = {
@@ -206,7 +211,11 @@ var ACCIONES = {
   pedidosSeguir:      { tipo: 'publica', fn: accionPedidosSeguir_ },
   misPedidos:         { tipo: 'publica', fn: accionMisPedidos_ },
   pagoOpciones:       { tipo: 'publica', fn: accionPagoOpciones_ },
-  clienteEfectivo:    { tipo: 'dueno',   fn: accionClienteEfectivo_ }
+  clienteEfectivo:    { tipo: 'dueno',   fn: accionClienteEfectivo_ },
+  /* 3.1.6 */
+  cuponValidar:       { tipo: 'publica', fn: accionCuponValidar_ },
+  localPausar:        { tipo: 'dueno', fn: accionLocalPausar_ },
+  pedidoRegresar:     { tipo: 'sesion', roles: ['dueno', 'cajero'], fn: accionPedidoRegresar_ }
 };
 
 /* ============================================================
@@ -517,6 +526,13 @@ function accionConfigGuardar_(data, ctx) {
     if (k === 'minutos_alerta_pago' && !(Number(v) >= 5 && Number(v) <= 1440)) throw fallo_('Minutos de aviso de pago no válidos (5 a 1440).');
     if (k === 'dias_historial_cliente' && !(Number(v) >= 1 && Number(v) <= 365)) throw fallo_('Días de historial no válidos (1 a 365).');
     if (k === 'anos_limpieza_clientes' && !(/^\d$/.test(v) && Number(v) <= 7)) throw fallo_('Años no válidos (0 a 7).');
+    /* 3.1.6: valores nuevos siempre validados por el servidor. */
+    if (k === 'cobertura_modo' && ['avisar', 'bloquear'].indexOf(v) < 0) throw fallo_('Modo de cobertura no válido.');
+    if ((k === 'permitir_programar' || k === 'recibir_cerrado') && ['SI', 'NO'].indexOf(v) < 0) throw fallo_('Elija si permite programar.');
+    if (k === 'cobertura_km' && v !== '' && !(Number(v) >= 0 && Number(v) <= 1000)) throw fallo_('Cobertura no válida (0 a 1000 km).');
+    if (k === 'ventana_minutos' && !(/^\d+$/.test(v) && Number(v) >= 10 && Number(v) <= 180)) throw fallo_('Ventana entre 10 y 180 minutos.');
+    if (k === 'velocidad_moto_kmh' && !(/^\d+$/.test(v) && Number(v) >= 5 && Number(v) <= 100)) throw fallo_('Velocidad entre 5 y 100 km/h.');
+    if (k === 'minutos_alerta_pedido' && !(/^\d+$/.test(v) && Number(v) >= 1 && Number(v) <= 240)) throw fallo_('Alerta entre 1 y 240 minutos.');
     limpio[k] = v;
   });
 
@@ -628,12 +644,29 @@ function datosPublicos_() {
   return pub;
 }
 
+/* 3.1.6: ubicación opcional de locales y zonas; enlaces de Maps solo cuando son resolubles. */
+function puntoConfig_(data) {
+  var lat = coord_(data.lat, -90, 90), lng = coord_(data.lng, -180, 180);
+  if (data.enlace && (lat === '' || lng === '')) {
+    var enlace = limpiarTexto_(data.enlace, 400);
+    if (!/^https:\/\/(?:maps\.app\.goo\.gl\/|goo\.gl\/maps\/|(?:www\.)?google\.[a-z.]+\/maps(?:[\/?#]|$)|maps\.google\.[a-z.]+\/)/i.test(enlace)) throw fallo_('Pegue un enlace de Google Maps.');
+    var p = coordenadasDeEnlace_(enlace);
+    if (!p) throw fallo_('No se pudieron leer las coordenadas de ese enlace. Use el botón GPS o pegue un enlace con un punto exacto.');
+    lat = coord_(p.lat, -90, 90); lng = coord_(p.lng, -180, 180);
+  }
+  if ((lat === '') !== (lng === '')) throw fallo_('La ubicación necesita latitud y longitud válidas.');
+  return { lat: lat, lng: lng };
+}
+function tienePunto_(r) { return r && r.lat !== '' && r.lng !== '' && r.lat != null && r.lng != null && isFinite(Number(r.lat)) && isFinite(Number(r.lng)); }
+function distanciaKm_(a, b) { return Math.round(distanciaM_({ lat: Number(a.lat), lng: Number(a.lng) }, { lat: Number(b.lat), lng: Number(b.lng) }) / 100) / 10; }
+function fechaCalendario_(d, cfg) { return d instanceof Date ? Utilities.formatDate(d, zona_(cfg), 'yyyy-MM-dd') : ''; }
+
 /* ============================================================
  * 7. LOCALES
  * ============================================================ */
 function accionLocalesListar_(data, ctx) {
   var lista = leerTabla_('locales').map(function (r) {
-    return { id: String(r.id), nombre: String(r.nombre), direccion: String(r.direccion), telefono: String(r.telefono), activo: r.activo === true };
+    return { id: String(r.id), nombre: String(r.nombre), direccion: String(r.direccion), telefono: String(r.telefono), activo: r.activo === true, lat: r.lat === '' ? '' : numero_(r.lat), lng: r.lng === '' ? '' : numero_(r.lng), pausado: r.pausado === true, mensaje_pausa: String(r.mensaje_pausa || ''), minimo_domicilio: r.minimo_domicilio === '' ? '' : redondear_(r.minimo_domicilio) };
   });
   if (ctx.sesion.rol !== 'dueno') lista = lista.filter(function (l) { return l.id === ctx.sesion.local_id; });
   return { ok: true, data: { locales: lista } };
@@ -643,8 +676,12 @@ function accionLocalGuardar_(data, ctx) {
   var id = limpiarTexto_(data.id, 40);
   var nombre = limpiarTexto_(data.nombre, 60);
   if (!nombre) throw fallo_('Escriba el nombre del local.');
+  var punto = puntoConfig_(data);
+  var minimo = data.minimo_domicilio === '' || data.minimo_domicilio == null ? '' : Number(data.minimo_domicilio);
+  if (minimo !== '' && !(minimo >= 0 && minimo <= 10000)) throw fallo_('Pedido mínimo no válido.');
   var cambios = {
     nombre: nombre,
+    lat: punto.lat, lng: punto.lng, minimo_domicilio: minimo,
     direccion: limpiarTexto_(data.direccion, 150),
     telefono: data.telefono ? normalizarTelefono_(data.telefono, leerConfig_().pais_codigo) : '',
     activo: data.activo !== false
@@ -663,12 +700,27 @@ function accionLocalGuardar_(data, ctx) {
       if (n) bitacora_(ctx.sesion, 'LOCALES', 'EDITAR', nombre, ctx.dispositivo);
     } else {
       id = nuevoId_('LOC');
-      agregarFilas_('locales', [[id, cambios.nombre, cambios.direccion, cambios.telefono, cambios.activo, new Date(), ctx.sesion.usuario]]);
+      agregarFilas_('locales', [[id, cambios.nombre, cambios.direccion, cambios.telefono, cambios.activo, new Date(), ctx.sesion.usuario, punto.lat, punto.lng, false, '', minimo]]);
       bitacora_(ctx.sesion, 'LOCALES', 'CREAR', nombre, ctx.dispositivo);
     }
   } finally {
     lock.releaseLock();
   }
+  limpiarMenuCache_();
+  return accionLocalesListar_({}, ctx);
+}
+
+function accionLocalPausar_(data, ctx) {
+  var id = limpiarTexto_(data.id, 40), mensaje = limpiarTexto_(data.mensaje, 160);
+  var lock = candado_(), nuevo;
+  try {
+    var l = leerTabla_('locales').filter(function (x) { return String(x.id) === id; })[0];
+    if (!l) throw fallo_('Local no encontrado.');
+    nuevo = l.pausado !== true;
+    actualizarCampos_('locales', l._fila, l, { pausado: nuevo, mensaje_pausa: nuevo ? (mensaje || 'Hoy cerramos temprano. Escríbenos para consultar.') : '' });
+    limpiarMenuCache_();
+  } finally { lock.releaseLock(); }
+  bitacora_(ctx.sesion, 'LOCALES', nuevo ? 'PAUSAR' : 'REANUDAR', id, ctx.dispositivo);
   return accionLocalesListar_({}, ctx);
 }
 
