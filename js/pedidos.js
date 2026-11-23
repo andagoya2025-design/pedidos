@@ -8,14 +8,14 @@
 (function (global) {
   'use strict';
   var UI = global.UI, DATOS = global.DATOS, APP = global.APP;
-  var est = { datos: null, motos: [], cargadoEn: 0, verAnulados: false };
+  var est = { datos: null, motos: [], cargadoEn: 0, verAnulados: false, diaEntregado: '', alertados: {} }; // 3.1.6
 
   var COLUMNAS = ['Recibido', 'Preparando', 'En camino', 'Entregado'];
 
   APP.vistas.pedidos = {
     titulo: 'Pedidos', icono: '🧾', orden: 10, roles: ['dueno', 'cajero'],
     pintar: function (cont) {
-      est = { datos: null, motos: [], cargadoEn: 0, verAnulados: false };
+      est = { datos: null, motos: [], cargadoEn: 0, verAnulados: false, diaEntregado: UI.hoy(), alertados: {} }; // 3.1.6
       var sonido = global.APP_MEMORIA.leer('sonido_pedidos') !== false;
       cont.innerHTML = UI.encabezado('Pedidos', APP.nombreLocal(APP.local),
         '<button class="btn secundario chico sonido-btn" type="button" id="btn-sonido" aria-pressed="' + sonido + '" title="Sonido de pedido nuevo">' + (sonido ? '🔔' : '🔕') + '</button>' +
@@ -41,7 +41,7 @@
 
   async function cargar() {
     var r = await Promise.allSettled([
-      DATOS.pedir('pedidosListar', { local_id: APP.local }),
+      DATOS.pedir('pedidosListar', { local_id: APP.local, dia: est.diaEntregado || UI.hoy() }),
       DATOS.pedir('motorizadosListar', { local_id: APP.local })
     ]);
     if (!cuerpo()) return; // se cambió de pantalla mientras cargaba
@@ -49,6 +49,7 @@
     est.datos = r[0].value;
     est.motos = r[1].status === 'fulfilled' ? r[1].value.motorizados || [] : [];
     est.cargadoEn = Date.now();
+    alertarRecibidos();
     pintar();
   }
 
@@ -61,22 +62,38 @@
     return UI.minutosDesde(p.creado, ahoraServidor()) > est.datos.minutos_atraso;
   }
 
+  function fechaAnterior(ymd) { var d = new Date(ymd + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() - 1); return d.toISOString().slice(0, 10); }
+  function esRecibidoAtrasado(p) { return p.estado === 'Recibido' && UI.minutosDesde(p.creado, ahoraServidor()) >= (Number(est.datos.minutos_alerta_pedido) || 15); }
+  function alertarRecibidos() {
+    if (!est.datos) return;
+    est.datos.pedidos.filter(esRecibidoAtrasado).forEach(function (p) {
+      if (est.alertados[p.id]) return;
+      est.alertados[p.id] = true;
+      if (global.APP_MEMORIA.leer('sonido_pedidos') !== false) UI.sonar();
+      UI.notificar('🔴 Pedido sin atender', p.numero + ' sigue en Recibido.');
+    });
+  }
   function pintar() {
     var lista = est.datos.pedidos;
     var anulados = lista.filter(function (p) { return p.estado === 'Anulado'; });
     var activos = lista.filter(function (p) { return p.estado !== 'Anulado'; });
     var tarde = activos.filter(atrasado).length;
-    var html = (tarde ? '<div class="banda error">⏰ <span>' + tarde + ' pedido(s) atrasado(s) (más de ' + est.datos.minutos_atraso + ' min).</span></div>' : '') +
+    var pendientes = activos.filter(esRecibidoAtrasado).length;
+    var html = (pendientes ? '<div class="banda error">🔴 <span>' + pendientes + ' pedido(s) en Recibido sin atender. Revise la primera columna.</span></div>' : '') +
+      (tarde ? '<div class="banda error">⏰ <span>' + tarde + ' pedido(s) atrasado(s) (más de ' + est.datos.minutos_atraso + ' min).</span></div>' : '') +
       '<div class="tablero">' + COLUMNAS.map(function (c) {
         var col = activos.filter(function (p) { return p.estado === c; });
-        if (c === 'Entregado') col = col.filter(function (p) { return p.dia_trabajo === est.datos.hoy; });
+        if (c === 'Entregado') col = col.filter(function (p) { return (p.entregado ? UI.fechaLocal(p.entregado) : p.dia_trabajo) === (est.diaEntregado || est.datos.dia); });
         col.sort(function (a, b) { return a.creado < b.creado ? 1 : -1; }); // 3.1.5: el más nuevo arriba (elegido por el dueño)
         return '<section class="columna" aria-label="' + UI.esc(c) + '"><div class="columna-cabeza">' + UI.chipEstado(c) + '<span class="cuenta">' + col.length + '</span></div>' +
+          (c === 'Entregado' ? '<div class="fecha-entregados"><button class="btn secundario chico" type="button" data-dia-ent="hoy">Hoy</button><button class="btn secundario chico" type="button" data-dia-ent="ayer">Ayer</button><input aria-label="Otra fecha de entrega" class="entrada" id="pd-fecha-ent" type="date" value="' + UI.esc(est.diaEntregado || UI.hoy()) + '"></div>' : '') +
           '<div class="lista">' + (col.length ? col.map(tarjeta).join('') : UI.vacio((UI.ESTADOS[c] || {}).icono || '•', c === 'Recibido' ? 'Aún no hay pedidos nuevos.' : 'Nada aquí por ahora.')) + '</div></section>';
       }).join('') + '</div>' +
       (anulados.length ? '<button class="btn borde bloque" type="button" id="ver-anulados" style="margin-top:16px">' + (est.verAnulados ? 'Ocultar' : 'Ver') + ' anulados (' + anulados.length + ')</button>' +
         (est.verAnulados ? '<div class="lista" style="margin-top:10px">' + anulados.map(tarjeta).join('') + '</div>' : '') : '');
     cuerpo().innerHTML = html;
+    UI.$$('[data-dia-ent]', cuerpo()).forEach(function (b) { b.addEventListener('click', function () { est.diaEntregado = b.getAttribute('data-dia-ent') === 'hoy' ? UI.hoy() : fechaAnterior(UI.hoy()); cargar(); }); });
+    var fe = UI.$('#pd-fecha-ent'); if (fe) fe.addEventListener('change', function () { if (/^\d{4}-\d{2}-\d{2}$/.test(fe.value)) { est.diaEntregado = fe.value; cargar(); } });
     var va = UI.$('#ver-anulados');
     if (va) va.addEventListener('click', function () { est.verAnulados = !est.verAnulados; pintar(); });
     UI.$$('[data-accion]', cuerpo()).forEach(function (b) {
@@ -86,7 +103,7 @@
 
   function tarjeta(p) {
     var min = UI.minutosDesde(p.creado, ahoraServidor());
-    var tarde = atrasado(p);
+    var tarde = atrasado(p) || esRecibidoAtrasado(p);
     var principal = '';
     if (p.estado === 'Recibido') principal = '<button class="btn chico" type="button" data-accion="preparar" data-id="' + UI.esc(p.id) + '">👨‍🍳 Preparar</button>';
     var dom = UI.tipoEntrega(p) === 'domicilio';
@@ -107,7 +124,7 @@
       '<div class="pedido-top"><span class="pedido-num">' + UI.esc(p.numero) + '</span>' + (p.estado === 'Anulado' ? UI.chipEstado('Anulado') : '') +
       '<span class="reloj' + (tarde ? ' tarde' : '') + '">' + UI.esc(UI.hora(p.creado)) + (['Entregado', 'Anulado'].indexOf(p.estado) < 0 ? ' · ' + min + ' min' : '') + '</span>' +
       '<span class="pedido-total">' + UI.dinero(p.total) + '</span></div>' +
-      '<div class="pedido-chips">' + UI.etiquetaTipo(p) + (p.cliente_nuevo ? '<span class="chip-nuevo">✨ Cliente nuevo</span>' : '') + (p.origen ? '<span class="chip-tipo">📊 ' + UI.esc(p.origen) + '</span>' : '') + '</div>' +
+      '<div class="pedido-chips">' + (p.distancia_km !== '' && Number(p.distancia_km) > Number(APP.publico && APP.publico.cobertura_km || 0) && Number(APP.publico && APP.publico.cobertura_km) > 0 ? '<span class="etiqueta aviso">⚠️ Lejos: ' + UI.esc(p.distancia_km) + ' km</span>' : '') + UI.etiquetaTipo(p) + (p.cliente_nuevo ? '<span class="chip-nuevo">✨ Cliente nuevo</span>' : '') + (p.origen ? '<span class="chip-tipo">📊 ' + UI.esc(p.origen) + '</span>' : '') + '</div>' +
       '<div class="pedido-linea"><b style="color:var(--texto)">' + UI.esc(p.cliente_nombre) + '</b> · ' + UI.esc(p.telefono) + '</div>' +
       (APP.local === 'TODOS' ? '<div class="pedido-linea">📍 ' + UI.esc(APP.nombreLocal(p.local_id)) + '</div>' : '') +
       '<ul class="pedido-items">' + (p.detalle || []).map(function (d) { return '<li><b>' + d.cantidad + '×</b> ' + UI.esc(d.nombre) + (d.extras ? ' <span class="pedido-linea">(' + UI.esc(d.extras) + ')</span>' : '') + '</li>'; }).join('') + '</ul>' +
@@ -170,7 +187,8 @@
         '\n👉 Mira a tu motorizado y tu código aquí: ' + link,
       'Entregado': '¡Gracias por tu compra, ' + p.cliente_nombre + '! Esperamos que disfrutes tu pedido ' + p.numero + '. ' + neg + '\n⭐ Califícanos aquí: ' + link + misPed
     };
-    return t[p.estado] || '';
+    var ventana = p.hora_llegada ? ' Ventana solicitada: ' + UI.ventanaHora(p.hora_llegada, p.hora_ventana_fin, Number(APP.publico && APP.publico.ventana_minutos) || 30) + ' aprox. Sujeta a confirmación por WhatsApp.' : '';
+    return (t[p.estado] || '') + ventana;
   }
 
   async function accion(boton, que, id) {
@@ -219,6 +237,7 @@
       try {
         var r = await DATOS.pedir('pedidosNuevos', {});
         if (ultimaMarca && r.ultimo > ultimaMarca) avisarNuevo();
+      if (APP.vistaActual === 'pedidos' && est.datos) { alertarRecibidos(); pintar(); }
         ultimaMarca = r.ultimo || ultimaMarca;
       } catch (e) { /* sin red: se intenta en la próxima vuelta */ }
       vigia = setTimeout(revisar, 25000);
@@ -327,7 +346,27 @@
         elegido = r.value; return true;
       } }]
     });
-    if (ok) guardar(boton, 'pedidoAsignar', { id: p.id, motorizado_id: elegido }, 'Motorizado asignado.');
+    if (!ok) return;
+    var motivo = '';
+    if (p.estado === 'En camino' && elegido !== p.motorizado_id) {
+      motivo = await UI.pedirDato({ icono: '🛵', titulo: 'Motivo del cambio', etiqueta: '¿Por qué cambia el motorizado?', ph: 'Moto dañada, accidente u otro', max: 200, validar: function (v) { return v.trim().length < 3 ? 'Escriba el motivo.' : ''; } });
+      if (motivo === null) return;
+    }
+    if (elegido === p.motorizado_id) return UI.aviso('Ese motorizado ya está asignado.', '');
+    var listo = await guardar(boton, 'pedidoAsignar', { id: p.id, motorizado_id: elegido, motivo: motivo }, 'Motorizado asignado.');
+    if (listo && p.estado === 'En camino' && UI.digitos(p.telefono)) UI.abrirWhatsApp(p.telefono, 'Hola ' + p.cliente_nombre + ', cambiamos a quien te lleva tu pedido ' + p.numero + '. Puedes ver a tu nuevo motorizado en el seguimiento: ' + enlaceSeguimiento(p));
+  }
+
+  function imprimirComanda(p) {
+    var items = (p.detalle || []).map(function (d) { return '<li><strong>' + Number(d.cantidad) + ' × ' + UI.esc(d.nombre) + '</strong>' + (d.extras ? '<small>Extras: ' + UI.esc(d.extras) + '</small>' : '') + '</li>'; }).join('');
+    var html = '<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Comanda ' + UI.esc(p.numero) + '</title><style>@page{margin:3mm}body{font:14px Arial,sans-serif;max-width:78mm;margin:auto;color:#111}h2{text-align:center;font-size:18px}ul{list-style:none;padding:0}li{padding:5px 0;border-bottom:1px dashed #777;break-inside:avoid}small{display:block}p{overflow-wrap:anywhere}@media print{button{display:none}}@media (min-width:600px){body{max-width:190mm}}</style></head><body>' +
+      '<h2>COMANDA ' + UI.esc(p.numero) + '</h2><p>Local: ' + UI.esc(APP.nombreLocal(p.local_id)) + '<br>Hora: ' + UI.esc(UI.fechaHora(p.creado)) + '<br>' + UI.esc(UI.tipoEntrega(p) === 'mesa' ? 'Mesa ' + p.mesa : UI.tipoEntrega(p) === 'domicilio' ? 'Domicilio · ' + p.direccion : 'Retiro') + '</p><ul>' + items + '</ul>' + (p.notas ? '<p>NOTAS: ' + UI.esc(p.notas) + '</p>' : '') + '</body></html>';
+    var w = global.open('', '_blank');
+    if (!w) return UI.aviso('Permita abrir la pestaña de impresión.', 'error');
+    w.document.open(); w.document.write(html); w.document.close(); w.focus();
+    var imprimir = w.document.createElement('button'); imprimir.textContent = '🖨️ Imprimir'; imprimir.style.cssText = 'display:block;margin:14px auto;padding:14px 25px;font-size:17px';
+    imprimir.addEventListener('click', function () { w.print(); }); w.document.body.insertBefore(imprimir, w.document.body.firstChild);
+    setTimeout(function () { if (!w.closed) w.print(); }, 250); // botón de respaldo por si el navegador bloquea impresión automática
   }
 
   async function mas(boton, p) {
@@ -337,7 +376,9 @@
     if (p.tiene_foto) opciones.unshift(['foto', '📷 Ver foto de entrega']); // 3.1.3
     if (p.clave_seguimiento && p.estado !== 'Anulado') opciones.push(['copiar', '🔗 Copiar enlace de seguimiento']);
     if (dom && !cerrado) opciones.push(['mapa', '🗺️ Ver en el mapa · ' + UI.fuenteUbicacion(p).replace(/^\S+\s/, '')], ['pedir_ubic', '📍 Pedir ubicación por WhatsApp'], ['ubicacion', '📋 Pegar ubicación que mandó']);
-    if (dom && (p.estado === 'Recibido' || p.estado === 'Preparando')) opciones.push(['asignar', '🛵 ' + (p.motorizado_id ? 'Cambiar' : 'Asignar') + ' motorizado']);
+    if (dom && (p.estado === 'Recibido' || p.estado === 'Preparando' || p.estado === 'En camino')) opciones.push(['asignar', '🛵 ' + (p.motorizado_id ? 'Cambiar' : 'Asignar') + ' motorizado']);
+    if (p.estado === 'En camino') opciones.push(['regresar', '↩️ Regresó al local']);
+    opciones.push(['imprimir', '🖨️ Imprimir comanda']);
     if (p.motorizado && !cerrado) opciones.push(['wa_moto', '💬 WhatsApp al motorizado']);
     if (UI.esDigital(p.forma_pago) && !cerrado) opciones.push(['verificar', p.pago_verificado ? '↩️ Marcar pago sin verificar' : '🏦 Marcar pago verificado']);
     if (UI.esDigital(p.forma_pago) && !p.pago_verificado && p.estado === 'Recibido') opciones.push(['anular_pago', '⛔ Anular: el pago no se acreditó']); // 3.1.5
@@ -347,6 +388,14 @@
       botones: opciones.map(function (o) { return { texto: o[1], valor: o[0], clase: 'borde opcion-lista' + (o[0] === 'anular' ? ' texto-peligro' : '') }; }).concat([{ texto: 'Cerrar', valor: null, clase: 'secundario' }])
     });
     if (!op) return;
+    if (op === 'imprimir') return imprimirComanda(p);
+    if (op === 'regresar') {
+      var motivo = await UI.pedirDato({ icono: '↩️', titulo: 'Regreso de ' + p.numero, etiqueta: 'Motivo del regreso', ph: 'Faltó algo, se derramó, moto dañada…', max: 200, validar: function (v) { return v.trim().length < 3 ? 'Indique el motivo.' : ''; } });
+      if (motivo === null) return;
+      var listo = await guardar(boton, 'pedidoRegresar', { id: p.id, motivo: motivo }, 'Pedido regresó a Preparando.');
+      if (listo && UI.digitos(p.telefono)) UI.abrirWhatsApp(p.telefono, 'Hola ' + p.cliente_nombre + ', tu pedido ' + p.numero + ' tuvo un inconveniente y lo estamos alistando de nuevo. Disculpa la demora. ' + enlaceSeguimiento(p));
+      return;
+    }
     if (op === 'avisar') return UI.abrirWhatsApp(p.telefono, mensajeCliente(p));
     if (op === 'foto') return UI.verFotoEntrega(p.id, p.numero);
     if (op === 'copiar') return UI.copiar(enlaceSeguimiento(p), 'Enlace copiado. Pégalo en el chat del cliente.');
