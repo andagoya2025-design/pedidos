@@ -201,6 +201,7 @@
       try { global.history.replaceState(null, '', global.location.pathname); } catch (e) { /* sin historial */ }
       traerMisPedidos(cc).then(function () { pintarSeguimiento(true); });
     } else pintarSeguimiento();
+    iniciarRelojSeguimiento();
     if (localId) pintarMenu(); else pintarLocales();
   }
 
@@ -922,6 +923,24 @@
       UI.ventana({ icono: '💾', titulo: 'Guardar el QR', html: '<img src="' + UI.esc(url) + '" alt="QR de Deuna" referrerpolicy="no-referrer" style="width:220px;max-width:100%;display:block;margin:0 auto 10px">' +
         '<p><b>Mantén presionado el QR</b> y elige «Guardar imagen» (o «Agregar a Fotos»). Luego en Deuna: Escanear → Galería.</p>', botones: [{ texto: 'Listo', valor: true }] });
     }
+  }
+
+  /* Fase 1: seguimiento sincronizado con el estado CONFIRMADO por Apps Script.
+   * No se intenta enviar mensajes de WhatsApp ni modificar pedidos desde aquí.
+   * Consulta cada 60 segundos solo con la pantalla visible y conexión. */
+  var relojSeguimiento = null, sincronizandoSeguimiento = false;
+  function refrescarSeguimientoAutomatico() {
+    if (sincronizandoSeguimiento || !M || document.hidden || (global.navigator && global.navigator.onLine === false) || !misPedidos().some(activo)) return;
+    sincronizandoSeguimiento = true;
+    pintarSeguimiento(false).catch(function () { /* conserva el aviso de reintento de la pantalla */ }).then(function () {
+      sincronizandoSeguimiento = false;
+    }, function () { sincronizandoSeguimiento = false; });
+  }
+  function iniciarRelojSeguimiento() {
+    if (relojSeguimiento) return;
+    relojSeguimiento = global.setInterval(refrescarSeguimientoAutomatico, 60000);
+    document.addEventListener('visibilitychange', function () { if (!document.hidden) refrescarSeguimientoAutomatico(); });
+    global.addEventListener('online', refrescarSeguimientoAutomatico);
   }
 
   /* ---------------- 3.1.5: «Mis pedidos» del cliente (guardado liviano en su teléfono) ---------------- */
