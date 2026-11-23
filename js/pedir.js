@@ -956,8 +956,14 @@
           var grupo = conClave.slice(lote, lote + 10);
           try {
             var r = await DATOS.pedir('pedidosSeguir', { s: grupo.map(function (x) { return x.s; }) });
-            grupo.forEach(function (x, k) {
-              res[x.n] = r.pedidos && r.pedidos[k] ? r.pedidos[k] : { consulta_error: true };
+            // Asociar por clave y no por posición: una respuesta parcial no puede
+            // mostrar el pedido de otro cliente en esta pantalla.
+            var porClave = {};
+            (Array.isArray(r.pedidos) ? r.pedidos : []).forEach(function (p) {
+              if (p && p.seguimiento) porClave[String(p.seguimiento)] = p;
+            });
+            grupo.forEach(function (x) {
+              res[x.n] = porClave[String(x.s)] || { consulta_error: true };
             });
           } catch (e) {
             grupo.forEach(function (x) { res[x.n] = { consulta_error: true }; });
