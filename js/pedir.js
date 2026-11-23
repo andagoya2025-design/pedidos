@@ -997,7 +997,16 @@
     UI.$$('[data-seg-act]', cont).forEach(function (b) { b.addEventListener('click', function (e) { UI.trabajando(e.currentTarget, function () { return pintarSeguimiento(true); }); }); });
     UI.$$('[data-calificar]', cont).forEach(function (b) { b.addEventListener('click', function () { var x = lista.filter(function (y) { return y.n === b.getAttribute('data-calificar'); })[0]; if (x) calificar({ numero: x.n, telefono: x.tel || (MEM.leer('cliente') || {}).telefono || '', s: x.s }); }); });
     UI.$$('[data-comprobante]', cont).forEach(function (b) { b.addEventListener('click', function () { var p = res[b.getAttribute('data-comprobante')]; if (p) UI.abrirWhatsApp(cfg().whatsapp, 'Hola, envío el comprobante del pedido *' + p.numero + '* por ' + UI.dinero(p.total) + (p.cuenta_pago ? ' (a ' + p.cuenta_pago + ')' : '') + '. 👇'); }); });
-    UI.$$('[data-escribir]', cont).forEach(function (b) { b.addEventListener('click', function () { UI.abrirWhatsApp(cfg().whatsapp, 'Hola, sobre mi pedido *' + b.getAttribute('data-escribir') + '*: '); }); });
+    UI.$('[data-escribir]', cont).forEach(function (b) { b.addEventListener('click', function () {
+      var numero = b.getAttribute('data-escribir');
+      var pedido = res[numero];
+      var estado = pedido && pedido.estado || (lista.filter(function (x) { return x.n === numero; })[0] || {}).e;
+      var texto = estado === 'Recibido' ? 'Quisiera consultar si todavía puedo modificar mi pedido antes de que empiecen a prepararlo.' :
+        estado === 'Preparando' ? 'Quisiera consultar disponibilidad, precio y tiempo para agregar productos sin quitar los que ya están preparando.' :
+        estado === 'En camino' ? 'Quisiera consultar cómo hacer un pedido adicional con otro envío o retiro, sin hacer regresar al motorizado.' :
+        'Quisiera consultar una duda sobre mi pedido.';
+      UI.abrirWhatsApp(cfg().whatsapp, 'Hola, sobre mi pedido *' + numero + '* (' + (estado || 'estado pendiente') + '): ' + texto + ' Entiendo que cualquier cambio requiere confirmación del restaurante.');
+    }); });
     UI.$$('[data-repetir]', cont).forEach(function (b) { b.addEventListener('click', function () { var x = lista.filter(function (y) { return y.n === b.getAttribute('data-repetir'); })[0]; repetirDe(x); }); });
     var bb = $('#mp-borrar'); if (bb) bb.addEventListener('click', async function () {
       var ok = await UI.confirmar('¿Borrar tu historial?', 'Se borra la lista de pedidos de este teléfono. Tus pedidos ya hechos no se cancelan.', 'Sí, borrar', true);
@@ -1031,7 +1040,7 @@
             r.estado === 'En camino' ? (r.eta_moto ? '<b>Llega en unos ' + r.eta_moto.desde + ' a ' + r.eta_moto.hasta + ' min.</b> Tiempo orientativo; puede variar.' : (r.en_camino ? 'Salió hace ' + UI.minutosDesde(r.en_camino) + ' min. ' + (UI.minutosDesde(r.en_camino) > (Number(cfg().minutos_preparacion) || 20) + 30 ? 'Hay más tráfico de lo normal; seguimos atentos a tu entrega.' : 'Te avisaremos si hay cambios.') : 'Pronto estará en camino.')) :
             'Tiempo aproximado: <b>' + ((Number(r.tiempo_preparacion) || 20) + (Number(r.tiempo_zona) || 0)) + ' a ' + ((Number(r.tiempo_preparacion) || 20) + (Number(r.tiempo_zona) || 0) + 10) + ' min.</b> Puede variar') + '</p>' : '')) +
       (digital ? (r.pago_verificado
-        ? '<div class="pago-estado ok">✅ <span><b>Pago confirmado en nuestra cuenta.</b>' + (r.estado === 'Recibido' ? ' Ya preparamos tu pedido.' : '') + '</span></div>'
+        ? '<div class="pago-estado ok">✅ <span><b>Pago confirmado en nuestra cuenta.</b>' + (r.estado === 'Recibido' ? ' El restaurante ya puede revisar tu pedido.' : '') + '</span></div>'
         : '<div class="pago-estado espera">⏳ <span><b>Pago por confirmar.</b> Tu pedido se prepara cuando confirmemos el pago de <b>' + UI.esc(UI.dinero(r.total)) + '</b> en nuestra cuenta' + (r.cuenta_pago ? ' (' + UI.esc(r.cuenta_pago) + ')' : '') + '. Si pagaste desde otro banco puede tardar un poco.</span></div>' +
           (r.forma_pago === 'transferencia' ? tarjetasCuentasSolo(r) : '') +
           (UI.digitos(cfg().whatsapp) ? '<button class="btn chico bloque" type="button" data-comprobante="' + UI.esc(r.numero) + '" style="margin-top:8px">💬 Enviar comprobante por WhatsApp</button>' : '')) : '') +
