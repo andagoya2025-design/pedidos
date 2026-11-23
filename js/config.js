@@ -13,7 +13,7 @@
   'use strict';
 
   /* ===== ÚNICA LÍNEA A CONFIGURAR EN CADA CLIENTE ===== */
-  var URL_SCRIPT = 'https://script.google.com/macros/s/AKfycbzI4P-BPCPBWjmITTQ9eVHcK26odpjLHYpCMNCRphleF6PFpPGu3sNbtL3dn0Uo-RM/exec';
+  var URL_SCRIPT = ''; // LABORATORIO: use SOLO el Apps Script y Google Sheet de PRUEBAS.
   /* ===================================================== */
 
   function valida(url) {
@@ -28,8 +28,8 @@
   global.APP_CONFIG = Object.freeze({
     url: valida(URL_SCRIPT) ? String(URL_SCRIPT).trim() : '',
     configurada: valida(URL_SCRIPT),
-    versionPantalla: '3.0.0',
-    versionScriptMinima: 30103, // 3.1.3 — si el script es más viejo, no se guarda nada
+    versionPantalla: '3.1.6',
+    versionScriptMinima: 30106, // 3.1.6 — si el script es más viejo, no se guarda nada
     tiempoEsperaMs: 25000
   });
 })(window);
