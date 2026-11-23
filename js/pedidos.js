@@ -9,14 +9,12 @@
   'use strict';
   var UI = global.UI, DATOS = global.DATOS, APP = global.APP;
   var est = { datos: null, motos: [], cargadoEn: 0, verAnulados: false, diaEntregado: '', alertados: {} }; // 3.1.6
-  var secuenciaPanelPedidos = 0;
 
   var COLUMNAS = ['Recibido', 'Preparando', 'En camino', 'Entregado'];
 
   APP.vistas.pedidos = {
     titulo: 'Pedidos', icono: '🧾', orden: 10, roles: ['dueno', 'cajero'],
     pintar: function (cont) {
-      ++secuenciaPanelPedidos;
       est = { datos: null, motos: [], cargadoEn: 0, verAnulados: false, diaEntregado: UI.hoy(), alertados: {} }; // 3.1.6
       var sonido = global.APP_MEMORIA.leer('sonido_pedidos') !== false;
       cont.innerHTML = UI.encabezado('Pedidos', APP.nombreLocal(APP.local),
@@ -41,23 +39,13 @@
 
   function cuerpo() { return UI.$('#pd-cuerpo'); }
 
-  async function cargar(silencioso) {
-    var numeroConsulta = ++secuenciaPanelPedidos;
+  async function cargar() {
     var r = await Promise.allSettled([
       DATOS.pedir('pedidosListar', { local_id: APP.local, dia: est.diaEntregado || UI.hoy() }),
       DATOS.pedir('motorizadosListar', { local_id: APP.local })
     ]);
-    if (numeroConsulta !== secuenciaPanelPedidos || !cuerpo()) return; // evita respuestas viejas / navegación
-    if (r[0].status !== 'fulfilled') {
-      // Si falla la consulta automática se conserva el tablero anterior.
-      if (!silencioso || !est.datos) cuerpo().innerHTML = '<div class="banda error">⚠️ <span>' + UI.esc(r[0].reason.message) + '</span></div>';
-      else if (!UI.$('#pd-sin-conexion')) {
-        var aviso = document.createElement('div'); aviso.className = 'banda aviso'; aviso.id = 'pd-sin-conexion';
-        aviso.textContent = '⚠️ Sin conexión reciente: estos estados pueden estar desactualizados.';
-        cuerpo().insertBefore(aviso, cuerpo().firstChild);
-      }
-      return;
-    }
+    if (!cuerpo()) return; // se cambió de pantalla mientras cargaba
+    if (r[0].status !== 'fulfilled') { cuerpo().innerHTML = '<div class="banda error">⚠️ <span>' + UI.esc(r[0].reason.message) + '</span></div>'; return; }
     est.datos = r[0].value;
     est.motos = r[1].status === 'fulfilled' ? r[1].value.motorizados || [] : [];
     est.cargadoEn = Date.now();
@@ -155,7 +143,6 @@
   function buscar(id) { return est.datos.pedidos.filter(function (p) { return p.id === id; })[0]; }
 
   function reemplazar(nuevo) {
-    ++secuenciaPanelPedidos; // una escritura confirmada tiene prioridad frente a lecturas antiguas
     var lista = est.datos.pedidos;
     for (var i = 0; i < lista.length; i++) if (lista[i].id === nuevo.id) { nuevo.detalle = lista[i].detalle; nuevo.motorizado = est.motos.filter(function (m) { return m.id === nuevo.motorizado_id; })[0] || lista[i].motorizado; lista[i] = nuevo; }
     pintar();
@@ -231,11 +218,8 @@
     if (!ok) return;
     var listo = await guardar(boton, 'pedidoPagoVerificar', { id: p.id, verificado: true }, 'Pago verificado. Ya puede prepararlo.');
     if (listo && UI.digitos(p.telefono)) { // 3.1.5: avisar al cliente que su pago se confirmó en la cuenta
-      var av = await UI.confirmar('¿Avisar a ' + p.cliente_nombre + '?', 'Se abrirá WhatsApp con el aviso de pago confirmado y el enlace de seguimiento. Deberás tocar Enviar.', '💬 Preparar aviso');
-      if (av) {
-        var confirmado = buscar(p.id) || p;
-        UI.abrirWhatsApp(confirmado.telefono, '✅ Hola ' + confirmado.cliente_nombre + ', confirmamos tu pago de ' + UI.dinero(confirmado.total) + ' en nuestra cuenta. Tu pedido ' + confirmado.numero + (confirmado.estado === 'Preparando' ? ' ya está en preparación.' : confirmado.estado === 'En camino' ? ' ya está en camino.' : confirmado.estado === 'Entregado' ? ' ya fue entregado.' : ' sigue como Recibido; te avisaremos cuando comience la preparación.') + '\n👉 Míralo aquí: ' + enlaceSeguimiento(confirmado));
-      }
+      var av = await UI.confirmar('¿Avisar a ' + p.cliente_nombre + '?', 'Le mandamos por WhatsApp que su pago de ' + UI.dinero(p.total) + ' ya se confirmó en la cuenta, con su enlace de seguimiento.', '💬 Avisar al cliente');
+      if (av) UI.abrirWhatsApp(p.telefono, '✅ Hola ' + p.cliente_nombre + ', confirmamos tu pago de ' + UI.dinero(p.total) + ' en nuestra cuenta. Ya estamos preparando tu pedido ' + p.numero + ' 👨‍🍳\n👉 Míralo aquí: ' + enlaceSeguimiento(p));
     }
     return listo;
   }
@@ -253,10 +237,7 @@
       try {
         var r = await DATOS.pedir('pedidosNuevos', {});
         if (ultimaMarca && r.ultimo > ultimaMarca) avisarNuevo();
-        // Fase 1: pedidos que cambia el motorizado también se reflejan en el local.
-        // Al refrescar se consulta el estado real de Sheets, no el último estado local.
-        if (APP.vistaActual === 'pedidos' && est.datos && !document.hidden && Date.now() - est.cargadoEn >= 60000) await cargar(true);
-        else if (APP.vistaActual === 'pedidos' && est.datos) alertarRecibidos();
+      if (APP.vistaActual === 'pedidos' && est.datos) { alertarRecibidos(); pintar(); }
         ultimaMarca = r.ultimo || ultimaMarca;
       } catch (e) { /* sin red: se intenta en la próxima vuelta */ }
       vigia = setTimeout(revisar, 25000);
