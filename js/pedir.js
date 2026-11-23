@@ -988,6 +988,15 @@
         if (cambio2) guardarMisPedidos(lista);
         act = lista.filter(activo); hist = lista.filter(function (x) { return !activo(x); });
       } catch (err) {
+        // Una desconexión NO anula ni cambia el pedido: conservar último estado visible.
+        if (sincronizandoSeguimiento && cont.querySelector('.seg-caja')) {
+          if (!$('#seg-sin-conexion')) {
+            var aviso = document.createElement('div'); aviso.id = 'seg-sin-conexion'; aviso.className = 'banda aviso';
+            aviso.textContent = '⚠️ Sin conexión: se muestra el último estado consultado. Toca Actualizar para comprobarlo.';
+            cont.insertBefore(aviso, cont.firstChild);
+          }
+          return;
+        }
         cont.innerHTML = '<div class="seg-caja"><b>Mis pedidos</b><span class="item-sub">No se pudo consultar ahora. <button class="enlace" type="button" id="seg-act">Reintentar</button></span></div>';
         $('#seg-act').addEventListener('click', function () { pintarSeguimiento(true); });
         return;
