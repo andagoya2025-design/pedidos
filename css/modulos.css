@@ -549,3 +549,12 @@ details.otras-fechas[open] summary { margin-bottom: 10px; }
 .pedir-pie a, .pedir-pie .enlace { color: var(--texto-2); font-weight: 600; }
 .pago-bloqueo { display: flex; gap: 8px; padding: 8px 10px; border-radius: var(--radio); background: color-mix(in srgb, #e9a400 16%, var(--superficie)); font-size: 13px; }
 .pago-bloqueo.tarde { background: color-mix(in srgb, var(--error) 16%, var(--superficie)); }
+
+/* 3.1.6: selector de entregas y controles táctiles sin desbordar pantallas de 320px. */
+.fecha-entregados{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:6px 8px 12px}
+.fecha-entregados input[type=date]{flex:1 1 145px;min-width:0;max-width:100%;font-size:16px}
+.fecha-entregados .btn{min-height:48px}
+@media(max-width:360px){.fecha-entregados{gap:5px;padding:5px}.fecha-entregados input[type=date]{flex-basis:100%;width:100%}}
+
+/* Nuevos controles cómodos en el teléfono. */
+#lo-gps,#zo-gps,#pe-aplicar,[data-pausar]{min-height:48px}
