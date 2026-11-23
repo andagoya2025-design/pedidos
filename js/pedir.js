@@ -963,7 +963,8 @@
               if (p && p.seguimiento) porClave[String(p.seguimiento)] = p;
             });
             grupo.forEach(function (x) {
-              res[x.n] = porClave[String(x.s)] || { consulta_error: true };
+              var encontrado = porClave[String(x.s)];
+              res[x.n] = encontrado && String(encontrado.numero) === String(x.n) ? encontrado : { consulta_error: true };
             });
           } catch (e) {
             grupo.forEach(function (x) { res[x.n] = { consulta_error: true }; });
