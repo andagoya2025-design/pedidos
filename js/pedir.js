@@ -24,6 +24,14 @@
   var carrito = {};             // clave -> { plato, extras:[nombres], cantidad }
   var codigoEnvio = '';         // se crea al confirmar y se reusa hasta que el pedido entra
   var envioPendiente = null;    // carga original inmutable para reintentos tras una respuesta incierta
+  // Solo esta pestaña: recuperar un envío incierto al recargar, con caducidad de 24 h.
+  try {
+    var recuperado = JSON.parse(global.sessionStorage.getItem('mipedido_envio_pendiente') || 'null');
+    if (recuperado && recuperado.fecha && Date.now() - recuperado.fecha < 86400000 && recuperado.datos && recuperado.datos.op_id) {
+      envioPendiente = recuperado.datos;
+      codigoEnvio = envioPendiente.op_id;
+    } else global.sessionStorage.removeItem('mipedido_envio_pendiente');
+  } catch (e) { /* almacenamiento bloqueado: continuar sin persistencia */ }
   var ubic = null;              // { lat, lng, precision, fuente:'gps'|'enlace', enlace }
   var mapa = null;
   var paso = 1;
@@ -852,7 +860,10 @@
     // Si la respuesta anterior se perdió, reintentar exactamente la misma carga.
     // Nunca reutilizar un op_id con platos, importes o dirección distintos.
     if (envioPendiente) datos = envioPendiente;
-    else envioPendiente = JSON.parse(JSON.stringify(datos));
+    else {
+      envioPendiente = JSON.parse(JSON.stringify(datos));
+      try { global.sessionStorage.setItem('mipedido_envio_pendiente', JSON.stringify({ fecha: Date.now(), datos: envioPendiente })); } catch (e) { /* sin almacenamiento */ }
+    }
     await UI.trabajando(boton, async function () {
       try {
         var r = await DATOS.pedir('pedidoCrear', datos, { guardar: true });
@@ -862,6 +873,7 @@
         var detalle = items();
         r.pedido.ubic_por_wa = !!(ubic && ubic.fuente === 'whatsapp'); // 3.1.1: solo entonces se pide la ubicación por WhatsApp
         carrito = {}; codigoEnvio = ''; envioPendiente = null; ubic = null; pago.propina = 0;
+        try { global.sessionStorage.removeItem('mipedido_envio_pendiente'); } catch (e) { /* sin almacenamiento */ }
         UI.vibrar([30, 40, 30]);
         pintarExito(r.pedido, detalle);
       } catch (err) {
