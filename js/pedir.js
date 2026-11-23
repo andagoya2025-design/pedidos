@@ -716,6 +716,7 @@
       : entrega.tipo === 'mesa' ? '🍽️ Mesa ' + UI.esc(entrega.mesa) : '🏪 Retiro en ' + UI.esc(local().nombre);
     cuerpo().innerHTML = pasos() +
       '<h2 class="paso-titulo">Revisa y confirma</h2>' +
+      (envioPendiente ? '<div class="banda aviso-cerrado" role="alert">⚠️ <span><b>Envío anterior sin confirmar.</b> Al pulsar enviar se reintentará exactamente el pedido original, no los cambios posteriores del carrito. No hagas otro pedido hasta verificar el resultado.</span></div>' : '') +
       '<div class="tarjeta" id="resumen-items"></div>' +
       (mensajeMinimo() ? '<div class="banda">⚠️ <span>' + UI.esc(mensajeMinimo()) + '</span></div>' : '') +
       (mensajeCobertura() ? '<div class="banda">⚠️ <span>' + UI.esc(mensajeCobertura()) + ' Puedes corregirla o seguir con tu pedido.</span></div>' : '') +
@@ -837,7 +838,7 @@
     if (pago.forma === 'transferencia' && cuentasBanco().length > 1 && !pago.cuenta) { UI.aviso('Elige a qué cuenta vas a pagar.', 'error'); var cb = UI.$('.cuentas'); if (cb) cb.scrollIntoView({ block: 'center' }); return; }
     MEM.guardar('acepta_politicas', true);
     MEM.guardar('acepta_privacidad', true); MEM.guardar('acepta_promos', !!(promos && promos.checked));
-    if (!codigoEnvio) codigoEnvio = UI.codigoEnvio();
+    if (!codigoEnvio) codigoEnvio = envioPendiente ? envioPendiente.op_id : UI.codigoEnvio();
     var dom = entrega.tipo === 'domicilio';
     var datos = {
       op_id: codigoEnvio, local_id: localId, tipo_entrega: entrega.tipo, zona_id: dom ? entrega.zona : '', mesa: entrega.tipo === 'mesa' ? entrega.mesa : '',
