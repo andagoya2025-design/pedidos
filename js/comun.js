@@ -66,6 +66,28 @@
     try { return new Intl.DateTimeFormat('en-CA', { timeZone: UI.zona, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); } catch (e) { return new Date().toISOString().slice(0, 10); }
   };
 
+
+  /* 3.1.7: misma regla de telefonía del servidor para avisar antes de enviar. */
+  UI.telefonoInternacional = function (valor, pais) {
+    var original = String(valor == null ? '' : valor).trim();
+    if (!original || !/^\+?[0-9\s().-]+$/.test(original)) throw new Error('Escribe un número de celular válido.');
+    var digitos = original.replace(/\D/g, '');
+    pais = String(pais == null ? '593' : pais).replace(/\D/g, '');
+    if (original.charAt(0) === '+' || digitos.slice(0, 2) === '00') {
+      if (original.charAt(0) !== '+') digitos = digitos.slice(2);
+      if (!/^[1-9]\d{7,14}$/.test(digitos) || (digitos.charAt(0) === '1' && digitos.length !== 11)) throw new Error('Revisa el número internacional (EE. UU.: 10 dígitos después de +1).');
+      return '+' + digitos;
+    }
+    if (!/^[1-9]\d{0,2}$/.test(pais)) throw new Error('Revisa el código de país.');
+    if (digitos.indexOf(pais) === 0 && digitos.length > pais.length + 6) {
+      if (digitos.length > 15 || (pais === '1' && digitos.length !== 11)) throw new Error('Revisa el número de teléfono.');
+      return '+' + digitos;
+    }
+    if (digitos.charAt(0) === '0') digitos = digitos.slice(1);
+    if (digitos.length < 7 || pais.length + digitos.length > 15 || (pais === '1' && digitos.length !== 10)) throw new Error('Revisa el número (EE. UU.: 10 dígitos).');
+    return '+' + pais + digitos;
+  };
+
   /* Solo dígitos para wa.me / tel: ("+593 99..." -> "59399...") */
   UI.digitos = function (tel) { return String(tel || '').replace(/\D/g, ''); };
 
