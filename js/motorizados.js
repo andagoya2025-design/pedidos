@@ -229,6 +229,16 @@
 
   /* =================== Mis entregas (motorizado) =================== */
   var mias = null;
+  var timerEntregas = null, consultandoEntregas = false;
+  function programarActualizacionEntregas() {
+    if (timerEntregas) clearTimeout(timerEntregas);
+    timerEntregas = setTimeout(function () {
+      timerEntregas = null;
+      if (APP.vistaActual !== 'entregas' || !APP.sesion || APP.sesion.rol !== 'motorizado') return;
+      if (document.visibilityState === 'visible') cargarMias(true);
+      programarActualizacionEntregas();
+    }, 30000);
+  }
 
   APP.vistas.entregas = {
     titulo: 'Mis entregas', icono: '📍', orden: 10, roles: ['motorizado'],
@@ -236,15 +246,24 @@
       cont.innerHTML = UI.encabezado('Mis entregas', 'Toque «Salí» al salir y «Entregado» al entregar') + '<div id="en-cuerpo">' + UI.esqueleto(3) + '</div>';
       UI.$('[data-actualizar]', cont).addEventListener('click', function (e) { UI.trabajando(e.currentTarget, cargarMias); });
       cargarMias();
+      programarActualizacionEntregas();
     }
   };
 
-  async function cargarMias() {
+  async function cargarMias(silencioso) {
+    if (consultandoEntregas) return;
+    consultandoEntregas = true;
     try {
-      mias = await DATOS.pedir('misEntregas', {});
-      pintarMias();
+      var nuevos = await DATOS.pedir('misEntregas', {});
+      if (APP.vistaActual !== 'entregas') return;
+      if (!silencioso || !mias || JSON.stringify(nuevos) !== JSON.stringify(mias)) {
+        mias = nuevos;
+        pintarMias();
+      }
     } catch (err) {
-      if (UI.$('#en-cuerpo')) UI.$('#en-cuerpo').innerHTML = '<div class="banda error">⚠️ <span>' + UI.esc(err.message) + '</span></div>';
+      if (!silencioso && !mias && UI.$('#en-cuerpo')) UI.$('#en-cuerpo').innerHTML = '<div class="banda error">⚠️ <span>' + UI.esc(err.message) + '</span></div>';
+    } finally {
+      consultandoEntregas = false;
     }
   }
 
