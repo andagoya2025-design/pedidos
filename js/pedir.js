@@ -860,7 +860,7 @@
         pintarExito(r.pedido, detalle);
       } catch (err) {
         // El código de envío se conserva: si vuelve a intentar, no se duplica.
-        UI.ventana({ icono: '⚠️', titulo: 'Tu pedido no se envió', texto: err.message, botones: [{ texto: 'Entendido', valor: true }] });
+        UI.ventana({ icono: '⚠️', titulo: 'No pudimos confirmar el envío', texto: 'No sabemos si el pedido llegó al restaurante. No hagas otro pedido todavía. Puedes reintentar con el mismo código sin duplicarlo. Detalle: ' + err.message, botones: [{ texto: 'Entendido', valor: true }] });
       }
     });
   }
@@ -955,12 +955,12 @@
         r.pedidos.forEach(function (p, k) { res[conClave[k].n] = p; });
         for (var j = 0; j < act.length; j++) { // pedidos viejos sin clave: número + celular
           var x = act[j]; if (x.s || res[x.n]) continue;
-          try { res[x.n] = await DATOS.pedir('pedidoConsultar', { numero: x.n, telefono: x.tel || (MEM.leer('cliente') || {}).telefono || '' }); } catch (e) { res[x.n] = { no_existe: true }; }
+          try { res[x.n] = await DATOS.pedir('pedidoConsultar', { numero: x.n, telefono: x.tel || (MEM.leer('cliente') || {}).telefono || '' }); } catch (e) { res[x.n] = { consulta_error: true }; }
         }
         var cambio2 = false;
         lista.forEach(function (x) {
           var p = res[x.n]; if (!p) return;
-          if (p.no_existe) { x.e = 'Anulado'; cambio2 = true; return; }
+          if (p.no_existe || p.consulta_error) { return; }
           if (p.estado !== x.e) { x.e = p.estado; if (p.estado === 'Entregado') x.fe = Date.now(); cambio2 = true; }
           if (p.total && !x.t) { x.t = p.total; cambio2 = true; }
           if (p.seguimiento && !x.s) { x.s = p.seguimiento; cambio2 = true; }
@@ -974,7 +974,7 @@
         return;
       }
     }
-    cont.innerHTML = act.map(function (x) { return res[x.n] && !res[x.n].no_existe ? tarjetaSeguimiento(res[x.n], x) : ''; }).join('') +
+    cont.innerHTML = act.map(function (x) { return res[x.n] && !res[x.n].no_existe && !res[x.n].consulta_error ? tarjetaSeguimiento(res[x.n], x) : '<div class="seg-caja"><b>' + UI.esc(x.n) + '</b><div class="item-sub">No se pudo actualizar el estado. Conservamos el último estado conocido: ' + UI.esc(x.e) + '.</div><button class="enlace" type="button" data-seg-act>Reintentar</button></div>'; }).join('') +
       (hist.length ? '<details class="seg-caja mis-pedidos"' + (act.length ? '' : ' open') + '><summary><b>🧾 Mis pedidos anteriores</b> <small>(' + hist.length + ')</small></summary>' +
         '<div class="lista">' + hist.map(function (x) {
           var fecha = new Date(x.f || Date.now());
