@@ -45,7 +45,11 @@
       DATOS.pedir('motorizadosListar', { local_id: APP.local })
     ]);
     if (!cuerpo()) return; // se cambió de pantalla mientras cargaba
-    if (r[0].status !== 'fulfilled') { cuerpo().innerHTML = '<div class="banda error">⚠️ <span>' + UI.esc(r[0].reason.message) + '</span></div>'; return; }
+    if (r[0].status !== 'fulfilled') {
+      // No borrar el tablero válido por una interrupción temporal de red.
+      if (!est.datos) cuerpo().innerHTML = '<div class="banda error">⚠️ <span>' + UI.esc(r[0].reason.message) + '</span></div>';
+      return;
+    }
     est.datos = r[0].value;
     est.motos = r[1].status === 'fulfilled' ? r[1].value.motorizados || [] : [];
     est.cargadoEn = Date.now();
