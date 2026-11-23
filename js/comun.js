@@ -28,6 +28,31 @@
     if (isNaN(d.getTime())) return '';
     try { return new Intl.DateTimeFormat('es-EC', { timeZone: UI.zona, hour: '2-digit', minute: '2-digit', hour12: UI.hora12() }).format(d); } catch (e) { return d.toTimeString().slice(0, 5); }
   };
+  /* 3.1.6: fechas comerciales según zona configurada (sin cambiar el día contable). */
+  UI.fechaLocal = function (iso) {
+    if (!iso) return '';
+    var d = new Date(iso); if (isNaN(d.getTime())) return '';
+    try {
+      var parts = new Intl.DateTimeFormat('en-US', { timeZone: UI.zona, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(d);
+      var obj = {}; parts.forEach(function (p) { obj[p.type] = p.value; });
+      return obj.year + '-' + obj.month + '-' + obj.day;
+    } catch (e) { return d.toISOString().slice(0, 10); }
+  };
+  UI.ventanaHora = function (inicio, fin, min) {
+    if (!inicio) return '';
+    var ini = new Date(inicio); if (isNaN(ini.getTime())) return '';
+    var final = fin && !isNaN(new Date(fin).getTime()) ? new Date(fin) : new Date(ini.getTime() + (Number(min) || 30) * 60000);
+    return 'Entre ' + UI.hora(ini.toISOString()) + ' y ' + UI.hora(final.toISOString());
+  };
+  UI.haversineKm = function (a, b) {
+    if (!a || !b || a.lat === '' || a.lng === '' || b.lat === '' || b.lng === '' || a.lat == null || a.lng == null || b.lat == null || b.lng == null) return null;
+    var c = [Number(a.lat), Number(a.lng), Number(b.lat), Number(b.lng)];
+    if (c.some(function (x) { return !isFinite(x); })) return null;
+    var rad = Math.PI / 180, p = (c[2] - c[0]) * rad, q = (c[3] - c[1]) * rad;
+    var v = Math.pow(Math.sin(p / 2), 2) + Math.cos(c[0] * rad) * Math.cos(c[2] * rad) * Math.pow(Math.sin(q / 2), 2);
+    return Math.round(6371 * 2 * Math.atan2(Math.sqrt(v), Math.sqrt(Math.max(0, 1 - v))) * 10) / 10;
+  };
+
   /* 3.1: horas en 12 h (a. m./p. m.) si el dueño lo eligió en los ajustes. */
   UI.hora12 = function () { var p = (global.APP && global.APP.publico) || global.__cfgPublica || {}; return String(p.formato_hora) === '12'; };
 
@@ -39,6 +64,28 @@
   /* Hoy (aaaa-mm-dd) en la zona del negocio. */
   UI.hoy = function () {
     try { return new Intl.DateTimeFormat('en-CA', { timeZone: UI.zona, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); } catch (e) { return new Date().toISOString().slice(0, 10); }
+  };
+
+
+  /* 3.1.7: misma regla de telefonía del servidor para avisar antes de enviar. */
+  UI.telefonoInternacional = function (valor, pais) {
+    var original = String(valor == null ? '' : valor).trim();
+    if (!original || !/^\+?[0-9\s().-]+$/.test(original)) throw new Error('Escribe un número de celular válido.');
+    var digitos = original.replace(/\D/g, '');
+    pais = String(pais == null ? '593' : pais).replace(/\D/g, '');
+    if (original.charAt(0) === '+' || digitos.slice(0, 2) === '00') {
+      if (original.charAt(0) !== '+') digitos = digitos.slice(2);
+      if (!/^[1-9]\d{7,14}$/.test(digitos) || (digitos.charAt(0) === '1' && digitos.length !== 11)) throw new Error('Revisa el número internacional (EE. UU.: 10 dígitos después de +1).');
+      return '+' + digitos;
+    }
+    if (!/^[1-9]\d{0,2}$/.test(pais)) throw new Error('Revisa el código de país.');
+    if (digitos.indexOf(pais) === 0 && digitos.length > pais.length + 6) {
+      if (digitos.length > 15 || (pais === '1' && digitos.length !== 11)) throw new Error('Revisa el número de teléfono.');
+      return '+' + digitos;
+    }
+    if (digitos.charAt(0) === '0') digitos = digitos.slice(1);
+    if (digitos.length < 7 || pais.length + digitos.length > 15 || (pais === '1' && digitos.length !== 10)) throw new Error('Revisa el número (EE. UU.: 10 dígitos).');
+    return '+' + pais + digitos;
   };
 
   /* Solo dígitos para wa.me / tel: ("+593 99..." -> "59399...") */
@@ -106,7 +153,7 @@
   UI.etiquetaTipo = function (p) {
     var t = UI.tipoEntrega(p), d = UI.TIPOS[t] || UI.TIPOS.retiro;
     return '<span class="chip-tipo tipo-' + t + '">' + d.icono + ' ' + (t === 'mesa' && p.mesa ? 'Mesa ' + UI.esc(p.mesa) : d.nombre) + '</span>' +
-      (p.hora_llegada ? '<span class="chip-tipo tipo-hora">⏰ ' + UI.esc(UI.hora(p.hora_llegada)) + '</span>' : '');
+      (p.hora_llegada ? '<span class="chip-tipo tipo-hora">⏰ ' + UI.esc(UI.ventanaHora(p.hora_llegada, p.hora_ventana_fin, Number(global.APP && global.APP.publico && global.APP.publico.ventana_minutos) || 30)) + ' aprox.</span>' : '');
   };
   UI.NOMBRE_PAGO = { efectivo: '💵 Efectivo', transferencia: '🏦 Transferencia', deuna: '📲 Deuna' };
   UI.esDigital = function (f) { return f === 'transferencia' || f === 'deuna'; };

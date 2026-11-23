@@ -146,6 +146,10 @@
       '<div class="tarjeta" style="margin-top:14px"><h3 style="margin-top:0">Diferencias de caja por cajero</h3>' + (r.cajeros.length ?
         '<table class="tabla"><thead><tr><th>Cajero</th><th class="n">Cierres</th><th class="n">Diferencia</th></tr></thead><tbody>' +
         r.cajeros.map(function (c) { return '<tr><td data-r="Cajero"><b>' + UI.esc(c.nombre) + '</b></td><td class="n" data-r="Cierres">' + c.cierres + '</td><td class="n" data-r="Diferencia">' + signo(c.diferencia) + '</td></tr>'; }).join('') +
-        '</tbody></table>' : '<p class="subtitulo">No hay cierres de caja en estas fechas.</p>') + '</div>';
+        '</tbody></table>' : '<p class="subtitulo">No hay cierres de caja en estas fechas.</p>') + '</div>' +
+      '<div class="tarjeta" style="margin-top:14px"><h3 style="margin-top:0">⛔ Anulaciones por motivo, local y responsable</h3>' +
+      ((r.anulaciones || []).length ? '<div class="lista">' + r.anulaciones.map(function (a) { return '<div class="item"><div class="item-cuerpo"><b>' + UI.esc(a.motivo) + '</b><div class="item-sub">' + UI.esc(a.local) + ' · Anuló: ' + UI.esc(a.cajero) + ' · Motorizado: ' + UI.esc(a.motorizado) + '</div></div><b>' + Number(a.cantidad) + '</b></div>'; }).join('') + '</div>' : '<p class="subtitulo">No hay anulaciones en estas fechas.</p>') + '</div>' +
+      '<div class="tarjeta" style="margin-top:14px"><h3 style="margin-top:0">⏱️ Tiempo real de entregas</h3><p class="ayuda">Promedio desde Recibido hasta Entregado frente a la preparación y el tiempo configurado de zona. Son estimaciones, no promesas.</p>' +
+      ((r.tiempos_reales || []).length ? '<div class="lista">' + r.tiempos_reales.map(function (t) { return '<div class="item"><div class="item-cuerpo"><b>' + UI.esc(t.tipo) + ': ' + UI.esc(t.nombre) + '</b><div class="item-sub">' + Number(t.cantidad) + ' entregas · Real: ' + Number(t.real) + ' min · Configurado: ' + Number(t.previsto) + ' min</div></div></div>'; }).join('') + '</div>' : '<p class="subtitulo">Todavía no hay entregas suficientes.</p>') + '</div>';
   }
 })(window);

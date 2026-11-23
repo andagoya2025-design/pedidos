@@ -18,8 +18,8 @@
  * ============================================================
  */
 
-var APP_VERSION = '3.1.5';
-var APP_VERSION_NUM = 30105; // 3.1.0 -> 30100 (la pantalla compara con su mínimo)
+var APP_VERSION = '3.1.7';
+var APP_VERSION_NUM = 30107; // 3.1.0 -> 30100 (la pantalla compara con su mínimo)
 var SESION_SEGUNDOS = 21600;  // 6 h; se renueva con cada uso
 var ROLES = ['dueno', 'cajero', 'motorizado'];
 
@@ -30,7 +30,7 @@ var ROLES = ['dueno', 'cajero', 'motorizado'];
  * ============================================================ */
 var HOJAS = {
   configuracion: [['clave', 't'], ['valor', 't'], ['actualizado', 'd'], ['actualizado_por', 't']],
-  locales: [['id', 't'], ['nombre', 't'], ['direccion', 't'], ['telefono', 't'], ['activo', 'b'], ['creado', 'd'], ['creado_por', 't']],
+  locales: [['id', 't'], ['nombre', 't'], ['direccion', 't'], ['telefono', 't'], ['activo', 'b'], ['creado', 'd'], ['creado_por', 't'], /* 3.1.6 */ ['lat', 'n'], ['lng', 'n'], ['pausado', 'b'], ['mensaje_pausa', 't'], ['minimo_domicilio', 'm']],
   categorias: [['id', 't'], ['local_id', 't'], ['nombre', 't'], ['orden', 'n'], ['activo', 'b'], ['creado', 'd']],
   platos: [['id', 't'], ['local_id', 't'], ['categoria_id', 't'], ['nombre', 't'], ['descripcion', 't'], ['precio', 'm'], ['foto_url', 't'], ['extras_json', 't'], ['agotado', 'b'], ['activo', 'b'], ['creado', 'd'],
     /* 3.0 */ ['etiquetas', 't'], ['sugerido', 'b']],
@@ -39,7 +39,8 @@ var HOJAS = {
     /* 3.0 (agregadas al final) */ ['tipo_entrega', 't'], ['mesa', 't'], ['hora_llegada', 'd'], ['origen', 't'], ['propina', 'm'], ['base_iva', 'm'], ['iva', 'm'], ['ubicacion_fuente', 't'], ['cliente_nuevo', 'b'], ['calificacion', 'n'], ['comentario', 't'], ['premio', 'm'], ['disp_id', 't'],
     /* 3.1 */ ['codigo_entrega', 't'], ['ultima_senal', 'd'],
     /* 3.1.3 */ ['clave_seguimiento', 't'],
-    /* 3.1.5 */ ['cuenta_pago', 't'], ['pago_verificado_fecha', 'd']],
+    /* 3.1.5 */ ['cuenta_pago', 't'], ['pago_verificado_fecha', 'd'],
+    /* 3.1.6 */ ['distancia_km', 'n'], ['hora_ventana_fin', 'd'], ['incidencia_motivo', 't'], ['anulado_por', 't']],
   pedido_detalle: [['id', 't'], ['pedido_id', 't'], ['plato_id', 't'], ['nombre', 't'], ['precio', 'm'], ['cantidad', 'n'], ['extras', 't'], ['total_linea', 'm']],
   clientes: [['id', 't'], ['telefono', 't'], ['nombre', 't'], ['direccion', 't'], ['referencia', 't'], ['lat', 'n'], ['lng', 'n'], ['pedidos', 'n'], ['total_gastado', 'm'], ['ultimo_pedido', 'd'], ['creado', 'd'],
     /* 3.0 */ ['entregados', 'n'], ['sellos', 'n'],
@@ -55,10 +56,10 @@ var HOJAS = {
   caja: [['id', 't'], ['local_id', 't'], ['dia_trabajo', 'f'], ['apertura', 'd'], ['fondo', 'm'], ['abierta_por', 't'], ['cierre', 'd'], ['esperado', 'm'], ['contado', 'm'], ['diferencia', 'm'], ['cerrada_por', 't'], ['estado', 't']],
   usuarios: [['id', 't'], ['usuario', 't'], ['nombre', 't'], ['rol', 't'], ['local_id', 't'], ['hash', 't'], ['sal', 't'], ['activo', 'b'], ['creado', 'd'], ['ultimo_acceso', 'd']],
   bitacora: [['fecha', 'd'], ['usuario', 't'], ['rol', 't'], ['local_id', 't'], ['modulo', 't'], ['accion', 't'], ['detalle', 't'], ['dispositivo', 't']],
-  zonas_envio: [['id', 't'], ['local_id', 't'], ['nombre', 't'], ['costo', 'm'], ['minutos', 'n'], ['activo', 'b'], ['creado', 'd']],
+  zonas_envio: [['id', 't'], ['local_id', 't'], ['nombre', 't'], ['costo', 'm'], ['minutos', 'n'], ['activo', 'b'], ['creado', 'd'], /* 3.1.6 */ ['lat', 'n'], ['lng', 'n'], ['radio_km', 'n'], ['minimo_domicilio', 'm']],
   caja_movimientos: [['id', 't'], ['caja_id', 't'], ['fecha', 'd'], ['tipo', 't'], ['monto', 'm'], ['forma', 't'], ['motivo', 't'], ['pedido_id', 't'], ['motorizado_id', 't'], ['usuario', 't']],
   liquidaciones_motorizado: [['id', 't'], ['caja_id', 't'], ['motorizado_id', 't'], ['fecha', 'd'], ['fondo', 'm'], ['efectivo_cobrado', 'm'], ['entregado', 'm'], ['diferencia', 'm'], ['recibido_por', 't']],
-  cupones: [['id', 't'], ['codigo', 't'], ['tipo', 't'], ['valor', 'n'], ['vence', 'f'], ['usos_max', 'n'], ['usos', 'n'], ['activo', 'b'], ['creado', 'd']],
+  cupones: [['id', 't'], ['codigo', 't'], ['tipo', 't'], ['valor', 'n'], ['vence', 'f'], ['usos_max', 'n'], ['usos', 'n'], ['activo', 'b'], ['creado', 'd'], /* 3.1.6 */ ['local_id', 't'], ['un_uso_cliente', 'b'], ['compra_minima', 'm']],
   /* 3.1: hojas nuevas (el instalador y asegurarHojas_ las crean solas) */
   turnos: [['id', 't'], ['motorizado_id', 't'], ['dia_trabajo', 'f'], ['inicio', 'd'], ['fin', 'd'], ['inicio_lat', 'n'], ['inicio_lng', 'n'], ['fin_lat', 'n'], ['fin_lng', 'n']],
   rastreo: [['id', 't'], ['pedido_id', 't'], ['motorizado_id', 't'], ['fecha', 'd'], ['lat', 'n'], ['lng', 'n'], ['precision', 'n']]
@@ -120,14 +121,18 @@ var CONFIG_DEFECTO = {
   minutos_alerta_pago: '30',   // aviso en el panel si el pago lleva más de N minutos sin verificar
   dias_historial_cliente: '30', // días que el teléfono del cliente guarda su historial de pedidos
   anos_limpieza_clientes: '2', // años sin pedir → se borran solos los datos personales del cliente (0 = nunca)
-  politicas_texto: ''          // «Cómo funciona tu pedido» (vacío = texto por defecto)
+  politicas_texto: '',         // «Cómo funciona tu pedido»
+  /* 3.1.6 */
+  cobertura_km: '', cobertura_modo: 'avisar', permitir_programar: 'NO', ventana_minutos: '30',
+  velocidad_moto_kmh: '20', minutos_alerta_pedido: '15', recibir_cerrado: 'SI'
 };
 
 /* Campos de configuración que puede ver cualquiera (sin sesión). */
 var CONFIG_PUBLICA = ['minutos_alerta_pago', 'anos_limpieza_clientes', 'negocio_nombre', 'logo_url', 'color_primario', 'color_acento', 'whatsapp', 'pais_codigo', 'ciudad', 'moneda', 'zona_horaria', 'mensaje_bienvenida',
   /* 3.0 */ 'horario_apertura', 'horario_cierre', 'dias_cerrado', 'deuna_qr_url', 'fidelidad_sellos', 'fidelidad_descuento', 'propinas', 'mesas', 'verificar_antes_salir', 'precios_incluyen_iva', 'codigo_entrega', 'privacidad_texto', 'formato_hora',
   /* 3.1.3 */ 'efectivo_permitido', 'efectivo_maximo', 'red_instagram', 'red_facebook', 'red_tiktok', 'pagina_web',
-  /* 3.1.5 */ 'iva_porcentaje', 'cuentas_bancarias', 'verificar_antes_preparar', 'dias_historial_cliente', 'politicas_texto'];
+  /* 3.1.5 */ 'iva_porcentaje', 'cuentas_bancarias', 'verificar_antes_preparar', 'dias_historial_cliente', 'politicas_texto',
+  /* 3.1.6 */ 'cobertura_km', 'cobertura_modo', 'permitir_programar', 'ventana_minutos', 'velocidad_moto_kmh', 'minutos_alerta_pedido', 'minutos_preparacion', 'recibir_cerrado'];
 
 /* Acciones: quién puede usarlas. 'publica' = sin sesión. */
 var ACCIONES = {
@@ -206,7 +211,11 @@ var ACCIONES = {
   pedidosSeguir:      { tipo: 'publica', fn: accionPedidosSeguir_ },
   misPedidos:         { tipo: 'publica', fn: accionMisPedidos_ },
   pagoOpciones:       { tipo: 'publica', fn: accionPagoOpciones_ },
-  clienteEfectivo:    { tipo: 'dueno',   fn: accionClienteEfectivo_ }
+  clienteEfectivo:    { tipo: 'dueno',   fn: accionClienteEfectivo_ },
+  /* 3.1.6 */
+  cuponValidar:       { tipo: 'publica', fn: accionCuponValidar_ },
+  localPausar:        { tipo: 'dueno', fn: accionLocalPausar_ },
+  pedidoRegresar:     { tipo: 'sesion', roles: ['dueno', 'cajero'], fn: accionPedidoRegresar_ }
 };
 
 /* ============================================================
@@ -517,6 +526,13 @@ function accionConfigGuardar_(data, ctx) {
     if (k === 'minutos_alerta_pago' && !(Number(v) >= 5 && Number(v) <= 1440)) throw fallo_('Minutos de aviso de pago no válidos (5 a 1440).');
     if (k === 'dias_historial_cliente' && !(Number(v) >= 1 && Number(v) <= 365)) throw fallo_('Días de historial no válidos (1 a 365).');
     if (k === 'anos_limpieza_clientes' && !(/^\d$/.test(v) && Number(v) <= 7)) throw fallo_('Años no válidos (0 a 7).');
+    /* 3.1.6: valores nuevos siempre validados por el servidor. */
+    if (k === 'cobertura_modo' && ['avisar', 'bloquear'].indexOf(v) < 0) throw fallo_('Modo de cobertura no válido.');
+    if ((k === 'permitir_programar' || k === 'recibir_cerrado') && ['SI', 'NO'].indexOf(v) < 0) throw fallo_('Elija si permite programar.');
+    if (k === 'cobertura_km' && v !== '' && !(Number(v) >= 0 && Number(v) <= 1000)) throw fallo_('Cobertura no válida (0 a 1000 km).');
+    if (k === 'ventana_minutos' && !(/^\d+$/.test(v) && Number(v) >= 10 && Number(v) <= 180)) throw fallo_('Ventana entre 10 y 180 minutos.');
+    if (k === 'velocidad_moto_kmh' && !(/^\d+$/.test(v) && Number(v) >= 5 && Number(v) <= 100)) throw fallo_('Velocidad entre 5 y 100 km/h.');
+    if (k === 'minutos_alerta_pedido' && !(/^\d+$/.test(v) && Number(v) >= 1 && Number(v) <= 240)) throw fallo_('Alerta entre 1 y 240 minutos.');
     limpio[k] = v;
   });
 
@@ -628,12 +644,29 @@ function datosPublicos_() {
   return pub;
 }
 
+/* 3.1.6: ubicación opcional de locales y zonas; enlaces de Maps solo cuando son resolubles. */
+function puntoConfig_(data) {
+  var lat = coord_(data.lat, -90, 90), lng = coord_(data.lng, -180, 180);
+  if (data.enlace && (lat === '' || lng === '')) {
+    var enlace = limpiarTexto_(data.enlace, 400);
+    if (!/^https:\/\/(?:maps\.app\.goo\.gl\/|goo\.gl\/maps\/|(?:www\.)?google\.[a-z.]+\/maps(?:[\/?#]|$)|maps\.google\.[a-z.]+\/)/i.test(enlace)) throw fallo_('Pegue un enlace de Google Maps.');
+    var p = coordenadasDeEnlace_(enlace);
+    if (!p) throw fallo_('No se pudieron leer las coordenadas de ese enlace. Use el botón GPS o pegue un enlace con un punto exacto.');
+    lat = coord_(p.lat, -90, 90); lng = coord_(p.lng, -180, 180);
+  }
+  if ((lat === '') !== (lng === '')) throw fallo_('La ubicación necesita latitud y longitud válidas.');
+  return { lat: lat, lng: lng };
+}
+function tienePunto_(r) { return r && r.lat !== '' && r.lng !== '' && r.lat != null && r.lng != null && isFinite(Number(r.lat)) && isFinite(Number(r.lng)); }
+function distanciaKm_(a, b) { return Math.round(distanciaM_({ lat: Number(a.lat), lng: Number(a.lng) }, { lat: Number(b.lat), lng: Number(b.lng) }) / 100) / 10; }
+function fechaCalendario_(d, cfg) { return d instanceof Date ? Utilities.formatDate(d, zona_(cfg), 'yyyy-MM-dd') : ''; }
+
 /* ============================================================
  * 7. LOCALES
  * ============================================================ */
 function accionLocalesListar_(data, ctx) {
   var lista = leerTabla_('locales').map(function (r) {
-    return { id: String(r.id), nombre: String(r.nombre), direccion: String(r.direccion), telefono: String(r.telefono), activo: r.activo === true };
+    return { id: String(r.id), nombre: String(r.nombre), direccion: String(r.direccion), telefono: String(r.telefono), activo: r.activo === true, lat: r.lat === '' ? '' : numero_(r.lat), lng: r.lng === '' ? '' : numero_(r.lng), pausado: r.pausado === true, mensaje_pausa: String(r.mensaje_pausa || ''), minimo_domicilio: r.minimo_domicilio === '' ? '' : redondear_(r.minimo_domicilio) };
   });
   if (ctx.sesion.rol !== 'dueno') lista = lista.filter(function (l) { return l.id === ctx.sesion.local_id; });
   return { ok: true, data: { locales: lista } };
@@ -643,8 +676,12 @@ function accionLocalGuardar_(data, ctx) {
   var id = limpiarTexto_(data.id, 40);
   var nombre = limpiarTexto_(data.nombre, 60);
   if (!nombre) throw fallo_('Escriba el nombre del local.');
+  var punto = puntoConfig_(data);
+  var minimo = data.minimo_domicilio === '' || data.minimo_domicilio == null ? '' : Number(data.minimo_domicilio);
+  if (minimo !== '' && !(minimo >= 0 && minimo <= 10000)) throw fallo_('Pedido mínimo no válido.');
   var cambios = {
     nombre: nombre,
+    lat: punto.lat, lng: punto.lng, minimo_domicilio: minimo,
     direccion: limpiarTexto_(data.direccion, 150),
     telefono: data.telefono ? normalizarTelefono_(data.telefono, leerConfig_().pais_codigo) : '',
     activo: data.activo !== false
@@ -663,12 +700,27 @@ function accionLocalGuardar_(data, ctx) {
       if (n) bitacora_(ctx.sesion, 'LOCALES', 'EDITAR', nombre, ctx.dispositivo);
     } else {
       id = nuevoId_('LOC');
-      agregarFilas_('locales', [[id, cambios.nombre, cambios.direccion, cambios.telefono, cambios.activo, new Date(), ctx.sesion.usuario]]);
+      agregarFilas_('locales', [[id, cambios.nombre, cambios.direccion, cambios.telefono, cambios.activo, new Date(), ctx.sesion.usuario, punto.lat, punto.lng, false, '', minimo]]);
       bitacora_(ctx.sesion, 'LOCALES', 'CREAR', nombre, ctx.dispositivo);
     }
   } finally {
     lock.releaseLock();
   }
+  limpiarMenuCache_();
+  return accionLocalesListar_({}, ctx);
+}
+
+function accionLocalPausar_(data, ctx) {
+  var id = limpiarTexto_(data.id, 40), mensaje = limpiarTexto_(data.mensaje, 160);
+  var lock = candado_(), nuevo;
+  try {
+    var l = leerTabla_('locales').filter(function (x) { return String(x.id) === id; })[0];
+    if (!l) throw fallo_('Local no encontrado.');
+    nuevo = l.pausado !== true;
+    actualizarCampos_('locales', l._fila, l, { pausado: nuevo, mensaje_pausa: nuevo ? (mensaje || 'Hoy cerramos temprano. Escríbenos para consultar.') : '' });
+    limpiarMenuCache_();
+  } finally { lock.releaseLock(); }
+  bitacora_(ctx.sesion, 'LOCALES', nuevo ? 'PAUSAR' : 'REANUDAR', id, ctx.dispositivo);
   return accionLocalesListar_({}, ctx);
 }
 
@@ -836,14 +888,33 @@ function hashClave_(clave, sal) {
   return bytes.map(function (b) { return ('0' + (b & 0xFF).toString(16)).slice(-2); }).join('');
 }
 
-/* Teléfono con código de país: "0991234567" -> "+593991234567". */
+/* 3.1.7: teléfonos internacionales E.164, sin modificar los números guardados.
+ * +1... conserva EE. UU.; 099... conserva Ecuador según el prefijo del negocio.
+ * Acepta espacios y guiones; nunca convierte un + explícito al país del local. */
 function normalizarTelefono_(v, pais) {
-  var d = String(v == null ? '' : v).replace(/\D/g, '');
+  var original = String(v == null ? '' : v).trim();
+  if (!original) return '';
+  if (!/^\+?[0-9\s().-]+$/.test(original)) throw fallo_('Número de teléfono no válido. Use solo números y, si desea, el signo + al principio.');
+  var d = original.replace(/\D/g, '');
   pais = String(pais || '593').replace(/\D/g, '');
-  if (!d) return '';
-  if (d.indexOf(pais) === 0 && d.length > pais.length + 6) return '+' + d;
+  if (!/^[1-9]\d{0,2}$/.test(pais)) throw fallo_('Código de país no válido.');
+  if (original.charAt(0) === '+') {
+    // En EE. UU. y Canadá se requieren 10 dígitos después del +1.
+    if (!/^[1-9]\d{7,14}$/.test(d) || (d.charAt(0) === '1' && d.length !== 11)) throw fallo_('Número internacional no válido. Revise el código de país y el celular.');
+    return '+' + d;
+  }
+  if (d.slice(0, 2) === '00') {
+    d = d.slice(2);
+    if (!/^[1-9]\d{7,14}$/.test(d) || (d.charAt(0) === '1' && d.length !== 11)) throw fallo_('Número internacional no válido.');
+    return '+' + d;
+  }
+  // Números ya escritos con prefijo pero sin + (compatibilidad con Ecuador).
+  if (d.indexOf(pais) === 0 && d.length > pais.length + 6) {
+    if (d.length > 15 || (pais === '1' && d.length !== 11)) throw fallo_('Número de teléfono no válido.');
+    return '+' + d;
+  }
   if (d.charAt(0) === '0') d = d.slice(1);
-  if (d.length < 7 || d.length > 12) throw fallo_('Número de teléfono no válido.');
+  if (d.length < 7 || pais.length + d.length > 15 || (pais === '1' && d.length !== 10)) throw fallo_('Número de teléfono no válido. Revise el código de país.');
   return '+' + pais + d;
 }
 
@@ -1010,7 +1081,7 @@ function accionMenuPublico_() {
   pub.datos_transferencia = cfg.datos_transferencia || '';
   pub.minutos_preparacion = numero_(cfg.minutos_preparacion) || 20;
   var locales = leerTabla_('locales').filter(function (l) { return l.activo === true; }).map(function (l) {
-    return { id: String(l.id), nombre: String(l.nombre), direccion: String(l.direccion), telefono: String(l.telefono) };
+    return { id: String(l.id), nombre: String(l.nombre), direccion: String(l.direccion), telefono: String(l.telefono), lat: l.lat === '' ? '' : numero_(l.lat), lng: l.lng === '' ? '' : numero_(l.lng), pausado: l.pausado === true, mensaje_pausa: String(l.mensaje_pausa || ''), minimo_domicilio: l.minimo_domicilio === '' ? '' : redondear_(l.minimo_domicilio) };
   });
   var data = {
     config: pub,
@@ -1019,8 +1090,9 @@ function accionMenuPublico_() {
       return { id: String(c.id), local_id: String(c.local_id), nombre: String(c.nombre), orden: numero_(c.orden) };
     }).sort(function (a, b) { return a.orden - b.orden; }),
     platos: leerTabla_('platos').filter(function (p) { return p.activo === true; }).map(platoPublico_),
+    populares: masPedidos30_(),
     zonas: leerTabla_('zonas_envio').filter(function (z) { return z.activo === true; }).map(function (z) {
-      return { id: String(z.id), local_id: String(z.local_id), nombre: String(z.nombre), costo: redondear_(z.costo), minutos: numero_(z.minutos) };
+      return { id: String(z.id), local_id: String(z.local_id), nombre: String(z.nombre), costo: redondear_(z.costo), minutos: numero_(z.minutos), lat: z.lat === '' ? '' : numero_(z.lat), lng: z.lng === '' ? '' : numero_(z.lng), radio_km: numero_(z.radio_km), minimo_domicilio: z.minimo_domicilio === '' ? '' : redondear_(z.minimo_domicilio) };
     })
   };
   /* 3.1.3: platos sin insumos suficientes en cada local (agotado automático) */
@@ -1033,6 +1105,18 @@ function accionMenuPublico_() {
   if (texto.length < 90000) cache.put('MENU_PUBLICO', texto, 120);
   data.abierto = estaAbierto_(cfg, new Date());
   return { ok: true, data: data };
+}
+
+/* Platos más pedidos en los últimos 30 días, agregado por ID y cacheado 300 s. */
+function masPedidos30_() {
+  var cache = CacheService.getScriptCache(), k = 'POPULAR_30', g = cache.get(k);
+  if (g) return JSON.parse(g);
+  var desde = Date.now() - 30 * 86400000, mapa = {}, cnt = {};
+  leerTabla_('pedidos').forEach(function (p) { if (p.creado instanceof Date && p.creado.getTime() >= desde && String(p.estado) !== 'Anulado') mapa[String(p.id)] = true; });
+  leerTabla_('pedido_detalle').forEach(function (d) { if (mapa[String(d.pedido_id)]) cnt[String(d.plato_id)] = (cnt[String(d.plato_id)] || 0) + numero_(d.cantidad); });
+  var lista = Object.keys(cnt).sort(function (a, b) { return cnt[b] - cnt[a]; }).slice(0, 10);
+  cache.put(k, JSON.stringify(lista), 300);
+  return lista;
 }
 
 /*
@@ -1094,13 +1178,14 @@ function accionPedidoCrear_(data, ctx) {
   // Horario: si está cerrado, solo se acepta un pedido programado para cuando abra.
   var ahora = new Date();
   var llegada = '';
+  if (data.hora_llegada && !siNo_(cfg.permitir_programar)) throw fallo_('Este negocio no tiene pedidos programados activados.');
   if (data.hora_llegada) {
     llegada = horaDeHoy_(String(data.hora_llegada), cfg, ahora);
     if (!llegada) throw fallo_('Hora no válida.');
     if (llegada.getTime() < ahora.getTime() + 10 * 60000) throw fallo_('Elija una hora al menos 10 minutos más tarde.');
   }
   var abierto = estaAbierto_(cfg, llegada || ahora);
-  if (!abierto.abierto) throw fallo_(abierto.mensaje, 'CERRADO');
+  if (!abierto.abierto && !(cfg.recibir_cerrado === 'SI' && !llegada)) throw fallo_(abierto.mensaje, 'CERRADO');
 
   // Freno contra pedidos en cadena (sin sesión): por teléfono y por dispositivo.
   var cache = CacheService.getScriptCache();
@@ -1118,6 +1203,7 @@ function accionPedidoCrear_(data, ctx) {
 
     var local = leerTabla_('locales').filter(function (l) { return String(l.id) === localId && l.activo === true; })[0];
     if (!local) throw fallo_('Elija un local disponible.');
+    if (local.pausado === true && (!ses || data.canal === 'cliente')) throw fallo_(String(local.mensaje_pausa || 'Este local pausó los pedidos. Vuelve pronto.'), 'PAUSADO');
     if (ses && ses.rol !== 'dueno' && ses.local_id !== localId) throw fallo_('Solo puede tomar pedidos de su local.', 'PERMISO');
 
     var platos = {};
@@ -1140,23 +1226,22 @@ function accionPedidoCrear_(data, ctx) {
       detalleFilas.push({ plato_id: String(p.id), nombre: String(p.nombre), precio: unitario, cantidad: cant, extras: extras.map(function (x) { return x.nombre; }).join(', '), total_linea: totalLinea });
     });
 
-    var envio = 0, minutos = 0;
+    var envio = 0, minutos = 0, zona = null;
     if (zonaId) {
-      var zona = leerTabla_('zonas_envio').filter(function (z) { return String(z.id) === zonaId && z.activo === true; })[0];
+      zona = leerTabla_('zonas_envio').filter(function (z) { return String(z.id) === zonaId && z.activo === true; })[0];
       if (!zona || (String(zona.local_id) !== 'TODOS' && String(zona.local_id) !== localId)) throw fallo_('Elija una zona de envío disponible.');
       envio = redondear_(zona.costo);
       minutos = numero_(zona.minutos);
     }
 
+    var distancia = tipo === 'domicilio' && tienePunto_(local) && lat !== '' && lng !== '' ? distanciaKm_(local, { lat: lat, lng: lng }) : '';
+    if (distancia !== '' && numero_(cfg.cobertura_km) > 0 && distancia > numero_(cfg.cobertura_km) && cfg.cobertura_modo === 'bloquear') throw fallo_('La dirección indicada está fuera de la cobertura. Puede cambiarla o elegir Retiro.', 'COBERTURA');
+    // Los mínimos de pedido se comunican, sin impedir la venta.
     var descuento = 0, cuponFila = null, codigo = limpiarTexto_(data.cupon, 30).toUpperCase();
     if (codigo) {
-      cuponFila = leerTabla_('cupones').filter(function (c) { return claveComparar_(c.codigo) === claveComparar_(codigo); })[0];
-      var hoy = Utilities.formatDate(ahora, zona_(cfg), 'yyyy-MM-dd');
-      if (!cuponFila || cuponFila.activo !== true) throw fallo_('El cupón «' + codigo + '» no existe.', 'CUPON');
-      if (cuponFila.vence instanceof Date && ymd_(cuponFila.vence, cfg) < hoy) throw fallo_('El cupón «' + codigo + '» ya venció.', 'CUPON');
-      if (numero_(cuponFila.usos_max) > 0 && numero_(cuponFila.usos) >= numero_(cuponFila.usos_max)) throw fallo_('El cupón «' + codigo + '» ya se usó el máximo de veces.', 'CUPON');
-      descuento = String(cuponFila.tipo) === 'porcentaje' ? redondear_(subtotal * numero_(cuponFila.valor) / 100) : redondear_(cuponFila.valor);
-      descuento = Math.min(descuento, subtotal);
+      var cupValidado = validarCupon316_(codigo, localId, telefono, subtotal, pedidos);
+      cuponFila = cupValidado.fila;
+      descuento = cupValidado.descuento;
     }
 
     // Cliente: uno por teléfono (no se repite).
@@ -1188,7 +1273,7 @@ function accionPedidoCrear_(data, ctx) {
     var numero = 'PED-' + ('000' + (mayor + 1)).slice(-Math.max(4, String(mayor + 1).length));
     var id = nuevoId_('PED');
     var base = llegada && llegada.getTime() > ahora.getTime() ? llegada : ahora;
-    var horaEst = llegada || new Date(base.getTime() + (numero_(cfg.minutos_preparacion) + minutos) * 60000);
+    var horaEst = !abierto.abierto && !llegada ? '' : (llegada || new Date(base.getTime() + (numero_(cfg.minutos_preparacion) + minutos) * 60000));
 
     var clienteId, nuevo = !cFila || numero_(cFila.entregados) + numero_(cFila.pedidos) === 0;
     if (cFila) {
@@ -1213,10 +1298,12 @@ function accionPedidoCrear_(data, ctx) {
       subtotal, envio, descuento, total, codigo, 'Recibido', '', ahora, '', '', '', '', '', ses ? ses.usuario : 'cliente',
       horaEst, enlaceUbic, limpiarTexto_(data.notas, 300), '', '', '', '', '', false, '', false,
       tipo, mesa, llegada || '', origen, propina, baseIva, iva, fuente, nuevo, '', '', premio, dispId,
-      ses && data.canal !== 'cliente' ? 'NO' : '', '', nuevaClaveSeguimiento_(), esDigital_(forma) ? limpiarTexto_(data.cuenta_pago, 80) : '', '']; // 3.1: pedido tomado por el personal (teléfono/mostrador): sin código. 3.1.1: si se hizo desde la página del cliente, sí lleva código
+      ses && data.canal !== 'cliente' ? 'NO' : '', '', nuevaClaveSeguimiento_(), esDigital_(forma) ? limpiarTexto_(data.cuenta_pago, 80) : '', '',
+      distancia, llegada ? new Date(llegada.getTime() + numero_(cfg.ventana_minutos) * 60000) : '', '', '']; // 3.1: pedido tomado por el personal (teléfono/mostrador): sin código. 3.1.1: si se hizo desde la página del cliente, sí lleva código
     agregarFilas_('pedidos', [fila]);
     agregarFilas_('pedido_detalle', detalleFilas.map(function (d) { return [nuevoId_('DET'), id, d.plato_id, d.nombre, d.precio, d.cantidad, d.extras, d.total_linea]; }));
     if (cuponFila) actualizarCampos_('cupones', cuponFila._fila, cuponFila, { usos: numero_(cuponFila.usos) + 1 });
+    CacheService.getScriptCache().remove('POPULAR_30');
 
     var descontado = descontarInventario_(id, numero, localId, detalleFilas, 1, ses ? ses.usuario : 'cliente');
     if (descontado) {
@@ -1268,9 +1355,24 @@ function accionPedidoConsultar_(data) {
     preparando: iso_(p.preparando), en_camino: iso_(p.en_camino), entregado: iso_(p.entregado), hora_estimada: iso_(p.hora_estimada), total: redondear_(p.total),
     tipo_entrega: tipoEntrega_(p), mesa: String(p.mesa || ''), calificacion: numero_(p.calificacion) || '', motivo_anulacion: String(p.estado) === 'Anulado' ? String(p.motivo_anulacion) : '',
     sellos: cli ? numero_(cli.sellos) : 0, sellos_meta: numero_(cfgC.fidelidad_sellos),
+    tiempo_preparacion: numero_(cfgC.minutos_preparacion) || 20,
+    tiempo_zona: numero_((leerTabla_('zonas_envio').filter(function (z) { return String(z.id) === String(p.zona_id); })[0] || {}).minutos),
+    ventana_fin: iso_(p.hora_ventana_fin),
+    eta_moto: etaMoto316_(p, cfgC),
     /* 3.1: tarjeta del motorizado y código de entrega — solo mientras va en camino */
     motorizado: String(p.estado) === 'En camino' ? tarjetaMotorizado_(p) : null,
     codigo_entrega: String(p.estado) === 'En camino' && siNo_(cfgC.codigo_entrega) && String(p.codigo_entrega || '') !== 'NO' ? String(p.codigo_entrega || '') : '' } };
+}
+
+/* ETA aproximado: último punto GPS del motorizado de ESTE pedido, sin mostrar las coordenadas. */
+function etaMoto316_(p, cfg) {
+  if (String(p.estado) !== 'En camino' || !tienePunto_(p)) return null;
+  var puntos = leerTabla_('rastreo').filter(function (r) { return String(r.pedido_id) === String(p.id) && String(r.motorizado_id) === String(p.motorizado_id) && tienePunto_(r) && p.en_camino instanceof Date && r.fecha instanceof Date && r.fecha >= p.en_camino; });
+  var ultimo = puntos.length ? puntos[puntos.length - 1] : null;
+  if (!ultimo && p.sali_lat !== '' && p.sali_lng !== '') ultimo = { lat: p.sali_lat, lng: p.sali_lng };
+  if (!ultimo) return null;
+  var n = distanciaKm_(ultimo, p) * 1.4 / Math.max(5, numero_(cfg.velocidad_moto_kmh) || 20) * 60;
+  return { desde: Math.max(2, Math.floor(n * 0.85)), hasta: Math.max(6, Math.ceil(n * 1.35 + 3)) };
 }
 
 /* ---------- 11.3 Menú (administración) ---------- */
@@ -1284,7 +1386,7 @@ function accionMenuListar_(data, ctx) {
     }).sort(function (a, b) { return a.orden - b.orden; }),
     platos: leerTabla_('platos').filter(function (p) { return sirve(p.local_id); }).map(platoPublico_),
     zonas: leerTabla_('zonas_envio').filter(function (z) { return sirve(z.local_id); }).map(function (z) {
-      return { id: String(z.id), local_id: String(z.local_id), nombre: String(z.nombre), costo: redondear_(z.costo), minutos: numero_(z.minutos), activo: z.activo === true };
+      return { id: String(z.id), local_id: String(z.local_id), nombre: String(z.nombre), costo: redondear_(z.costo), minutos: numero_(z.minutos), activo: z.activo === true, lat: z.lat === '' ? '' : numero_(z.lat), lng: z.lng === '' ? '' : numero_(z.lng), radio_km: numero_(z.radio_km), minimo_domicilio: z.minimo_domicilio === '' ? '' : redondear_(z.minimo_domicilio) };
     })
   } };
 }
@@ -1416,7 +1518,11 @@ function accionZonaGuardar_(data, ctx) {
   if (!nombre) throw fallo_('Escriba el nombre de la zona.');
   if (!(costo >= 0 && costo <= 500)) throw fallo_('Costo de envío no válido.');
   if (!(minutos >= 0 && minutos <= 300)) throw fallo_('Minutos no válidos.');
-  var cambios = { nombre: nombre, local_id: localId, costo: redondear_(costo), minutos: minutos, activo: data.activo !== false };
+  var punto = puntoConfig_(data), radio = data.radio_km === '' || data.radio_km == null ? 0 : Number(data.radio_km);
+  var minimo = data.minimo_domicilio === '' || data.minimo_domicilio == null ? '' : Number(data.minimo_domicilio);
+  if (!(radio >= 0 && radio <= 1000)) throw fallo_('Radio no válido (0 a 1000 km).');
+  if (minimo !== '' && !(minimo >= 0 && minimo <= 10000)) throw fallo_('Pedido mínimo no válido.');
+  var cambios = { nombre: nombre, local_id: localId, costo: redondear_(costo), minutos: minutos, activo: data.activo !== false, lat: punto.lat, lng: punto.lng, radio_km: radio, minimo_domicilio: minimo };
   var lock = candado_();
   try {
     validarLocalOTodos_(localId);
@@ -1428,7 +1534,7 @@ function accionZonaGuardar_(data, ctx) {
       if (!actual) throw fallo_('Esa zona ya no existe. Toque Actualizar.', 'NO_EXISTE');
       if (actualizarCampos_('zonas_envio', actual._fila, actual, cambios)) bitacora_(ctx.sesion, 'MENU', 'EDITAR_ZONA', nombre, ctx.dispositivo);
     } else {
-      agregarFilas_('zonas_envio', [[nuevoId_('ZON'), localId, nombre, cambios.costo, minutos, cambios.activo, new Date()]]);
+      agregarFilas_('zonas_envio', [[nuevoId_('ZON'), localId, nombre, cambios.costo, minutos, cambios.activo, new Date(), punto.lat, punto.lng, radio, minimo]]);
       bitacora_(ctx.sesion, 'MENU', 'CREAR_ZONA', nombre, ctx.dispositivo);
     }
     limpiarMenuCache_();
@@ -1439,7 +1545,7 @@ function accionZonaGuardar_(data, ctx) {
 function accionCuponesListar_() {
   var cfg = leerConfig_();
   return { ok: true, data: { cupones: leerTabla_('cupones').map(function (c) {
-    return { id: String(c.id), codigo: String(c.codigo), tipo: String(c.tipo), valor: numero_(c.valor), vence: c.vence instanceof Date ? ymd_(c.vence, cfg) : '', usos_max: numero_(c.usos_max), usos: numero_(c.usos), activo: c.activo === true };
+    return { id: String(c.id), codigo: String(c.codigo), tipo: String(c.tipo), valor: numero_(c.valor), vence: c.vence instanceof Date ? ymd_(c.vence, cfg) : '', usos_max: numero_(c.usos_max), usos: numero_(c.usos), activo: c.activo === true, local_id: String(c.local_id || 'TODOS'), un_uso_cliente: c.un_uso_cliente === true, compra_minima: numero_(c.compra_minima) };
   }) } };
 }
 
@@ -1452,9 +1558,12 @@ function accionCuponGuardar_(data, ctx) {
   if (!(valor > 0) || (tipo === 'porcentaje' && valor > 100) || valor > 1000) throw fallo_('Valor del descuento no válido.');
   if (vence && !/^\d{4}-\d{2}-\d{2}$/.test(vence)) throw fallo_('Fecha de vencimiento no válida.');
   if (!(usosMax >= 0)) throw fallo_('Usos máximos no válidos.');
-  var cambios = { codigo: codigo, tipo: tipo, valor: valor, vence: vence ? fechaDia_(vence) : '', usos_max: usosMax, activo: data.activo !== false };
+  var localId = limpiarTexto_(data.local_id, 40) || 'TODOS', compraMin = Number(data.compra_minima || 0);
+  if (!(compraMin >= 0 && compraMin <= 10000)) throw fallo_('Compra mínima no válida.');
+  var cambios = { codigo: codigo, tipo: tipo, valor: valor, vence: vence ? fechaDia_(vence) : '', usos_max: usosMax, activo: data.activo !== false, local_id: localId, un_uso_cliente: data.un_uso_cliente === true, compra_minima: redondear_(compraMin) };
   var lock = candado_();
   try {
+    validarLocalOTodos_(localId);
     var filas = leerTabla_('cupones');
     var rep = filas.filter(function (r) { return String(r.id) !== id && claveComparar_(r.codigo) === claveComparar_(codigo); })[0];
     if (rep) throw fallo_('El cupón «' + codigo + '» ya existe.', 'DUPLICADO');
@@ -1463,11 +1572,43 @@ function accionCuponGuardar_(data, ctx) {
       if (!actual) throw fallo_('Ese cupón ya no existe.', 'NO_EXISTE');
       if (actualizarCampos_('cupones', actual._fila, actual, cambios)) bitacora_(ctx.sesion, 'MENU', 'EDITAR_CUPON', codigo, ctx.dispositivo);
     } else {
-      agregarFilas_('cupones', [[nuevoId_('CUP'), codigo, tipo, valor, cambios.vence, usosMax, 0, cambios.activo, new Date()]]);
+      agregarFilas_('cupones', [[nuevoId_('CUP'), codigo, tipo, valor, cambios.vence, usosMax, 0, cambios.activo, new Date(), localId, cambios.un_uso_cliente, cambios.compra_minima]]);
       bitacora_(ctx.sesion, 'MENU', 'CREAR_CUPON', codigo, ctx.dispositivo);
     }
   } finally { lock.releaseLock(); }
   return accionCuponesListar_();
+}
+
+/* Validación única del cupón: consulta pública y creación usan las mismas reglas. */
+function validarCupon316_(codigo, localId, telefono, subtotal, pedidos) {
+  if (!codigo) return { descuento: 0, fila: null };
+  var c = leerTabla_('cupones').filter(function (x) { return claveComparar_(x.codigo) === claveComparar_(codigo); })[0];
+  var hoy = Utilities.formatDate(new Date(), zona_(leerConfig_()), 'yyyy-MM-dd');
+  if (!c || c.activo !== true) throw fallo_('Ese cupón no está disponible.', 'CUPON');
+  if (c.vence instanceof Date && ymd_(c.vence, leerConfig_()) < hoy) throw fallo_('Este cupón ya venció.', 'CUPON');
+  if (numero_(c.usos_max) > 0 && numero_(c.usos) >= numero_(c.usos_max)) throw fallo_('Este cupón alcanzó el máximo de usos.', 'CUPON');
+  if (String(c.local_id || 'TODOS') !== 'TODOS' && String(c.local_id) !== localId) throw fallo_('Este cupón es para otro local.', 'CUPON');
+  if (subtotal < numero_(c.compra_minima)) throw fallo_('Este cupón es para compras desde ' + UI_dinero_(c.compra_minima) + '.', 'CUPON');
+  if (c.un_uso_cliente === true && telefono && pedidos.some(function (p) { return String(p.telefono) === telefono && claveComparar_(p.cupon) === claveComparar_(codigo) && String(p.estado) !== 'Anulado'; })) throw fallo_('Este cupón ya se utilizó con ese número.', 'CUPON');
+  var d = String(c.tipo) === 'porcentaje' ? redondear_(subtotal * numero_(c.valor) / 100) : redondear_(c.valor);
+  return { descuento: Math.min(subtotal, d), fila: c };
+}
+function accionCuponValidar_(data) {
+  var localId = limpiarTexto_(data.local_id, 40), codigo = limpiarTexto_(data.cupon, 30).toUpperCase();
+  if (!codigo) throw fallo_('Escriba un cupón.', 'CUPON');
+  var tel = data.telefono ? normalizarTelefono_(data.telefono, leerConfig_().pais_codigo) : '';
+  var productos = {}; leerTabla_('platos').forEach(function (p) { productos[String(p.id)] = p; });
+  var subtotal = 0;
+  (Array.isArray(data.items) ? data.items : []).slice(0, 60).forEach(function (it) {
+    var p = productos[String(it.plato_id)], n = Math.floor(numero_(it.cantidad));
+    if (!p || p.activo !== true || !(n >= 1 && n <= 50) || (String(p.local_id) !== 'TODOS' && String(p.local_id) !== localId)) throw fallo_('Revise los platos del carrito.', 'PLATO');
+    var extras = (Array.isArray(it.extras) ? it.extras : []).map(claveComparar_);
+    var extra = leerExtras_(p.extras_json).filter(function (x) { return extras.indexOf(claveComparar_(x.nombre)) >= 0; }).reduce(function (s, x) { return s + x.precio; }, 0);
+    subtotal = redondear_(subtotal + redondear_((numero_(p.precio) + extra) * n));
+  });
+  if (!subtotal) throw fallo_('Agregue platos antes de aplicar un cupón.', 'CUPON');
+  var r = validarCupon316_(codigo, localId, tel, subtotal, leerTabla_('pedidos'));
+  return { ok: true, data: { codigo: codigo, descuento: r.descuento, subtotal: subtotal } };
 }
 
 /* Receta de un plato: qué insumos descuenta cada unidad vendida. */
@@ -1575,7 +1716,10 @@ function accionPedidosListar_(data, ctx) {
     if (local !== 'TODOS' && String(p.local_id) !== local) return false;
     var d = ymd_(p.dia_trabajo, cfg);
     var abierto = ['Entregado', 'Anulado'].indexOf(String(p.estado)) < 0;
-    return d === dia || (dia === hoy && abierto); // hoy + los que quedaron abiertos de antes
+    // Abiertos: siempre visibles; entregados: por fecha REAL de entrega; anulados: conservan día contable.
+    if (abierto) return true;
+    if (String(p.estado) === 'Entregado') return fechaCalendario_(p.entregado, cfg) === dia || (!p.entregado && d === dia);
+    return d === dia;
   });
   /* 3.1.3: pedidos de antes de la 3.1.3 reciben su clave de seguimiento la primera vez que se listan */
   var sinClave = lista.filter(function (p) { return !String(p.clave_seguimiento || ''); });
@@ -1599,7 +1743,7 @@ function accionPedidosListar_(data, ctx) {
   }
   filasCli.forEach(function (c) { clis[String(c.id)] = String(c.clave_cliente || ''); });
   return { ok: true, data: {
-    dia: dia, hoy: hoy, ahora: new Date().toISOString(), minutos_atraso: numero_(cfg.minutos_atraso) || 45,
+    dia: dia, hoy: fechaCalendario_(new Date(), cfg), ahora: new Date().toISOString(), minutos_atraso: numero_(cfg.minutos_atraso) || 45, minutos_alerta_pedido: numero_(cfg.minutos_alerta_pedido) || 15,
     pedidos: lista.map(function (p) {
       var o = pedidoSalida_(p, det[String(p.id)] || []);
       o.motorizado = motos[o.motorizado_id] || null;
@@ -1643,20 +1787,37 @@ function accionPedidoEstado_(data, ctx) {
 
 function accionPedidoAsignar_(data, ctx) {
   exigirTurnoAbierto_(data.motorizado_id); // 3.1 (solo si el dueño lo activó)
+  var motivoCambio = limpiarTexto_(data.motivo, 200);
   var motoId = limpiarTexto_(data.motorizado_id, 40);
   var lock = candado_();
   var p, m;
   try {
     p = buscarPedido_(data.id, ctx);
-    if (['Recibido', 'Preparando'].indexOf(String(p.estado)) < 0) throw fallo_('Solo se asigna motorizado antes de que el pedido salga.');
+    if (['Recibido', 'Preparando', 'En camino'].indexOf(String(p.estado)) < 0) throw fallo_('Este pedido ya no admite cambio de motorizado.');
+    if (String(p.estado) === 'En camino' && motivoCambio.length < 3) throw fallo_('Escriba el motivo del cambio de motorizado.');
     if (!p.zona_id) throw fallo_('Este pedido es para retirar en el local.');
     m = leerTabla_('motorizados').filter(function (x) { return String(x.id) === motoId; })[0];
     if (!m || m.activo !== true) throw fallo_('Ese motorizado no está activo.');
     if (m.local_id && String(m.local_id) !== 'TODOS' && String(m.local_id) !== String(p.local_id)) throw fallo_('Ese motorizado es de otro local.');
-    actualizarCampos_('pedidos', p._fila, p, { motorizado_id: motoId });
+    if (String(p.motorizado_id) !== motoId) actualizarCampos_('pedidos', p._fila, p, { motorizado_id: motoId, incidencia_motivo: motivoCambio, ultima_senal: '', sali_lat: String(p.estado) === 'En camino' ? '' : p.sali_lat, sali_lng: String(p.estado) === 'En camino' ? '' : p.sali_lng });
     p = buscarPedido_(data.id, ctx);
   } finally { lock.releaseLock(); }
-  bitacora_(ctx.sesion, 'PEDIDOS', 'ASIGNAR', p.numero + ' → ' + m.nombre, ctx.dispositivo);
+  bitacora_(ctx.sesion, 'PEDIDOS', 'ASIGNAR', p.numero + ' → ' + m.nombre + (motivoCambio ? ' · Motivo: ' + motivoCambio : ''), ctx.dispositivo);
+  return { ok: true, data: { pedido: pedidoSalida_(p) } };
+}
+
+/* Reingreso al local: conservamos repartidor y código; invalidamos salida y ETA previos. */
+function accionPedidoRegresar_(data, ctx) {
+  var motivo = limpiarTexto_(data.motivo, 200);
+  if (motivo.length < 3) throw fallo_('Escriba el motivo del regreso.');
+  var lock = candado_(), p;
+  try {
+    p = buscarPedido_(data.id, ctx);
+    if (String(p.estado) !== 'En camino') throw fallo_('Solo un pedido En camino puede regresar al local.', 'CAMBIO');
+    actualizarCampos_('pedidos', p._fila, p, { estado: 'Preparando', en_camino: '', sali_lat: '', sali_lng: '', ultima_senal: '', incidencia_motivo: motivo });
+    p = buscarPedido_(data.id, ctx);
+  } finally { lock.releaseLock(); }
+  bitacora_(ctx.sesion, 'PEDIDOS', 'REGRESO', p.numero + ' · ' + motivo, ctx.dispositivo);
   return { ok: true, data: { pedido: pedidoSalida_(p) } };
 }
 
@@ -1672,7 +1833,7 @@ function accionPedidoAnular_(data, ctx) {
     if (String(p.estado) === 'Entregado' && ctx.sesion.rol !== 'dueno') throw fallo_('Un pedido entregado solo lo anula el dueño.', 'PERMISO');
     if (p.liquidacion_id) throw fallo_('El efectivo de este pedido ya se liquidó en caja: no se puede anular.');
     var eraEntregado = String(p.estado) === 'Entregado';
-    actualizarCampos_('pedidos', p._fila, p, { estado: 'Anulado', anulado: new Date(), motivo_anulacion: motivo });
+    actualizarCampos_('pedidos', p._fila, p, { estado: 'Anulado', anulado: new Date(), motivo_anulacion: motivo, anulado_por: ctx.sesion.usuario });
     var c = leerTabla_('clientes').filter(function (x) { return String(x.id) === String(p.cliente_id); })[0];
     if (c) actualizarCampos_('clientes', c._fila, c, { pedidos: Math.max(0, numero_(c.pedidos) - 1) });
     if (eraEntregado) sumarEntregaCliente_(p, -1);
@@ -1687,6 +1848,7 @@ function accionPedidoAnular_(data, ctx) {
     }
     p = buscarPedido_(data.id, ctx);
   } finally { lock.releaseLock(); }
+  CacheService.getScriptCache().remove('POPULAR_30');
   bitacora_(ctx.sesion, 'PEDIDOS', 'ANULAR', p.numero + ' · ' + motivo, ctx.dispositivo);
   return { ok: true, data: { pedido: pedidoSalida_(p) } };
 }
@@ -1831,7 +1993,7 @@ function accionMisEntregas_(data, ctx) {
   var mios = pedidos.filter(function (p) {
     if (String(p.motorizado_id) !== String(m.id)) return false;
     var abierto = ['Recibido', 'Preparando', 'En camino'].indexOf(String(p.estado)) >= 0;
-    return abierto || (String(p.estado) === 'Entregado' && ymd_(p.dia_trabajo, cfg) === hoy);
+    return abierto || (String(p.estado) === 'Entregado' && fechaCalendario_(p.entregado, cfg) === fechaCalendario_(new Date(), cfg));
   });
   var det = detallePorPedido_(mios.map(function (p) { return String(p.id); }));
   var cajas = leerTabla_('caja').filter(function (c) { return String(c.estado) === 'abierta'; });
@@ -2263,8 +2425,11 @@ function accionCajaCerrar_(data, ctx) {
   var nombreLocal = (leerTabla_('locales').filter(function (l) { return String(l.id) === local; })[0] || {}).nombre || local;
   var r = res.resumen, mon = cfg.moneda || 'USD';
   function f(n) { return mon + ' ' + redondear_(n).toFixed(2); }
+  var pedidosDia = leerTabla_('pedidos').filter(function (p) { return String(p.local_id) === local && ymd_(p.dia_trabajo, cfg) === ymd_(c.dia_trabajo, cfg); });
+  var anulDia = pedidosDia.filter(function (p) { return String(p.estado) === 'Anulado'; }).length;
+  var propDia = pedidosDia.filter(function (p) { return String(p.estado) !== 'Anulado'; }).reduce(function (sum, p) { return sum + numero_(p.propina); }, 0);
   var texto = '*Cierre de caja — ' + nombreLocal + '*\nDía: ' + ymd_(c.dia_trabajo, cfg) + '\nCerró: ' + ctx.sesion.nombre +
-    '\n\nPedidos: ' + r.pedidos + ' · Ventas: ' + f(r.ventas) +
+    '\n\nPedidos: ' + r.pedidos + ' · Anulados: ' + anulDia + ' · Propinas: ' + f(propDia) + ' · Ventas: ' + f(r.ventas) +
     '\nFondo inicial: ' + f(r.fondo) + '\nEfectivo de motorizados: ' + f(r.liquidado) + '\nEfectivo en el local: ' + f(r.efectivo_local) +
     '\nEntradas: ' + f(r.entradas) + '\nSalidas: ' + f(r.salidas) + '\nFondos a motorizados: ' + f(r.fondos_motorizado) +
     '\nTransferencias verificadas: ' + f(r.transferencias) + (r.transferencias_pendientes ? '\n⚠️ Transferencias sin verificar: ' + f(r.transferencias_pendientes) : '') +
@@ -2537,6 +2702,29 @@ function accionReportes_(data, ctx) {
   d.por_tipo = Object.keys(porTipo).map(function (k) { return { tipo: k, pedidos: porTipo[k].pedidos, total: redondear_(porTipo[k].total) }; });
   d.por_origen = Object.keys(porOrigen).map(function (k) { var o = porOrigen[k]; o.total = redondear_(o.total); return o; }).sort(function (a, b) { return b.pedidos - a.pedidos; });
   d.comentarios = comentarios.slice(-20).reverse();
+  /* 3.1.6: informes adicionales separados, no recalculan caja ni ventas. */
+  var anulaciones = {}, tiempos = {}, zonas = {}, motos = {}, locales = {};
+  leerTabla_('zonas_envio').forEach(function (z) { zonas[String(z.id)] = numero_(z.minutos); });
+  leerTabla_('motorizados').forEach(function (m) { motos[String(m.id)] = String(m.nombre); });
+  leerTabla_('locales').forEach(function (l) { locales[String(l.id)] = String(l.nombre); });
+  leerTabla_('pedidos').forEach(function (p) {
+    var dia = ymd_(p.dia_trabajo, cfg), lid = String(p.local_id);
+    if (dia < d.desde || dia > d.hasta || (local !== 'TODOS' && lid !== local)) return;
+    if (String(p.estado) === 'Anulado') {
+      var motivo = String(p.motivo_anulacion || 'Sin motivo'), caj = String(p.anulado_por || 'Sin registro anterior'), mot = String(p.motorizado_id || 'Sin motorizado');
+      var k = [lid, motivo, caj, mot].join('|');
+      anulaciones[k] = anulaciones[k] || { local: locales[lid] || lid, motivo: motivo, cajero: caj, motorizado: motos[mot] || mot, cantidad: 0 };
+      anulaciones[k].cantidad++;
+    }
+    if (String(p.estado) === 'Entregado' && p.creado instanceof Date && p.entregado instanceof Date && p.zona_id) {
+      var real = (p.entregado - p.creado) / 60000, previsto = numero_(cfg.minutos_preparacion) + (zonas[String(p.zona_id)] || 0);
+      if (!(real >= 0 && real <= 10080)) return;
+      var claves = ['LOCAL:' + lid, 'MOTO:' + String(p.motorizado_id || '')];
+      claves.forEach(function (k) { if (k === 'MOTO:') return; tiempos[k] = tiempos[k] || { tipo: k.indexOf('LOCAL:') === 0 ? 'Local' : 'Motorizado', nombre: k.indexOf('LOCAL:') === 0 ? (locales[lid] || lid) : (motos[String(p.motorizado_id)] || String(p.motorizado_id)), total_real: 0, total_previsto: 0, cantidad: 0 }; tiempos[k].cantidad++; tiempos[k].total_real += real; tiempos[k].total_previsto += previsto; });
+    }
+  });
+  d.anulaciones = Object.keys(anulaciones).map(function (k) { return anulaciones[k]; }).sort(function (a, b) { return b.cantidad - a.cantidad; });
+  d.tiempos_reales = Object.keys(tiempos).map(function (k) { var t = tiempos[k]; return { tipo: t.tipo, nombre: t.nombre, cantidad: t.cantidad, real: Math.round(t.total_real / t.cantidad), previsto: Math.round(t.total_previsto / t.cantidad) }; });
   return r;
 }
 

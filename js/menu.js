@@ -318,7 +318,7 @@
 
   async function editarZona(z) {
     var nuevo = !z;
-    z = z || { id: '', nombre: '', local_id: APP.local === 'TODOS' ? (APP.locales[0] || {}).id || 'TODOS' : APP.local, costo: '', minutos: 20, activo: true };
+    z = z || { id: '', nombre: '', local_id: APP.local === 'TODOS' ? (APP.locales[0] || {}).id || 'TODOS' : APP.local, costo: '', minutos: 20, activo: true, lat: '', lng: '', radio_km: '', minimo_domicilio: '' };
     var enviar = null;
     var ok = await UI.ventana({
       icono: '🛵', titulo: nuevo ? 'Nueva zona de envío' : 'Editar zona',
@@ -326,11 +326,26 @@
         '<div class="campo"><label for="zo-local">Local que despacha</label><select class="entrada" id="zo-local" name="local_id">' + opcionesLocal(z.local_id, true) + '</select></div>' +
         '<div class="fila-campos"><div class="campo"><label for="zo-costo">Costo de envío</label><input class="entrada" id="zo-costo" name="costo" inputmode="decimal" value="' + UI.esc(z.costo) + '" placeholder="0.00"></div>' +
         '<div class="campo"><label for="zo-min">Minutos de viaje</label><input class="entrada" id="zo-min" name="minutos" inputmode="numeric" value="' + UI.esc(z.minutos) + '"></div></div>' +
+        '<div class="fila-campos"><div class="campo"><label for="zo-radio">Radio desde el centro (km)</label><input class="entrada" id="zo-radio" name="radio_km" inputmode="decimal" value="' + UI.esc(z.radio_km || '') + '" placeholder="Opcional"></div>' +
+        '<div class="campo"><label for="zo-minimo">Pedido mínimo a domicilio</label><input class="entrada" id="zo-minimo" name="minimo_domicilio" inputmode="decimal" value="' + UI.esc(z.minimo_domicilio || '') + '" placeholder="Hereda el local"></div></div>' +
+        '<div class="campo"><label>Centro de la zona (opcional)</label><button class="btn secundario chico" id="zo-gps" type="button">📍 Marcar con mi ubicación</button>' +
+        '<input type="hidden" id="zo-lat" name="lat" value="' + UI.esc(z.lat === '' ? '' : z.lat) + '"><input type="hidden" id="zo-lng" name="lng" value="' + UI.esc(z.lng === '' ? '' : z.lng) + '">' +
+        '<input class="entrada" id="zo-enlace" name="enlace" placeholder="O pega el enlace de Google Maps" style="margin-top:8px"><span class="ayuda" id="zo-pos">' + (z.lat !== '' && z.lat != null ? 'Marcado: ' + UI.esc(z.lat) + ', ' + UI.esc(z.lng) : 'Sin centro: la zona seguirá funcionando manualmente') + '</span></div>' +
         '<label class="interruptor"><input type="checkbox" name="activo"' + (z.activo ? ' checked' : '') + '> Activa</label></form>',
+      alAbrir: function (v) {
+        UI.$('#zo-gps', v).addEventListener('click', function (e) { UI.trabajando(e.currentTarget, async function () {
+          var pt = await UI.ubicacion(); if (!pt) return UI.aviso('No pudimos leer el GPS. Pega un enlace de Maps.', 'error');
+          UI.$('#zo-lat', v).value = pt.lat; UI.$('#zo-lng', v).value = pt.lng; UI.$('#zo-enlace', v).value = '';
+          UI.$('#zo-pos', v).textContent = 'Marcado: ' + pt.lat + ', ' + pt.lng;
+        }); });
+        UI.$('#zo-enlace', v).addEventListener('input', function () { UI.$('#zo-lat', v).value = ''; UI.$('#zo-lng', v).value = ''; });
+      },
       botones: [{ texto: 'Cancelar', valor: false, clase: 'secundario' }, { texto: 'Guardar', valor: true, antes: function (v) {
         enviar = UI.leerFormulario(UI.$('#form-zona', v));
         enviar.costo = UI.numero(enviar.costo || 0); enviar.minutos = UI.numero(enviar.minutos || 0);
-        var malo = !enviar.nombre ? 'Escriba el nombre.' : !(enviar.costo >= 0) ? 'Costo no válido.' : !(enviar.minutos >= 0) ? 'Minutos no válidos.' : '';
+        enviar.radio_km = enviar.radio_km === '' ? '' : Number(enviar.radio_km);
+        enviar.minimo_domicilio = enviar.minimo_domicilio === '' ? '' : Number(enviar.minimo_domicilio);
+        var malo = !enviar.nombre ? 'Escriba el nombre.' : !(enviar.costo >= 0) ? 'Costo no válido.' : !(enviar.minutos >= 0) ? 'Minutos no válidos.' : (enviar.radio_km !== '' && !(enviar.radio_km > 0)) ? 'El radio debe ser mayor que cero.' : (enviar.minimo_domicilio !== '' && !(enviar.minimo_domicilio >= 0)) ? 'Pedido mínimo no válido.' : '';
         if (malo) { UI.aviso(malo, 'error'); return false; }
         return true;
       } }]
@@ -362,7 +377,7 @@
 
   async function editarCupon(c) {
     var nuevo = !c;
-    c = c || { id: '', codigo: '', tipo: 'porcentaje', valor: '', vence: '', usos_max: 0, activo: true };
+    c = c || { id: '', codigo: '', tipo: 'porcentaje', valor: '', vence: '', usos_max: 0, activo: true, local_id: 'TODOS', un_uso_cliente: false, compra_minima: 0 };
     var enviar = null;
     var ok = await UI.ventana({
       icono: '🎟️', titulo: nuevo ? 'Nuevo cupón' : 'Editar cupón',
@@ -371,10 +386,13 @@
         '<div class="campo"><label for="cu-valor">Valor</label><input class="entrada" id="cu-valor" name="valor" inputmode="decimal" value="' + UI.esc(c.valor) + '"></div>' +
         '<div class="campo"><label for="cu-vence">Vence (opcional)</label><input class="entrada" id="cu-vence" name="vence" type="date" value="' + UI.esc(c.vence) + '"></div>' +
         '<div class="campo"><label for="cu-max">Usos máximos</label><input class="entrada" id="cu-max" name="usos_max" inputmode="numeric" value="' + UI.esc(c.usos_max) + '"><span class="ayuda">0 = sin límite</span></div></div>' +
+        '<div class="campo"><label for="cu-local">Válido en</label><select class="entrada" id="cu-local" name="local_id">' + opcionesLocal(c.local_id || 'TODOS', true) + '</select></div>' +
+        '<div class="campo"><label for="cu-min">Compra mínima (sin envío)</label><input class="entrada" id="cu-min" name="compra_minima" inputmode="decimal" value="' + UI.esc(c.compra_minima || 0) + '"></div>' +
+        '<label class="interruptor"><input type="checkbox" name="un_uso_cliente"' + (c.un_uso_cliente ? ' checked' : '') + '> Un uso por teléfono</label>' +
         '<label class="interruptor"><input type="checkbox" name="activo"' + (c.activo ? ' checked' : '') + '> Activo</label></form>',
       botones: [{ texto: 'Cancelar', valor: false, clase: 'secundario' }, { texto: 'Guardar', valor: true, antes: function (v) {
         enviar = UI.leerFormulario(UI.$('#form-cupon', v));
-        enviar.valor = UI.numero(enviar.valor); enviar.usos_max = UI.numero(enviar.usos_max || 0);
+        enviar.valor = UI.numero(enviar.valor); enviar.usos_max = UI.numero(enviar.usos_max || 0); enviar.compra_minima = UI.numero(enviar.compra_minima || 0);
         var malo = !/^[A-Za-z0-9_-]{3,30}$/.test(enviar.codigo) ? 'Código de 3 a 30 letras o números, sin espacios.' : !(enviar.valor > 0) ? 'Escriba el valor.' : (enviar.tipo === 'porcentaje' && enviar.valor > 100) ? 'Máximo 100%.' : '';
         if (malo) { UI.aviso(malo, 'error'); return false; }
         return true;
@@ -476,6 +494,14 @@
       '<div class="campo"><label>Días que NO atiende</label><div class="segmento" id="aj-dias">' + ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'].map(function (n, i) {
         return '<button type="button" data-dia="' + (i + 1) + '" class="' + (String(c.dias_cerrado || '').split(',').indexOf(String(i + 1)) >= 0 ? 'activo' : '') + '">' + n + '</button>';
       }).join('') + '</div><span class="ayuda">Vacío = atiende siempre. Fuera de horario, el cliente puede programar su pedido.</span></div>' +
+      '<h4>🌍 Cobertura y programación</h4>' +
+      '<div class="fila-campos"><div class="campo"><label for="aj-cob">Cobertura en línea recta (km)</label><input class="entrada" id="aj-cob" name="cobertura_km" inputmode="decimal" placeholder="0 = apagado" value="' + UI.esc(c.cobertura_km || '') + '"><span class="ayuda">Por calles suele ser 30–50 % más: para unos 10 km por calle, marca aproximadamente 7 km.</span></div>' +
+      '<div class="campo"><label for="aj-cobmodo">Al salir de cobertura</label><select class="entrada" id="aj-cobmodo" name="cobertura_modo"><option value="avisar"' + (c.cobertura_modo !== 'bloquear' ? ' selected' : '') + '>Avisar y permitir seguir</option><option value="bloquear"' + (c.cobertura_modo === 'bloquear' ? ' selected' : '') + '>Bloquear domicilio</option></select></div></div>' +
+      '<label class="interruptor"><input type="checkbox" id="aj-programar"' + (c.permitir_programar === 'SI' ? ' checked' : '') + '> Permitir solicitar una ventana de entrega programada (el negocio confirma por WhatsApp)</label>' +
+      '<label class="interruptor"><input type="checkbox" id="aj-cerrado"' + (c.recibir_cerrado !== 'NO' ? ' checked' : '') + '> Recibir pedidos cuando el local esté cerrado y prepararlos en la próxima apertura</label>' +
+      '<div class="fila-campos"><div class="campo"><label>Duración de ventana (min)</label><input class="entrada" name="ventana_minutos" inputmode="numeric" value="' + UI.esc(c.ventana_minutos || 30) + '"></div>' +
+      '<div class="campo"><label>Velocidad promedio moto (km/h)</label><input class="entrada" name="velocidad_moto_kmh" inputmode="numeric" value="' + UI.esc(c.velocidad_moto_kmh || 20) + '"></div></div>' +
+      '<div class="campo"><label>Avisar pedido Recibido sin atender (min)</label><input class="entrada" name="minutos_alerta_pedido" inputmode="numeric" value="' + UI.esc(c.minutos_alerta_pedido || 15) + '"></div>' +
       '<h4>⏱️ Tiempos</h4>' +
       '<div class="fila-campos"><div class="campo"><label for="aj-prep">Minutos de preparación</label><input class="entrada" id="aj-prep" name="minutos_preparacion" inputmode="numeric" value="' + UI.esc(c.minutos_preparacion) + '"></div>' +
       '<div class="campo"><label for="aj-atraso">Atrasado después de (min)</label><input class="entrada" id="aj-atraso" name="minutos_atraso" inputmode="numeric" value="' + UI.esc(c.minutos_atraso) + '"></div>' +
@@ -620,6 +646,8 @@
       d.dias_cerrado = UI.$$('[data-dia].activo', f).map(function (x) { return x.getAttribute('data-dia'); }).join(',');
       d.verificar_antes_salir = UI.$('#aj-verificar').checked ? 'SI' : 'NO';
       d.verificar_antes_preparar = UI.$('#aj-verprep').checked ? 'SI' : 'NO'; // 3.1.5
+      d.permitir_programar = UI.$('#aj-programar').checked ? 'SI' : 'NO'; // 3.1.6
+      d.recibir_cerrado = UI.$('#aj-cerrado').checked ? 'SI' : 'NO';
       d.cuentas_bancarias = JSON.stringify(cuentas);
       d.minutos_alerta_pago = String(Math.max(5, Math.floor(UI.numero(d.minutos_alerta_pago) || 30)));
       d.dias_historial_cliente = String(Math.min(365, Math.max(1, Math.floor(UI.numero(d.dias_historial_cliente) || 30))));

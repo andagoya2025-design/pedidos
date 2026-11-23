@@ -28,6 +28,7 @@
   var paso = 1;
   var params = new URLSearchParams(global.location.search);
   var entrega = { tipo: '', zona: '', mesa: params.get('mesa') || '', cuando: 'ya', hora: '' };
+  var cuponAplicado = null; // nunca afirmar descuento hasta respuesta real del servidor
   var pago = { forma: 'efectivo', propina: 0 };
   var origen = (params.get('o') || '').toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 30);
 
@@ -65,7 +66,79 @@
   function zonaElegida() { return entrega.tipo === 'domicilio' ? M.zonas.filter(function (z) { return z.id === entrega.zona; })[0] || null : null; }
   function envio() { var z = zonaElegida(); return z ? z.costo : 0; }
   function propina() { return entrega.tipo === 'domicilio' && cfg().propinas !== 'NO' ? pago.propina : 0; }
-  function cambio() { codigoEnvio = ''; }
+  function cambio() { codigoEnvio = ''; cuponAplicado = null; }
+  function puntoValido(x) { return x && x.lat !== '' && x.lng !== '' && x.lat != null && x.lng != null && isFinite(Number(x.lat)) && isFinite(Number(x.lng)); }
+  function distanciaLocal() { return puntoValido(local()) && puntoValido(ubic) ? UI.haversineKm(local(), ubic) : null; }
+  function minimoZona() { var z = zonaElegida(), l = local(); return z && z.minimo_domicilio !== '' && z.minimo_domicilio != null ? Number(z.minimo_domicilio) || 0 : Number(l.minimo_domicilio) || 0; }
+  function mensajeMinimo() { var falta = minimoZona() - subtotal(); return entrega.tipo === 'domicilio' && falta > 0 ? 'Te faltan ' + UI.dinero(falta) + ' para el envío a domicilio. Puedes agregar platos o continuar; el local te confirmará.' : ''; }
+  function mensajeCobertura() {
+    var d = distanciaLocal(), limite = Number(cfg().cobertura_km) || 0;
+    return d !== null && limite > 0 && d > limite ? '📍 Estás a ' + d + ' km del local. ¿Es para otra dirección? Escríbela o marca el punto donde lo recibes. También puedes elegir Retiro.' : '';
+  }
+  function zonaPorPunto() {
+    if (!puntoValido(ubic)) return;
+    var candidatas = zonasDe(localId).filter(function (z) { return puntoValido(z) && Number(z.radio_km) > 0; }).map(function (z) { return { zona: z, km: UI.haversineKm(ubic, z) }; })
+      .filter(function (x) { return x.km <= Number(x.zona.radio_km); }).sort(function (a, b) { return a.km - b.km; });
+    entrega.zona = candidatas.length ? candidatas[0].zona.id : ''; // sin coincidencia: no se elige a ciegas
+    UI.$$('input[name=zona]').forEach(function (r) { r.checked = r.value === entrega.zona; });
+    var aviso = $('#ubic-cobertura');
+    if (aviso) aviso.textContent = mensajeCobertura() || (candidatas.length ? '✅ Zona detectada: ' + candidatas[0].zona.nombre + ' · ' + UI.dinero(candidatas[0].zona.costo) : 'No identificamos una zona automáticamente. Elige tu zona de envío manualmente.');
+  }
+  function ventanaTexto(hora) {
+    if (!hora) return '';
+    var n = Number(cfg().ventana_minutos) || 30, a = hora.split(':');
+    var fin = (Number(a[0]) * 60 + Number(a[1]) + n) % 1440;
+    return 'Entre ' + hora + ' y ' + ('0' + Math.floor(fin / 60)).slice(-2) + ':' + ('0' + (fin % 60)).slice(-2);
+  }
+  function rangoPreparacion() { var n = (Number(cfg().minutos_preparacion) || 20) + Number((zonaElegida() || {}).minutos || 0); return n + ' a ' + (n + Math.max(10, Math.ceil((Number(cfg().ventana_minutos) || 30) / 3))) + ' min aprox.'; }
+
+
+  /* 3.1.7: cada cliente elige SU prefijo; no se cambia el país del negocio. */
+  var PAISES_TEL = [
+    { codigo: '593', nombre: '🇪🇨 Ecuador (+593)' },
+    { codigo: '1', nombre: '🇺🇸 EE. UU. / Canadá (+1)' },
+    { codigo: '57', nombre: '🇨🇴 Colombia (+57)' },
+    { codigo: '51', nombre: '🇵🇪 Perú (+51)' },
+    { codigo: '52', nombre: '🇲🇽 México (+52)' },
+    { codigo: '34', nombre: '🇪🇸 España (+34)' },
+    { codigo: '54', nombre: '🇦🇷 Argentina (+54)' },
+    { codigo: '55', nombre: '🇧🇷 Brasil (+55)' },
+    { codigo: '44', nombre: '🇬🇧 Reino Unido (+44)' },
+    { codigo: '33', nombre: '🇫🇷 Francia (+33)' },
+    { codigo: '49', nombre: '🇩🇪 Alemania (+49)' },
+    { codigo: '39', nombre: '🇮🇹 Italia (+39)' }
+  ];
+  function telefonoDeCliente(c) {
+    var valor = String(c.telefono || '').trim();
+    var codigo = String(c.pais_telefono || cfg().pais_codigo || '593').replace(/\D/g, '');
+    if (!/^[1-9]\d{0,2}$/.test(codigo)) codigo = '593';
+    var pref = '';
+    if (valor.charAt(0) === '+') {
+      var opciones = PAISES_TEL.map(function (p) { return p.codigo; });
+      if (opciones.indexOf(codigo) < 0) opciones.push(codigo);
+      opciones.sort(function (a, b) { return b.length - a.length; });
+      for (var i = 0; i < opciones.length; i++) {
+        if (valor.indexOf('+' + opciones[i]) === 0 && valor.replace(/\D/g, '').length - opciones[i].length >= 7) { pref = opciones[i]; break; }
+      }
+      if (pref) { codigo = pref; valor = valor.slice(pref.length + 1); }
+      // Si no identificamos el prefijo, mostramos el + completo para NO alterarlo.
+      else codigo = '';
+    }
+    return { codigo: codigo, seleccion: PAISES_TEL.some(function (p) { return p.codigo === codigo; }) ? codigo : 'otro', numero: valor };
+  }
+  function selectorTelefono(c) {
+    var t = telefonoDeCliente(c);
+    return '<div class="telefono-internacional">' +
+      '<div class="campo"><label for="pe-pais">País del celular</label><select class="entrada" id="pe-pais" autocomplete="off">' +
+      PAISES_TEL.map(function (p) { return '<option value="' + p.codigo + '"' + (t.seleccion === p.codigo ? ' selected' : '') + '>' + UI.esc(p.nombre) + '</option>'; }).join('') +
+      '<option value="otro"' + (t.seleccion === 'otro' ? ' selected' : '') + '>🌎 Otro país</option></select></div>' +
+      '<div class="campo" id="pe-otro-campo"' + (t.seleccion === 'otro' ? '' : ' hidden') + '><label for="pe-otro-codigo">Código de país</label><input class="entrada" id="pe-otro-codigo" inputmode="numeric" maxlength="3" placeholder="Ej. 972" value="' + UI.esc(t.seleccion === 'otro' ? t.codigo : '') + '"></div>' +
+      '<div class="campo"><label for="pe-tel">Celular (WhatsApp)</label><input class="entrada" id="pe-tel" name="telefono" type="tel" inputmode="tel" autocomplete="tel-national" maxlength="24" placeholder="' + (t.codigo === '1' ? '202 555 0147' : '099 123 4567') + '" value="' + UI.esc(t.numero) + '"><span class="ayuda">Escribe el número local, o el número completo empezando con +.</span></div></div>';
+  }
+  function codigoTelefonoElegido() {
+    var sel = $('#pe-pais');
+    return sel && sel.value === 'otro' ? String(($('#pe-otro-codigo') || {}).value || '').trim() : sel ? sel.value : String(cfg().pais_codigo || '593');
+  }
 
   /* ---------------- Horario ---------------- */
   function horaAhora() {
@@ -190,18 +263,19 @@
   function pintarMenu() {
     paso = 1;
     var cats = categoriasDe(localId);
-    var hayVendidos = platosDe(localId).some(function (p) { return /mas_vendido/.test(p.etiquetas); });
+    var hayVendidos = platosDe(localId).some(function (p) { return (M.populares || []).indexOf(p.id) >= 0; });
     if (categoria !== '_top' && (!categoria || !cats.some(function (c) { return c.id === categoria; }))) categoria = hayVendidos ? '_top' : (cats.length ? cats[0].id : '');
     var varios = localesConMenu().length > 1;
     var rep = ultimoCarrito();
     cuerpo().innerHTML = pasos() +
       (varios ? '<button class="btn secundario chico" type="button" id="btn-cambiar-local" style="margin-bottom:8px">📍 ' + UI.esc(local().nombre) + ' · cambiar</button>' : '<p class="subtitulo" style="margin:0 0 6px">📍 ' + UI.esc(local().nombre) + '</p>') +
       (entrega.tipo === 'mesa' && entrega.mesa ? '<div class="banda" style="margin:0 0 10px">🍽️ <span>Estás en la <b>mesa ' + UI.esc(entrega.mesa) + '</b>. Pide aquí y te lo llevamos.</span></div>' : '') +
-      (!abierto() ? '<div class="banda aviso-cerrado" style="margin:0 0 10px">🌙 <span>' + UI.esc(M.abierto.mensaje || 'Estamos cerrados.') + '</span></div>' : '') +
+      (local().pausado ? '<div class="banda aviso-cerrado" style="margin:0 0 10px">⏸ <span>' + UI.esc(local().mensaje_pausa || 'Este local pausó los pedidos por hoy.') + '</span></div>' : '') +
+      (!abierto() ? '<div class="banda aviso-cerrado" style="margin:0 0 10px">🌙 <span>' + UI.esc(M.abierto.mensaje || 'Estamos cerrados.') + (cfg().recibir_cerrado !== 'NO' ? ' Puedes dejarnos tu pedido y lo atenderemos cuando abramos.' : '') + '</span></div>' : '') +
       (rep && !cantidadTotal() ? '<button class="tarjeta repetir" type="button" id="btn-repetir"><span class="repetir-ico">🔁</span><span><b>Repetir mi último pedido</b><small>' + UI.esc(rep.map(function (i) { return i.cantidad + '× ' + plato(i.plato_id).nombre; }).join(', ')) + '</small></span><span aria-hidden="true">›</span></button>' : '') +
       '<div class="buscador"><span aria-hidden="true">🔎</span><input class="entrada" id="buscar" type="search" placeholder="Buscar un plato…" autocomplete="off" value="' + UI.esc(busqueda) + '" aria-label="Buscar un plato"></div>' +
       '<div class="categorias-barra"><div class="pestanas" role="tablist" style="padding-bottom:0;margin-bottom:0">' +
-      (hayVendidos ? '<button class="pestana" role="tab" type="button" data-cat="_top" aria-selected="' + (categoria === '_top') + '">⭐ Más pedidos</button>' : '') +
+      (hayVendidos ? '<button class="pestana" role="tab" type="button" data-cat="_top" aria-selected="' + (categoria === '_top') + '">🔥 Lo más pedido</button>' : '') +
       cats.map(function (c) {
         return '<button class="pestana" role="tab" type="button" data-cat="' + UI.esc(c.id) + '" aria-selected="' + (c.id === categoria) + '">' + UI.esc(c.nombre) + '</button>';
       }).join('') + '</div></div>' +
@@ -253,7 +327,7 @@
     var todos = platosDe(localId);
     var q = sinTildes(busqueda.trim());
     var lista = q ? todos.filter(function (p) { return sinTildes(p.nombre + ' ' + p.descripcion).indexOf(q) >= 0; })
-      : categoria === '_top' ? todos.filter(function (p) { return /mas_vendido/.test(p.etiquetas); })
+      : categoria === '_top' ? todos.filter(function (p) { return (M.populares || []).indexOf(p.id) >= 0; })
       : todos.filter(function (p) { return p.categoria_id === categoria; });
     var cont = $('#lista-platos');
     cont.innerHTML = lista.length ? lista.map(function (p) {
@@ -261,7 +335,7 @@
       return '<article class="plato' + (p.agotado ? ' agotado' : '') + (cant ? ' en-carrito' : '') + '">' +
         '<button class="plato-foto" type="button" data-ver="' + UI.esc(p.id) + '" aria-label="Ver ' + UI.esc(p.nombre) + '" data-ico="' + iconoCategoria(p) + '">' + fotoHtml(p) +
         (cant ? '<span class="plato-cant">' + cant + '</span>' : '') + '</button>' +
-        '<div class="plato-info">' + (p.etiquetas ? '<div class="chips">' + UI.chipsEtiquetas(p.etiquetas) + '</div>' : '') +
+        '<div class="plato-info">' + (p.etiquetas || (M.populares || []).indexOf(p.id) >= 0 ? '<div class="chips">' + ((M.populares || []).indexOf(p.id) >= 0 ? '<span class="chip-etiqueta">🔥 Lo más pedido</span>' : '') + UI.chipsEtiquetas(p.etiquetas) + '</div>' : '') +
         '<h3>' + UI.esc(p.nombre) + '</h3>' + (p.descripcion ? '<p>' + UI.esc(p.descripcion) + '</p>' : '') +
         (p.extras.length ? '<p class="plato-extras">＋ Puedes personalizarlo</p>' : '') +
         '<div class="plato-pie"><span class="precio">' + UI.dinero(p.precio) + '</span><span style="flex:1"></span>' +
@@ -380,9 +454,9 @@
     var zonas = zonasDe(localId);
     if (!entrega.tipo) entrega.tipo = zonas.length ? 'domicilio' : 'retiro';
     if (entrega.tipo === 'domicilio' && !zonas.length) entrega.tipo = 'retiro';
-    if (entrega.tipo === 'domicilio' && !entrega.zona && zonas.length === 1) entrega.zona = zonas[0].id;
-    if (!abierto()) entrega.cuando = 'programar';
-    var horas = horasProgramables();
+    // 3.1.6: nunca seleccionar una zona por existir una sola; primero verificar el punto GPS.
+    if (cfg().permitir_programar !== 'SI') entrega.cuando = 'ya';
+    var horas = cfg().permitir_programar === 'SI' ? horasProgramables() : [];
     var tipos = [];
     if (zonas.length) tipos.push(['domicilio', '🛵', 'A domicilio', 'Te lo llevamos']);
     tipos.push(['retiro', '🏪', 'Retiro', 'Pasas a recoger']);
@@ -399,20 +473,30 @@
         '</select><span class="ayuda">Está en el letrero de tu mesa.</span></div></div>' : '') +
       (entrega.tipo === 'retiro' && local().direccion ? '<div class="tarjeta retiro-info">🏪 <span><b>' + UI.esc(local().nombre) + '</b><br>' + UI.esc(local().direccion) + '</span><a class="btn secundario chico" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(local().direccion + ' ' + (cfg().ciudad || '')) + '">Cómo llegar</a></div>' : '') +
       '<div class="tarjeta"><h3 style="margin-top:0">¿Cuándo?</h3><div class="segmento">' +
-      (abierto() ? '<button type="button" data-cuando="ya" class="' + (entrega.cuando === 'ya' ? 'activo' : '') + '">⚡ Lo antes posible</button>' : '') +
-      '<button type="button" data-cuando="programar" class="' + (entrega.cuando === 'programar' ? 'activo' : '') + '">⏰ ' + (entrega.tipo === 'domicilio' ? 'Programar hora' : 'Llego a las…') + '</button></div>' +
-      (entrega.cuando === 'programar' ? (horas.length ? '<div class="campo" style="margin:12px 0 0"><label for="pe-hora">Hora</label><select class="entrada" id="pe-hora">' + horas.map(function (h) { return '<option' + (entrega.hora === h ? ' selected' : '') + '>' + h + '</option>'; }).join('') + '</select><span class="ayuda">' + (entrega.tipo === 'domicilio' ? 'Te lo llevamos a esa hora.' : 'Lo tendremos listo cuando llegues.') + '</span></div>' : '<p class="ayuda">Hoy ya no quedan horas disponibles. Escríbenos por WhatsApp.</p>') : '<p class="ayuda" style="margin:10px 0 0">Tiempo estimado: ~' + (Number(cfg().minutos_preparacion) + ((zonaElegida() || {}).minutos || 0)) + ' min.</p>') +
+      '<button type="button" data-cuando="ya" class="' + (entrega.cuando === 'ya' ? 'activo' : '') + '">⚡ Lo antes posible</button>' +
+      (cfg().permitir_programar === 'SI' ? '<button type="button" data-cuando="programar" class="' + (entrega.cuando === 'programar' ? 'activo' : '') + '">⏰ Solicitar ventana</button>' : '') + '</div>' +
+      (entrega.cuando === 'programar' ? (horas.length ? '<div class="campo" style="margin:12px 0 0"><label for="pe-hora">Preferencia aproximada</label><select class="entrada" id="pe-hora">' + '<option value="">Elige una ventana</option>' + horas.map(function (h) { return '<option value="' + h + '"' + (entrega.hora === h ? ' selected' : '') + '>' + ventanaTexto(h) + '</option>'; }).join('') + '</select><span class="ayuda">Es una hora aproximada. Intentamos llegar en ese rato y te avisamos por WhatsApp si hay cambios. El negocio confirma la preferencia.</span></div>' : '<p class="ayuda">Hoy ya no quedan ventanas disponibles. Escríbenos por WhatsApp.</p>') : '<p class="ayuda" style="margin:10px 0 0">Tiempo aproximado: ' + rangoPreparacion() + (!abierto() ? ' · Tu pedido se preparará cuando el local abra.' : '') + '</p>') +
       '</div>' +
       '<div class="tarjeta"><h3 style="margin-top:0">Tus datos</h3>' +
       '<div class="campo"><label for="pe-nombre">Nombre</label><input class="entrada" id="pe-nombre" name="nombre" autocomplete="name" maxlength="80" value="' + UI.esc(cli.nombre || '') + '"></div>' +
-      '<div class="campo" style="margin-bottom:0"><label for="pe-tel">Celular (WhatsApp)</label><input class="entrada" id="pe-tel" name="telefono" type="tel" inputmode="tel" autocomplete="tel" maxlength="20" placeholder="0991234567" value="' + UI.esc(cli.telefono || '') + '"><span class="ayuda">Para avisarte cuando tu pedido esté en camino.</span></div></div>' +
+      selectorTelefono(cli) + '</div>' +
       '<div class="acciones-paso"><button class="btn secundario" type="button" id="btn-atras">← Platos</button><button class="btn" type="submit">Continuar →</button></div>' +
       '</form>';
 
     UI.$$('[data-tipo]').forEach(function (b) { b.addEventListener('click', function () { guardarCampos(); entrega.tipo = b.getAttribute('data-tipo'); cambio(); pintarEntrega(); }); });
     UI.$$('[data-cuando]').forEach(function (b) { b.addEventListener('click', function () { guardarCampos(); entrega.cuando = b.getAttribute('data-cuando'); pintarEntrega(); }); });
-    UI.$$('[data-zona]').forEach(function (b) { b.addEventListener('change', function () { entrega.zona = b.value; cambio(); }); });
+    UI.$$('[data-zona]').forEach(function (b) { b.addEventListener('change', function () { entrega.zona = b.value; cambio(); var m = $('#aviso-minimo'); if (m) m.textContent = mensajeMinimo(); }); });
     $('#btn-atras').addEventListener('click', function () { guardarCampos(); irA(1); });
+    var paisTel = $('#pe-pais');
+    if (paisTel) paisTel.addEventListener('change', function () {
+      var otro = $('#pe-otro-campo'); if (otro) otro.hidden = paisTel.value !== 'otro';
+      var tel = $('#pe-tel'); if (tel) {
+        // Al cambiar país, no convertir silenciosamente el número anterior a otro.
+        tel.value = '';
+        tel.placeholder = paisTel.value === '1' ? '202 555 0147' : 'Número de celular';
+      }
+      var pref = $('#pe-otro-codigo'); if (paisTel.value === 'otro' && pref) pref.focus();
+    });
     var h = $('#pe-hora'); if (h) h.addEventListener('change', function () { entrega.hora = h.value; });
     var me = $('#pe-mesa'); if (me) me.addEventListener('change', function () { entrega.mesa = me.value; });
     if (entrega.tipo === 'domicilio') conectarUbicacion();
@@ -420,12 +504,15 @@
       e.preventDefault();
       guardarCampos();
       var c = MEM.leer('cliente') || {};
+      var numeroInternacional = '', errorTelefono = '';
+      try { numeroInternacional = UI.telefonoInternacional(c.telefono, c.pais_telefono || cfg().pais_codigo); }
+      catch (err) { errorTelefono = err.message; }
       var malo = !c.nombre ? ['pe-nombre', 'Escribe tu nombre.'] :
-        UI.digitos(c.telefono).length < 7 ? ['pe-tel', 'Escribe tu número de celular.'] :
+        errorTelefono ? ['pe-tel', errorTelefono] :
         (entrega.tipo === 'domicilio' && !entrega.zona) ? ['op-zonas', 'Elige tu zona de envío.'] :
         (entrega.tipo === 'domicilio' && !c.direccion && (!ubic || ubic.fuente === 'whatsapp')) ? ['pe-dir', ubic ? 'Escribe tu dirección (la ubicación la mandas luego por WhatsApp).' : 'Escribe tu dirección o marca tu ubicación.'] :
         (entrega.tipo === 'mesa' && !entrega.mesa) ? ['pe-mesa', 'Elige tu número de mesa.'] :
-        (entrega.cuando === 'programar' && !entrega.hora) ? ['pe-hora', 'Elige la hora.'] : null;
+        (entrega.cuando === 'programar' && !entrega.hora) ? ['pe-hora', 'Elige la ventana.'] : null;
       UI.$$('[aria-invalid]').forEach(function (x) { x.removeAttribute('aria-invalid'); });
       UI.$$('.error-campo').forEach(function (x) { x.remove(); });
       if (malo) {
@@ -441,6 +528,10 @@
         }
         return UI.aviso(malo[1], 'error');
       }
+      if (entrega.tipo === 'domicilio' && mensajeCobertura() && cfg().cobertura_modo === 'bloquear') return UI.aviso('Fuera de cobertura: cambia la dirección o selecciona Retiro.', 'error');
+      if (local().pausado) return UI.aviso(local().mensaje_pausa || 'Este local pausó los pedidos.', 'error');
+      c.telefono = numeroInternacional;
+      MEM.guardar('cliente', c);
       irA(3);
     });
   }
@@ -448,26 +539,25 @@
   function guardarCampos() {
     var c = MEM.leer('cliente') || {};
     ['nombre', 'telefono', 'direccion', 'referencia'].forEach(function (k) { var el = UI.$('[name=' + k + ']'); if (el) c[k] = el.value.trim(); });
+    var sel = $('#pe-pais');
+    if (sel) c.pais_telefono = codigoTelefonoElegido();
     MEM.guardar('cliente', c);
     var h = $('#pe-hora'); if (h) entrega.hora = h.value;
     var z = UI.$('input[name=zona]:checked'); if (z) entrega.zona = z.value;
   }
 
   function bloqueDomicilio(zonas, cli) {
-    return '<div class="tarjeta"><h3 style="margin-top:0">Zona de envío</h3><div class="opciones" id="op-zonas">' +
-      zonas.map(function (z) {
-        return '<label class="opcion"><input type="radio" name="zona" data-zona value="' + UI.esc(z.id) + '"' + (entrega.zona === z.id ? ' checked' : '') + '><span>' + UI.esc(z.nombre) + (z.minutos ? ' <small style="color:var(--texto-2)">~' + z.minutos + ' min</small>' : '') + '</span><span class="derecha">' + UI.dinero(z.costo) + '</span></label>';
-      }).join('') + '</div></div>' +
-      '<div class="tarjeta"><h3 style="margin-top:0">¿Dónde te lo llevamos?</h3>' +
+    return '<div class="tarjeta"><h3 style="margin-top:0">¿Dónde te lo llevamos?</h3>' +
       '<div class="ubic-opciones">' +
       '<button class="ubic-op" type="button" id="btn-gps"><span>📍</span><b>Usar mi ubicación</b><small>La más exacta</small></button>' +
       '<button class="ubic-op" type="button" id="btn-pegar"><span>📋</span><b>Pegar ubicación</b><small>Copiada de Google Maps</small></button>' +
-      '<button class="ubic-op" type="button" id="btn-ubic-wa"><span>💬</span><b>Por WhatsApp</b><small>La mandas al terminar</small></button>' +
-      '</div>' +
-      '<div id="ubic-zona"></div>' +
+      '<button class="ubic-op" type="button" id="btn-ubic-wa"><span>💬</span><b>Por WhatsApp</b><small>La mandas al terminar</small></button></div>' +
+      '<div id="ubic-zona"></div><div class="ayuda" id="ubic-cobertura" style="margin-top:8px"></div>' +
       '<div class="campo" style="margin-top:14px"><label for="pe-dir">Dirección</label><input class="entrada" id="pe-dir" name="direccion" autocomplete="street-address" maxlength="200" placeholder="Calle principal y secundaria" value="' + UI.esc(cli.direccion || '') + '"></div>' +
-      '<div class="campo" style="margin-bottom:0"><label for="pe-ref">Referencia</label><input class="entrada" id="pe-ref" name="referencia" maxlength="200" placeholder="Ej. casa azul, junto a la farmacia" value="' + UI.esc(cli.referencia || '') + '">' +
-      '</div></div>';
+      '<div class="campo" style="margin-bottom:0"><label for="pe-ref">Referencia</label><input class="entrada" id="pe-ref" name="referencia" maxlength="200" placeholder="Ej. casa azul, junto a la farmacia" value="' + UI.esc(cli.referencia || '') + '"></div></div>' +
+      '<div class="tarjeta"><h3 style="margin-top:0">Zona de envío</h3><p class="ayuda">Marca tu ubicación arriba para detectar la zona. También puedes elegirla manualmente.</p><div class="opciones" id="op-zonas">' +
+      zonas.map(function (z) { return '<label class="opcion"><input type="radio" name="zona" data-zona value="' + UI.esc(z.id) + '"' + (entrega.zona === z.id ? ' checked' : '') + '><span>' + UI.esc(z.nombre) + (z.minutos ? ' <small style="color:var(--texto-2)">~' + z.minutos + ' min</small>' : '') + '</span><span class="derecha">' + UI.dinero(z.costo) + '</span></label>'; }).join('') +
+      '</div><p class="ayuda" id="aviso-minimo">' + UI.esc(mensajeMinimo()) + '</p></div>';
   }
 
   /* ----- Ubicación: GPS con mapa, pegar enlace, quitar ----- */
@@ -480,7 +570,7 @@
         var pos = await UI.ubicacion();
         if (!pos) { estado.innerHTML = '<div class="banda error" style="margin:10px 0 0;text-align:left">⚠️ <span>No pudimos tomar tu ubicación.<br>' + UI.ayudaUbicacion() + '<br><br>Si no se puede, usa <b>«Pegar ubicación»</b> o <b>«Por WhatsApp»</b>, o escribe tu dirección.</span></div>'; return; }
         ubic = { lat: pos.lat, lng: pos.lng, precision: pos.precision, fuente: 'gps' };
-        cambio(); mostrarMapa();
+        cambio(); mostrarMapa(); zonaPorPunto();
       });
     });
     $('#btn-pegar').addEventListener('click', pegarUbicacion);
@@ -491,7 +581,7 @@
       $('#btn-quitar').addEventListener('click', quitarUbicacion);
     });
     if (ubic && ubic.fuente === 'whatsapp') $('#btn-ubic-wa').click();
-    else if (ubic) mostrarMapa();
+    else if (ubic) { mostrarMapa(); zonaPorPunto(); }
   }
 
   /* 3.1.1: saca el enlace o las coordenadas de cualquier texto copiado (Maps, WhatsApp, mensajes). */
@@ -538,7 +628,7 @@
     estado.innerHTML = '<p class="ayuda">Leyendo la ubicación…</p>';
     try {
       var r = await DATOS.pedir('ubicacionResolver', { enlace: enlace, disp_id: UI.dispId() });
-      if (r.punto) { ubic = { lat: r.punto.lat, lng: r.punto.lng, fuente: 'enlace', enlace: enlace }; cambio(); mostrarMapa(); return; }
+      if (r.punto) { ubic = { lat: r.punto.lat, lng: r.punto.lng, fuente: 'enlace', enlace: enlace }; cambio(); mostrarMapa(); zonaPorPunto(); return; }
     } catch (err) { /* se guarda el enlace tal cual */ }
     ubic = { lat: '', lng: '', fuente: 'enlace', enlace: enlace }; cambio();
     estado.innerHTML = '<div class="ubic-lista">✅ <span>Ubicación guardada. El motorizado abrirá tu enlace.</span><button class="btn secundario chico" type="button" id="btn-quitar">✕ Quitar</button></div>';
@@ -551,10 +641,10 @@
       '<div class="ubic-lista">✅ <span>' + (ubic.fuente === 'gps' && ubic.precision ? 'Ubicación lista (±' + ubic.precision + ' m). ' : 'Ubicación lista. ') + '¿No es tu puerta? Mueve el mapa.</span>' +
       '<button class="btn secundario chico" type="button" id="btn-quitar">✕ Quitar</button></div>';
     if (mapa) mapa.destruir();
-    mapa = UI.mapa($('#mapa'), { lat: ubic.lat, lng: ubic.lng, zoom: 17, alMover: function (pt) { ubic.lat = pt.lat; ubic.lng = pt.lng; cambio(); } });
+    mapa = UI.mapa($('#mapa'), { lat: ubic.lat, lng: ubic.lng, zoom: 17, alMover: function (pt) { ubic.lat = pt.lat; ubic.lng = pt.lng; cambio(); zonaPorPunto(); } });
     $('#btn-quitar').addEventListener('click', quitarUbicacion);
   }
-  function quitarUbicacion() { ubic = null; cambio(); if (mapa) { mapa.destruir(); mapa = null; } $('#ubic-zona').innerHTML = ''; }
+  function quitarUbicacion() { ubic = null; entrega.zona = ''; cambio(); if (mapa) { mapa.destruir(); mapa = null; } $('#ubic-zona').innerHTML = ''; UI.$$('input[name=zona]').forEach(function (x) { x.checked = false; }); if ($('#ubic-cobertura')) $('#ubic-cobertura').textContent = ''; }
 
   /* ---------------- 3.1.5: cuentas bancarias, políticas y efectivo por cliente ---------------- */
   function cuentasBanco() {
@@ -626,7 +716,9 @@
     cuerpo().innerHTML = pasos() +
       '<h2 class="paso-titulo">Revisa y confirma</h2>' +
       '<div class="tarjeta" id="resumen-items"></div>' +
-      '<div class="tarjeta resumen-entrega"><div>' + resumenEntrega + (entrega.cuando === 'programar' && entrega.hora ? '<br><small>⏰ ' + UI.esc(entrega.hora) + '</small>' : '') +
+      (mensajeMinimo() ? '<div class="banda">⚠️ <span>' + UI.esc(mensajeMinimo()) + '</span></div>' : '') +
+      (mensajeCobertura() ? '<div class="banda">⚠️ <span>' + UI.esc(mensajeCobertura()) + ' Puedes corregirla o seguir con tu pedido.</span></div>' : '') +
+      '<div class="tarjeta resumen-entrega"><div>' + resumenEntrega + (entrega.cuando === 'programar' && entrega.hora ? '<br><small>⏰ ' + UI.esc(ventanaTexto(entrega.hora)) + ' aprox. (sujeto a confirmación por WhatsApp)</small>' : '') +
       '<br><small>👤 ' + UI.esc(cli.nombre || '') + ' · ' + UI.esc(cli.telefono || '') + '</small></div><button class="btn secundario chico" type="button" id="btn-editar-entrega">Cambiar</button></div>' +
       '<form id="form-pedido" class="rejilla" autocomplete="off" novalidate>' +
       '<div class="tarjeta"><h3 style="margin-top:0">¿Cómo pagas?</h3><div class="tipos-entrega formas">' + formas.map(function (f) {
@@ -640,7 +732,7 @@
       (conPropina ? '<div class="tarjeta"><h3 style="margin-top:0">Propina para el motorizado <small style="font-weight:600;color:var(--texto-2)">(opcional)</small></h3><div class="segmento">' +
         [0, 0.5, 1, 2].map(function (v) { return '<button type="button" data-propina="' + v + '" class="' + (pago.propina === v ? 'activo' : '') + '">' + (v ? UI.dinero(v) : 'Sin propina') + '</button>'; }).join('') + '</div><p class="ayuda" style="margin:8px 0 0">Va completa para quien te lleva el pedido. 🙌</p></div>' : '') +
       '<div class="tarjeta"><details' + (MEM.leer('ultimo_cupon') ? ' open' : '') + '><summary>🏷️ ¿Tienes un cupón o una nota para la cocina?</summary>' +
-      '<div class="campo" style="margin-top:12px"><label for="pe-cupon">Cupón de descuento</label><input class="entrada" id="pe-cupon" name="cupon" maxlength="30" autocapitalize="characters" spellcheck="false"><span class="ayuda">El descuento se aplica al enviar.</span></div>' +
+      '<div class="campo" style="margin-top:12px"><label for="pe-cupon">Cupón de descuento</label><input class="entrada" id="pe-cupon" name="cupon" maxlength="30" autocapitalize="characters" spellcheck="false"><button class="btn secundario chico" type="button" id="pe-aplicar" style="margin-top:7px">Aplicar</button><span class="ayuda" id="pe-cupon-estado">Comprueba el descuento antes de enviar tu pedido.</span></div>' +
       '<div class="campo" style="margin-bottom:0"><label for="pe-notas">Nota para la cocina</label><textarea class="entrada" id="pe-notas" name="notas" maxlength="300" placeholder="Ej. sin ají"></textarea></div></details></div>' +
       '<div class="tarjeta"><div id="totales"></div>' +
       '<label class="casilla"><input type="checkbox" name="acepta_privacidad" id="pe-privacidad"' + (MEM.leer('acepta_privacidad') ? ' checked' : '') + '> <span>Acepto que usen mi nombre, celular y dirección solo para este pedido. <a href="privacidad.html" target="_blank" rel="noopener">Aviso de privacidad</a></span></label>' +
@@ -662,6 +754,18 @@
       });
     });
     $('#form-pedido').addEventListener('submit', enviar);
+    $('#pe-aplicar').addEventListener('click', function (e) { UI.trabajando(e.currentTarget, async function () {
+      var codigo = ($('#pe-cupon').value || '').trim().toUpperCase();
+      cuponAplicado = null;
+      if (!codigo) { totales(); return UI.aviso('Escribe un cupón.', 'error'); }
+      try {
+        var r = await DATOS.pedir('cuponValidar', { cupon: codigo, local_id: localId, telefono: (MEM.leer('cliente') || {}).telefono, items: items().map(function (it) { return { plato_id: it.plato.id, cantidad: it.cantidad, extras: it.extras }; }) });
+        cuponAplicado = { codigo: r.codigo, descuento: r.descuento };
+        $('#pe-cupon-estado').textContent = '✅ Cupón aplicado: −' + UI.dinero(r.descuento) + ' en platos.';
+        totales();
+      } catch (err) { $('#pe-cupon-estado').textContent = '⚠️ ' + err.message; UI.aviso(err.message, 'error'); totales(); }
+    }); });
+    $('#pe-cupon').addEventListener('input', function () { cuponAplicado = null; $('#pe-cupon-estado').textContent = 'Toca Aplicar para comprobar el cupón.'; totales(); });
     $('#ver-politicas').addEventListener('click', function (e) { e.preventDefault(); verPoliticas(); });
     UI.$$('[data-cuenta]').forEach(function (b) { b.addEventListener('click', function () { pago.cuenta = b.getAttribute('data-cuenta'); guardarNotas(); pintarConfirmar(); restaurarNotas(); }); });
     if (pago.forma === 'transferencia' && cuentasBanco().length === 1) pago.cuenta = etiquetaCuenta(cuentasBanco()[0]);
@@ -682,14 +786,15 @@
   function restaurarNotas() { if ($('#pe-cupon')) $('#pe-cupon').value = notasTmp.cupon || ''; if ($('#pe-notas')) $('#pe-notas').value = notasTmp.notas || ''; }
 
   function totales() {
-    var e = envio(), pr = propina(), t = subtotal() + e + pr;
+    var e = envio(), pr = propina(), descuento = cuponAplicado ? cuponAplicado.descuento : 0, t = subtotal() + e + pr - descuento;
     $('#totales').innerHTML =
       '<div class="resumen-linea"><span>Subtotal</span><span>' + UI.dinero(subtotal()) + '</span></div>' +
       (entrega.tipo === 'domicilio' ? '<div class="resumen-linea"><span>Envío</span><span>' + UI.dinero(e) + '</span></div>' : '') +
       (pr ? '<div class="resumen-linea"><span>Propina</span><span>' + UI.dinero(pr) + '</span></div>' : '') +
+      (descuento ? '<div class="resumen-linea"><span>Descuento en platos</span><span>−' + UI.dinero(descuento) + '</span></div>' : '') +
       '<div class="resumen-linea total"><span>Total</span><span>' + UI.dinero(t) + '</span></div>' +
       (cfg().precios_incluyen_iva !== 'NO' ? (function () { // 3.1.5: IVA desglosado (el precio no cambia; la propina no lleva IVA)
-        var pct = Number(cfg().iva_porcentaje) || 15, gravado = subtotal() + e, iva = Math.round((gravado - gravado / (1 + pct / 100)) * 100) / 100;
+        var pct = Number(cfg().iva_porcentaje) || 15, gravado = subtotal() + e - descuento, iva = Math.round((gravado - gravado / (1 + pct / 100)) * 100) / 100;
         return '<div class="resumen-linea iva-linea"><span>Incluye IVA ' + pct + ' %</span><span>' + UI.dinero(iva) + '</span></div>';
       })() : '');
     $('#total-boton').textContent = UI.dinero(t);
@@ -710,6 +815,7 @@
         var it = lista[Number(b.getAttribute(mas ? 'data-r-mas' : 'data-r-menos'))];
         it.cantidad = Math.max(0, Math.min(50, it.cantidad + (mas ? 1 : -1)));
         cambio(); UI.vibrar(10);
+        if ($('#pe-cupon-estado')) $('#pe-cupon-estado').textContent = 'Carrito modificado: vuelve a aplicar el cupón.';
         pintarItemsResumen(); totales();
       });
     });
@@ -724,6 +830,9 @@
     if (!priv.checked) { UI.aviso('Marca la casilla del aviso de privacidad para enviar.', 'error'); priv.focus(); priv.closest('.casilla').classList.add('falta'); return; }
     var pol = $('#pe-politicas');
     if (pol && !pol.checked) { UI.aviso('Marca que leíste cómo funciona el pedido.', 'error'); pol.focus(); pol.closest('.casilla').classList.add('falta'); return; }
+    if (d.cupon && (!cuponAplicado || cuponAplicado.codigo !== d.cupon.trim().toUpperCase())) return UI.aviso('Toca Aplicar para confirmar el cupón antes de enviar.', 'error');
+    if (local().pausado) return UI.aviso(local().mensaje_pausa || 'Este local pausó los pedidos.', 'error');
+    if (mensajeCobertura() && cfg().cobertura_modo === 'bloquear' && entrega.tipo === 'domicilio') return UI.aviso('La ubicación está fuera de cobertura. Cambia a Retiro o corrige la dirección.', 'error');
     if (pago.forma === 'transferencia' && cuentasBanco().length > 1 && !pago.cuenta) { UI.aviso('Elige a qué cuenta vas a pagar.', 'error'); var cb = UI.$('.cuentas'); if (cb) cb.scrollIntoView({ block: 'center' }); return; }
     MEM.guardar('acepta_politicas', true);
     MEM.guardar('acepta_privacidad', true); MEM.guardar('acepta_promos', !!(promos && promos.checked));
@@ -762,7 +871,7 @@
     return 'Hola, acabo de hacer el pedido *' + p.numero + '* en ' + (local().nombre || '') + '.\n' + lineas.join('\n') +
       '\nTotal: ' + UI.dinero(p.total) + ' · Pago: ' + (UI.NOMBRE_PAGO[p.forma_pago] || p.forma_pago).replace(/^\S+\s/, '') +
       (tipo === 'domicilio' ? '\nDirección: ' + (p.direccion || '—') + (p.referencia ? ' (' + p.referencia + ')' : '') : tipo === 'mesa' ? '\nMesa ' + p.mesa : '\nRetiro en el local') +
-      (p.hora_llegada ? '\nHora: ' + UI.hora(p.hora_llegada) : '') +
+      (p.hora_llegada ? '\nVentana solicitada: ' + UI.ventanaHora(p.hora_llegada, p.hora_ventana_fin, Number(cfg().ventana_minutos) || 30) + ' aprox. (por confirmar)' : '') +
       (p.lat !== '' && p.lat != null ? '\nUbicación: https://maps.google.com/?q=' + p.lat + ',' + p.lng : (p.ubicacion_enlace ? '\nUbicación: ' + p.ubicacion_enlace : '')) +
       '\nNombre: ' + p.cliente_nombre;
   }
@@ -778,7 +887,7 @@
       '<h2 style="margin:4px 0">¡Pedido recibido!</h2><p class="subtitulo" style="margin-bottom:6px">Tu número es</p>' +
       '<div class="numero-pedido">' + UI.esc(p.numero) + '</div>' +
       '<p style="margin:8px 0 0">Total: <b>' + UI.dinero(p.total) + '</b>' + (p.descuento ? ' · Descuento ' + UI.dinero(p.descuento) : '') + (p.premio ? ' · 🎁 Premio ' + UI.dinero(p.premio) : '') + '</p>' +
-      (p.hora_estimada ? '<p class="subtitulo" style="margin:4px 0 0">' + (UI.tipoEntrega(p) === 'domicilio' ? 'Llega aprox. a las ' : 'Listo aprox. a las ') + UI.esc(UI.hora(p.hora_estimada)) + '</p>' : '') +
+      (p.hora_llegada ? '<p class="subtitulo">Ventana solicitada: ' + UI.esc(UI.ventanaHora(p.hora_llegada, p.hora_ventana_fin, Number(cfg().ventana_minutos) || 30)) + ' aprox. Por confirmar.</p>' : '<p class="subtitulo">Tiempo orientativo: ' + UI.esc(rangoPreparacion()) + '</p>') +
       (p.forma_pago === 'deuna' && c.deuna_qr_url ? '<div class="pago-qr"><b>Paga con Deuna</b><img src="' + UI.esc(c.deuna_qr_url) + '" alt="QR de Deuna del local" referrerpolicy="no-referrer"><small>Monto: ' + UI.dinero(p.total) + ' · Referencia: ' + UI.esc(p.numero) + '</small>' +
         '<button class="btn borde chico" type="button" id="btn-guardar-qr">💾 Guardar QR</button><small>¿Pagas desde este mismo teléfono? Guarda el QR y en Deuna elige «Escanear» → «Galería».</small></div>' : '') +
       (p.forma_pago === 'transferencia' ? '<div style="text-align:left;margin-top:12px">' + tarjetasCuentasSolo(p) + '</div>' : '') +
@@ -899,7 +1008,10 @@
       '<button class="btn secundario chico" type="button" data-seg-act aria-label="Actualizar">↻</button></div>' +
       (r.estado === 'Anulado' ? '<p class="item-sub">' + UI.esc(r.motivo_anulacion || 'Fue anulado. Escríbenos por WhatsApp si tienes dudas.') + '</p>' :
         '<div class="seg-linea">' + pasos.map(function (n, k) { return '<span class="' + (k <= i ? 'hecho' : '') + (k === i ? ' actual' : '') + '"><i></i>' + UI.esc(k === pasos.length - 1 ? nombreFin : n) + '</span>'; }).join('') + '</div>' +
-        (r.hora_estimada && r.estado !== 'Entregado' ? '<p class="item-sub" style="margin:6px 0 0">Hora estimada: <b>' + UI.esc(UI.hora(r.hora_estimada)) + '</b></p>' : '')) +
+        (r.estado !== 'Entregado' ? '<p class="item-sub" style="margin:6px 0 0">' +
+          (r.ventana_fin ? 'Ventana solicitada: <b>' + UI.esc(UI.ventanaHora(r.hora_estimada, r.ventana_fin, Number(cfg().ventana_minutos) || 30)) + ' aprox.</b> Sujeta a confirmación.' :
+            r.estado === 'En camino' ? (r.eta_moto ? '<b>Llega en unos ' + r.eta_moto.desde + ' a ' + r.eta_moto.hasta + ' min.</b> Tiempo orientativo; puede variar.' : (r.en_camino ? 'Salió hace ' + UI.minutosDesde(r.en_camino) + ' min. ' + (UI.minutosDesde(r.en_camino) > (Number(cfg().minutos_preparacion) || 20) + 30 ? 'Hay más tráfico de lo normal; seguimos atentos a tu entrega.' : 'Te avisaremos si hay cambios.') : 'Pronto estará en camino.')) :
+            'Tiempo aproximado: <b>' + ((Number(r.tiempo_preparacion) || 20) + (Number(r.tiempo_zona) || 0)) + ' a ' + ((Number(r.tiempo_preparacion) || 20) + (Number(r.tiempo_zona) || 0) + 10) + ' min.</b> Puede variar') + '</p>' : '')) +
       (digital ? (r.pago_verificado
         ? '<div class="pago-estado ok">✅ <span><b>Pago confirmado en nuestra cuenta.</b>' + (r.estado === 'Recibido' ? ' Ya preparamos tu pedido.' : '') + '</span></div>'
         : '<div class="pago-estado espera">⏳ <span><b>Pago por confirmar.</b> Tu pedido se prepara cuando confirmemos el pago de <b>' + UI.esc(UI.dinero(r.total)) + '</b> en nuestra cuenta' + (r.cuenta_pago ? ' (' + UI.esc(r.cuenta_pago) + ')' : '') + '. Si pagaste desde otro banco puede tardar un poco.</span></div>' +
