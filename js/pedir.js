@@ -1007,6 +1007,14 @@
     if (abrir) cont.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
+  // Orientación honesta mientras no exista una operación de cambios autorizada en el servidor.
+  function mensajeCambioPedido(estado) {
+    if (estado === 'Recibido') return '¿Quieres modificar tu pedido? Solicítalo antes de que el restaurante empiece a prepararlo. El cambio requiere confirmación.';
+    if (estado === 'Preparando') return '¿Quieres agregar productos? Consulta su disponibilidad y precio. No se pueden quitar productos que ya están en preparación.';
+    if (estado === 'En camino') return 'Tu pedido ya salió. El motorizado no debe regresar por productos adicionales; consulta un nuevo envío o retiro.';
+    return 'Consulta cualquier cambio directamente con el restaurante.';
+  }
+
   /* Tarjeta de seguimiento de un pedido en curso. */
   function tarjetaSeguimiento(r, x) {
     var tipo = r.tipo_entrega;
@@ -1031,7 +1039,7 @@
       (r.codigo_entrega ? '<div class="codigo-entrega"><span>🔢 Tu código de entrega</span><b>' + UI.esc(r.codigo_entrega) + '</b><small>Dáselo al motorizado solo cuando tengas tu pedido en la mano.</small></div>' : '') +
       (r.estado === 'Entregado' && !r.calificacion ? '<button class="btn chico bloque" type="button" data-calificar="' + UI.esc(r.numero) + '" style="margin-top:10px">⭐ ¿Cómo estuvo? Califícanos</button>' : '') +
       (r.sellos_meta ? '<div class="sellos" title="Tarjeta de sellos">' + sellosHtml(r.sellos, r.sellos_meta) + '</div>' : '') +
-      (FINALES.indexOf(r.estado) < 0 && UI.digitos(cfg().whatsapp) ? '<p class="ayuda" style="margin:8px 0 0">¿Necesitas cambiar algo? <button class="enlace" type="button" data-escribir="' + UI.esc(r.numero) + '">Escríbenos por WhatsApp</button> (un pedido enviado ya no se edita aquí).</p>' : '') +
+      (FINALES.indexOf(r.estado) < 0 && UI.digitos(cfg().whatsapp) ? '<p class="ayuda" style="margin:8px 0 0">' + UI.esc(mensajeCambioPedido(r.estado)) + ' <button class="enlace" type="button" data-escribir="' + UI.esc(r.numero) + '">Consultar por WhatsApp</button></p>' : '') +
       '</div>';
   }
 
