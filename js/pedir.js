@@ -1089,12 +1089,17 @@
   /* Repetir un pedido del historial (solo platos que siguen disponibles en ese local). */
   function repetirDe(x) {
     if (!x || !x.i) return;
-    if (x.l && x.l !== localId && M.locales.some(function (l) { return l.id === x.l; })) { localId = x.l; MEM.guardar('pedir_local', localId); marcarAgotados(); }
+    if (x.l && x.l !== localId && M.locales.some(function (l) { return l.id === x.l; })) {
+      // Nunca mezclar productos de dos restaurantes al repetir un pedido histórico.
+      if (cantidadTotal()) return UI.aviso('Tu carrito tiene productos de otro local. Vacíalo antes de repetir este pedido.', 'error');
+      localId = x.l; categoria = ''; busqueda = ''; entrega.zona = '';
+      MEM.guardar('pedir_local', localId); marcarAgotados();
+    }
     var lista = x.i.map(function (y) { return { plato_id: y.p, cantidad: y.c, extras: y.x || [] }; }).filter(function (y) { var p = plato(y.plato_id); return p && !p.agotado && (p.local_id === 'TODOS' || p.local_id === localId); });
     if (!lista.length) return UI.aviso('Esos platos ya no están disponibles.', 'error');
     if (paso !== 1) { paso = 1; pintarMenu(); }
     repetir(lista);
-    if (lista.length < x.i.length) UI.aviso('Algunos platos ya no están disponibles; agregamos los demás.', '');
+    // repetir() ya informa si algún producto fue omitido; evitar avisos duplicados.
   }
 
   /* 3.1.5: enlace personal «Mis pedidos» (?c=…): trae el historial a este teléfono. */
