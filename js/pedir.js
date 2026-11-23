@@ -92,6 +92,54 @@
   }
   function rangoPreparacion() { var n = (Number(cfg().minutos_preparacion) || 20) + Number((zonaElegida() || {}).minutos || 0); return n + ' a ' + (n + Math.max(10, Math.ceil((Number(cfg().ventana_minutos) || 30) / 3))) + ' min aprox.'; }
 
+
+  /* 3.1.7: cada cliente elige SU prefijo; no se cambia el país del negocio. */
+  var PAISES_TEL = [
+    { codigo: '593', nombre: '🇪🇨 Ecuador (+593)' },
+    { codigo: '1', nombre: '🇺🇸 EE. UU. / Canadá (+1)' },
+    { codigo: '57', nombre: '🇨🇴 Colombia (+57)' },
+    { codigo: '51', nombre: '🇵🇪 Perú (+51)' },
+    { codigo: '52', nombre: '🇲🇽 México (+52)' },
+    { codigo: '34', nombre: '🇪🇸 España (+34)' },
+    { codigo: '54', nombre: '🇦🇷 Argentina (+54)' },
+    { codigo: '55', nombre: '🇧🇷 Brasil (+55)' },
+    { codigo: '44', nombre: '🇬🇧 Reino Unido (+44)' },
+    { codigo: '33', nombre: '🇫🇷 Francia (+33)' },
+    { codigo: '49', nombre: '🇩🇪 Alemania (+49)' },
+    { codigo: '39', nombre: '🇮🇹 Italia (+39)' }
+  ];
+  function telefonoDeCliente(c) {
+    var valor = String(c.telefono || '').trim();
+    var codigo = String(c.pais_telefono || cfg().pais_codigo || '593').replace(/\D/g, '');
+    if (!/^[1-9]\d{0,2}$/.test(codigo)) codigo = '593';
+    var pref = '';
+    if (valor.charAt(0) === '+') {
+      var opciones = PAISES_TEL.map(function (p) { return p.codigo; });
+      if (opciones.indexOf(codigo) < 0) opciones.push(codigo);
+      opciones.sort(function (a, b) { return b.length - a.length; });
+      for (var i = 0; i < opciones.length; i++) {
+        if (valor.indexOf('+' + opciones[i]) === 0 && valor.replace(/\D/g, '').length - opciones[i].length >= 7) { pref = opciones[i]; break; }
+      }
+      if (pref) { codigo = pref; valor = valor.slice(pref.length + 1); }
+      // Si no identificamos el prefijo, mostramos el + completo para NO alterarlo.
+      else codigo = '';
+    }
+    return { codigo: codigo, seleccion: PAISES_TEL.some(function (p) { return p.codigo === codigo; }) ? codigo : 'otro', numero: valor };
+  }
+  function selectorTelefono(c) {
+    var t = telefonoDeCliente(c);
+    return '<div class="telefono-internacional">' +
+      '<div class="campo"><label for="pe-pais">País del celular</label><select class="entrada" id="pe-pais" autocomplete="off">' +
+      PAISES_TEL.map(function (p) { return '<option value="' + p.codigo + '"' + (t.seleccion === p.codigo ? ' selected' : '') + '>' + UI.esc(p.nombre) + '</option>'; }).join('') +
+      '<option value="otro"' + (t.seleccion === 'otro' ? ' selected' : '') + '>🌎 Otro país</option></select></div>' +
+      '<div class="campo" id="pe-otro-campo"' + (t.seleccion === 'otro' ? '' : ' hidden') + '><label for="pe-otro-codigo">Código de país</label><input class="entrada" id="pe-otro-codigo" inputmode="numeric" maxlength="3" placeholder="Ej. 972" value="' + UI.esc(t.seleccion === 'otro' ? t.codigo : '') + '"></div>' +
+      '<div class="campo"><label for="pe-tel">Celular (WhatsApp)</label><input class="entrada" id="pe-tel" name="telefono" type="tel" inputmode="tel" autocomplete="tel-national" maxlength="24" placeholder="' + (t.codigo === '1' ? '202 555 0147' : '099 123 4567') + '" value="' + UI.esc(t.numero) + '"><span class="ayuda">Escribe el número local, o el número completo empezando con +.</span></div></div>';
+  }
+  function codigoTelefonoElegido() {
+    var sel = $('#pe-pais');
+    return sel && sel.value === 'otro' ? String(($('#pe-otro-codigo') || {}).value || '').trim() : sel ? sel.value : String(cfg().pais_codigo || '593');
+  }
+
   /* ---------------- Horario ---------------- */
   function horaAhora() {
     try { return new Intl.DateTimeFormat('en-GB', { timeZone: UI.zona, hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date()); } catch (e) { return new Date().toTimeString().slice(0, 5); }
@@ -431,7 +479,7 @@
       '</div>' +
       '<div class="tarjeta"><h3 style="margin-top:0">Tus datos</h3>' +
       '<div class="campo"><label for="pe-nombre">Nombre</label><input class="entrada" id="pe-nombre" name="nombre" autocomplete="name" maxlength="80" value="' + UI.esc(cli.nombre || '') + '"></div>' +
-      '<div class="campo" style="margin-bottom:0"><label for="pe-tel">Celular (WhatsApp)</label><input class="entrada" id="pe-tel" name="telefono" type="tel" inputmode="tel" autocomplete="tel" maxlength="20" placeholder="0991234567" value="' + UI.esc(cli.telefono || '') + '"><span class="ayuda">Para avisarte cuando tu pedido esté en camino.</span></div></div>' +
+      selectorTelefono(cli) + '</div>' +
       '<div class="acciones-paso"><button class="btn secundario" type="button" id="btn-atras">← Platos</button><button class="btn" type="submit">Continuar →</button></div>' +
       '</form>';
 
@@ -439,6 +487,16 @@
     UI.$$('[data-cuando]').forEach(function (b) { b.addEventListener('click', function () { guardarCampos(); entrega.cuando = b.getAttribute('data-cuando'); pintarEntrega(); }); });
     UI.$$('[data-zona]').forEach(function (b) { b.addEventListener('change', function () { entrega.zona = b.value; cambio(); var m = $('#aviso-minimo'); if (m) m.textContent = mensajeMinimo(); }); });
     $('#btn-atras').addEventListener('click', function () { guardarCampos(); irA(1); });
+    var paisTel = $('#pe-pais');
+    if (paisTel) paisTel.addEventListener('change', function () {
+      var otro = $('#pe-otro-campo'); if (otro) otro.hidden = paisTel.value !== 'otro';
+      var tel = $('#pe-tel'); if (tel) {
+        // Al cambiar país, no convertir silenciosamente el número anterior a otro.
+        tel.value = '';
+        tel.placeholder = paisTel.value === '1' ? '202 555 0147' : 'Número de celular';
+      }
+      var pref = $('#pe-otro-codigo'); if (paisTel.value === 'otro' && pref) pref.focus();
+    });
     var h = $('#pe-hora'); if (h) h.addEventListener('change', function () { entrega.hora = h.value; });
     var me = $('#pe-mesa'); if (me) me.addEventListener('change', function () { entrega.mesa = me.value; });
     if (entrega.tipo === 'domicilio') conectarUbicacion();
@@ -446,8 +504,11 @@
       e.preventDefault();
       guardarCampos();
       var c = MEM.leer('cliente') || {};
+      var numeroInternacional = '', errorTelefono = '';
+      try { numeroInternacional = UI.telefonoInternacional(c.telefono, c.pais_telefono || cfg().pais_codigo); }
+      catch (err) { errorTelefono = err.message; }
       var malo = !c.nombre ? ['pe-nombre', 'Escribe tu nombre.'] :
-        UI.digitos(c.telefono).length < 7 ? ['pe-tel', 'Escribe tu número de celular.'] :
+        errorTelefono ? ['pe-tel', errorTelefono] :
         (entrega.tipo === 'domicilio' && !entrega.zona) ? ['op-zonas', 'Elige tu zona de envío.'] :
         (entrega.tipo === 'domicilio' && !c.direccion && (!ubic || ubic.fuente === 'whatsapp')) ? ['pe-dir', ubic ? 'Escribe tu dirección (la ubicación la mandas luego por WhatsApp).' : 'Escribe tu dirección o marca tu ubicación.'] :
         (entrega.tipo === 'mesa' && !entrega.mesa) ? ['pe-mesa', 'Elige tu número de mesa.'] :
@@ -469,6 +530,8 @@
       }
       if (entrega.tipo === 'domicilio' && mensajeCobertura() && cfg().cobertura_modo === 'bloquear') return UI.aviso('Fuera de cobertura: cambia la dirección o selecciona Retiro.', 'error');
       if (local().pausado) return UI.aviso(local().mensaje_pausa || 'Este local pausó los pedidos.', 'error');
+      c.telefono = numeroInternacional;
+      MEM.guardar('cliente', c);
       irA(3);
     });
   }
@@ -476,6 +539,8 @@
   function guardarCampos() {
     var c = MEM.leer('cliente') || {};
     ['nombre', 'telefono', 'direccion', 'referencia'].forEach(function (k) { var el = UI.$('[name=' + k + ']'); if (el) c[k] = el.value.trim(); });
+    var sel = $('#pe-pais');
+    if (sel) c.pais_telefono = codigoTelefonoElegido();
     MEM.guardar('cliente', c);
     var h = $('#pe-hora'); if (h) entrega.hora = h.value;
     var z = UI.$('input[name=zona]:checked'); if (z) entrega.zona = z.value;
