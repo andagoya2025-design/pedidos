@@ -558,3 +558,10 @@ details.otras-fechas[open] summary { margin-bottom: 10px; }
 
 /* Nuevos controles cómodos en el teléfono. */
 #lo-gps,#zo-gps,#pe-aplicar,[data-pausar]{min-height:48px}
+
+/* 3.1.7: prefijos internacionales accesibles en móvil de 320 px. */
+.telefono-internacional {display:grid;grid-template-columns:minmax(0,1fr);gap:8px;min-width:0}
+.telefono-internacional .campo {min-width:0;margin:0}
+.telefono-internacional .entrada {width:100%;max-width:100%;min-width:0;font-size:16px}
+.telefono-internacional select {min-height:48px}
+.telefono-internacional #pe-otro-campo[hidden] {display:none}
