@@ -28,6 +28,31 @@
     if (isNaN(d.getTime())) return '';
     try { return new Intl.DateTimeFormat('es-EC', { timeZone: UI.zona, hour: '2-digit', minute: '2-digit', hour12: UI.hora12() }).format(d); } catch (e) { return d.toTimeString().slice(0, 5); }
   };
+  /* 3.1.6: fechas comerciales según zona configurada (sin cambiar el día contable). */
+  UI.fechaLocal = function (iso) {
+    if (!iso) return '';
+    var d = new Date(iso); if (isNaN(d.getTime())) return '';
+    try {
+      var parts = new Intl.DateTimeFormat('en-US', { timeZone: UI.zona, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(d);
+      var obj = {}; parts.forEach(function (p) { obj[p.type] = p.value; });
+      return obj.year + '-' + obj.month + '-' + obj.day;
+    } catch (e) { return d.toISOString().slice(0, 10); }
+  };
+  UI.ventanaHora = function (inicio, fin, min) {
+    if (!inicio) return '';
+    var ini = new Date(inicio); if (isNaN(ini.getTime())) return '';
+    var final = fin && !isNaN(new Date(fin).getTime()) ? new Date(fin) : new Date(ini.getTime() + (Number(min) || 30) * 60000);
+    return 'Entre ' + UI.hora(ini.toISOString()) + ' y ' + UI.hora(final.toISOString());
+  };
+  UI.haversineKm = function (a, b) {
+    if (!a || !b || a.lat === '' || a.lng === '' || b.lat === '' || b.lng === '' || a.lat == null || a.lng == null || b.lat == null || b.lng == null) return null;
+    var c = [Number(a.lat), Number(a.lng), Number(b.lat), Number(b.lng)];
+    if (c.some(function (x) { return !isFinite(x); })) return null;
+    var rad = Math.PI / 180, p = (c[2] - c[0]) * rad, q = (c[3] - c[1]) * rad;
+    var v = Math.pow(Math.sin(p / 2), 2) + Math.cos(c[0] * rad) * Math.cos(c[2] * rad) * Math.pow(Math.sin(q / 2), 2);
+    return Math.round(6371 * 2 * Math.atan2(Math.sqrt(v), Math.sqrt(Math.max(0, 1 - v))) * 10) / 10;
+  };
+
   /* 3.1: horas en 12 h (a. m./p. m.) si el dueño lo eligió en los ajustes. */
   UI.hora12 = function () { var p = (global.APP && global.APP.publico) || global.__cfgPublica || {}; return String(p.formato_hora) === '12'; };
 
@@ -106,7 +131,7 @@
   UI.etiquetaTipo = function (p) {
     var t = UI.tipoEntrega(p), d = UI.TIPOS[t] || UI.TIPOS.retiro;
     return '<span class="chip-tipo tipo-' + t + '">' + d.icono + ' ' + (t === 'mesa' && p.mesa ? 'Mesa ' + UI.esc(p.mesa) : d.nombre) + '</span>' +
-      (p.hora_llegada ? '<span class="chip-tipo tipo-hora">⏰ ' + UI.esc(UI.hora(p.hora_llegada)) + '</span>' : '');
+      (p.hora_llegada ? '<span class="chip-tipo tipo-hora">⏰ ' + UI.esc(UI.ventanaHora(p.hora_llegada, p.hora_ventana_fin, Number(global.APP && global.APP.publico && global.APP.publico.ventana_minutos) || 30)) + ' aprox.</span>' : '');
   };
   UI.NOMBRE_PAGO = { efectivo: '💵 Efectivo', transferencia: '🏦 Transferencia', deuna: '📲 Deuna' };
   UI.esDigital = function (f) { return f === 'transferencia' || f === 'deuna'; };
