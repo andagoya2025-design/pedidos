@@ -23,6 +23,7 @@
   var busqueda = '';
   var carrito = {};             // clave -> { plato, extras:[nombres], cantidad }
   var codigoEnvio = '';         // se crea al confirmar y se reusa hasta que el pedido entra
+  var envioPendiente = null;    // carga original inmutable para reintentos tras una respuesta incierta
   var ubic = null;              // { lat, lng, precision, fuente:'gps'|'enlace', enlace }
   var mapa = null;
   var paso = 1;
@@ -66,7 +67,7 @@
   function zonaElegida() { return entrega.tipo === 'domicilio' ? M.zonas.filter(function (z) { return z.id === entrega.zona; })[0] || null : null; }
   function envio() { var z = zonaElegida(); return z ? z.costo : 0; }
   function propina() { return entrega.tipo === 'domicilio' && cfg().propinas !== 'NO' ? pago.propina : 0; }
-  function cambio() { codigoEnvio = ''; cuponAplicado = null; }
+  function cambio() { if (!envioPendiente) codigoEnvio = ''; cuponAplicado = null; }
   function puntoValido(x) { return x && x.lat !== '' && x.lng !== '' && x.lat != null && x.lng != null && isFinite(Number(x.lat)) && isFinite(Number(x.lng)); }
   function distanciaLocal() { return puntoValido(local()) && puntoValido(ubic) ? UI.haversineKm(local(), ubic) : null; }
   function minimoZona() { var z = zonaElegida(), l = local(); return z && z.minimo_domicilio !== '' && z.minimo_domicilio != null ? Number(z.minimo_domicilio) || 0 : Number(l.minimo_domicilio) || 0; }
@@ -847,6 +848,10 @@
         lat: dom && ubic && ubic.lat !== '' ? ubic.lat : '', lng: dom && ubic && ubic.lng !== '' ? ubic.lng : '',
         ubicacion_fuente: dom && ubic ? ubic.fuente : '', ubicacion_enlace: dom && ubic && ubic.enlace ? ubic.enlace : '' }
     };
+    // Si la respuesta anterior se perdió, reintentar exactamente la misma carga.
+    // Nunca reutilizar un op_id con platos, importes o dirección distintos.
+    if (envioPendiente) datos = envioPendiente;
+    else envioPendiente = JSON.parse(JSON.stringify(datos));
     await UI.trabajando(boton, async function () {
       try {
         var r = await DATOS.pedir('pedidoCrear', datos, { guardar: true });
@@ -855,12 +860,12 @@
           i: datos.items.map(function (x) { var pl = plato(x.plato_id); return { p: x.plato_id, c: x.cantidad, x: x.extras, n: pl ? pl.nombre : '' }; }) });
         var detalle = items();
         r.pedido.ubic_por_wa = !!(ubic && ubic.fuente === 'whatsapp'); // 3.1.1: solo entonces se pide la ubicación por WhatsApp
-        carrito = {}; codigoEnvio = ''; ubic = null; pago.propina = 0;
+        carrito = {}; codigoEnvio = ''; envioPendiente = null; ubic = null; pago.propina = 0;
         UI.vibrar([30, 40, 30]);
         pintarExito(r.pedido, detalle);
       } catch (err) {
         // El código de envío se conserva: si vuelve a intentar, no se duplica.
-        UI.ventana({ icono: '⚠️', titulo: 'No pudimos confirmar el envío', texto: 'No sabemos si el pedido llegó al restaurante. No hagas otro pedido todavía. Puedes reintentar con el mismo código sin duplicarlo. Detalle: ' + err.message, botones: [{ texto: 'Entendido', valor: true }] });
+        UI.ventana({ icono: '⚠️', titulo: 'No pudimos confirmar el envío', texto: 'No sabemos si el pedido llegó al restaurante. No hagas otro pedido todavía. Puedes reintentar el envío original con el mismo código, aunque hayas cambiado el carrito. No hagas un pedido nuevo hasta confirmar el anterior. Detalle: ' + err.message, botones: [{ texto: 'Entendido', valor: true }] });
       }
     });
   }
