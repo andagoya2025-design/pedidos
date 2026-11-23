@@ -229,7 +229,7 @@
 
   /* =================== Mis entregas (motorizado) =================== */
   var mias = null;
-  var firmaEntregas = '', relojEntregas = null, consultaEntregasEnCurso = false;
+  var firmaEntregas = '', relojEntregas = null, consultaEntregasEnCurso = false, secuenciaEntregas = 0;
 
   function avisoConexionEntregas(texto) {
     if (APP.vistaActual !== 'entregas') return;
@@ -258,15 +258,16 @@
   async function refrescarEntregasAutomaticamente() {
     if (APP.vistaActual !== 'entregas' || document.hidden || (global.navigator && global.navigator.onLine === false) || consultaEntregasEnCurso) return;
     consultaEntregasEnCurso = true;
+    var numeroConsulta = ++secuenciaEntregas;
     try {
       var nuevo = await DATOS.pedir('misEntregas', {});
-      if (APP.vistaActual !== 'entregas' || !UI.$('#en-cuerpo')) return;
+      if (numeroConsulta !== secuenciaEntregas || APP.vistaActual !== 'entregas' || !UI.$('#en-cuerpo')) return;
       var firma = firmaEstadoEntregas(nuevo);
       mias = nuevo;
       if (firma !== firmaEntregas) { firmaEntregas = firma; pintarMias(); }
       avisoConexionEntregas('');
     } catch (e) {
-      avisoConexionEntregas('⚠️ Sin conexión: los estados mostrados son los últimos consultados. Pulsa Actualizar al recuperar internet.');
+      if (numeroConsulta === secuenciaEntregas) avisoConexionEntregas('⚠️ Sin conexión: los estados mostrados son los últimos consultados. Pulsa Actualizar al recuperar internet.');
     }
     finally { consultaEntregasEnCurso = false; }
   }
@@ -289,12 +290,16 @@
   };
 
   async function cargarMias() {
+    var numeroConsulta = ++secuenciaEntregas;
     try {
-      mias = await DATOS.pedir('misEntregas', {});
+      var nuevo = await DATOS.pedir('misEntregas', {});
+      if (numeroConsulta !== secuenciaEntregas || !UI.$('#en-cuerpo') || APP.vistaActual !== 'entregas') return;
+      mias = nuevo;
       firmaEntregas = firmaEstadoEntregas(mias);
       pintarMias();
       avisoConexionEntregas('');
     } catch (err) {
+      if (numeroConsulta !== secuenciaEntregas || APP.vistaActual !== 'entregas') return;
       if (UI.$('#en-cuerpo') && !mias) UI.$('#en-cuerpo').innerHTML = '<div class="banda error">⚠️ <span>' + UI.esc(err.message) + '</span></div>';
       else { avisoConexionEntregas('⚠️ No se pudo actualizar Mis entregas: se muestra la última información recibida.'); UI.aviso('No se pudo actualizar Mis entregas. Comprueba la conexión.', 'error'); }
     }
@@ -339,7 +344,8 @@
     UI.trabajando(boton, async function () {
       var pos = await UI.ubicacion(8000);
       try {
-        mias = await DATOS.pedir(terminar ? 'turnoTerminar' : 'turnoIniciar', { lat: pos ? pos.lat : '', lng: pos ? pos.lng : '' }, { guardar: true });
+        var turnoActualizado = await DATOS.pedir(terminar ? 'turnoTerminar' : 'turnoIniciar', { lat: pos ? pos.lat : '', lng: pos ? pos.lng : '' }, { guardar: true });
+        ++secuenciaEntregas; mias = turnoActualizado; firmaEntregas = firmaEstadoEntregas(mias);
         UI.aviso(terminar ? 'Turno terminado. ¡Buen descanso!' : '¡Turno iniciado! Buen trabajo 🛵', 'ok');
         pintarMias();
       } catch (err) { UI.error('No se guardó', err.message); }
@@ -455,7 +461,8 @@
       return UI.trabajando(boton, async function () {
         var pos = await UI.ubicacion(8000);
         try {
-          mias = await DATOS.pedir('entregaEntregado', { id: id, lat: pos ? pos.lat : '', lng: pos ? pos.lng : '', foto: foto, codigo: codigo }, { guardar: true });
+          var entregaActualizada = await DATOS.pedir('entregaEntregado', { id: id, lat: pos ? pos.lat : '', lng: pos ? pos.lng : '', foto: foto, codigo: codigo }, { guardar: true });
+          ++secuenciaEntregas; mias = entregaActualizada; firmaEntregas = firmaEstadoEntregas(mias);
           UI.vibrar([30, 40, 30]); UI.aviso('¡Entrega registrada! 🎉', 'ok');
           pintarMias();
         } catch (err) { UI.error('No se guardó', err.message); if (err.codigo === 'CAMBIO') cargarMias(); }
