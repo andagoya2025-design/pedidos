@@ -18,8 +18,8 @@
  * ============================================================
  */
 
-var APP_VERSION = '3.1.6';
-var APP_VERSION_NUM = 30106; // 3.1.0 -> 30100 (la pantalla compara con su mínimo)
+var APP_VERSION = '3.1.7';
+var APP_VERSION_NUM = 30107; // 3.1.0 -> 30100 (la pantalla compara con su mínimo)
 var SESION_SEGUNDOS = 21600;  // 6 h; se renueva con cada uso
 var ROLES = ['dueno', 'cajero', 'motorizado'];
 
@@ -888,14 +888,33 @@ function hashClave_(clave, sal) {
   return bytes.map(function (b) { return ('0' + (b & 0xFF).toString(16)).slice(-2); }).join('');
 }
 
-/* Teléfono con código de país: "0991234567" -> "+593991234567". */
+/* 3.1.7: teléfonos internacionales E.164, sin modificar los números guardados.
+ * +1... conserva EE. UU.; 099... conserva Ecuador según el prefijo del negocio.
+ * Acepta espacios y guiones; nunca convierte un + explícito al país del local. */
 function normalizarTelefono_(v, pais) {
-  var d = String(v == null ? '' : v).replace(/\D/g, '');
+  var original = String(v == null ? '' : v).trim();
+  if (!original) return '';
+  if (!/^\+?[0-9\s().-]+$/.test(original)) throw fallo_('Número de teléfono no válido. Use solo números y, si desea, el signo + al principio.');
+  var d = original.replace(/\D/g, '');
   pais = String(pais || '593').replace(/\D/g, '');
-  if (!d) return '';
-  if (d.indexOf(pais) === 0 && d.length > pais.length + 6) return '+' + d;
+  if (!/^[1-9]\d{0,2}$/.test(pais)) throw fallo_('Código de país no válido.');
+  if (original.charAt(0) === '+') {
+    // En EE. UU. y Canadá se requieren 10 dígitos después del +1.
+    if (!/^[1-9]\d{7,14}$/.test(d) || (d.charAt(0) === '1' && d.length !== 11)) throw fallo_('Número internacional no válido. Revise el código de país y el celular.');
+    return '+' + d;
+  }
+  if (d.slice(0, 2) === '00') {
+    d = d.slice(2);
+    if (!/^[1-9]\d{7,14}$/.test(d) || (d.charAt(0) === '1' && d.length !== 11)) throw fallo_('Número internacional no válido.');
+    return '+' + d;
+  }
+  // Números ya escritos con prefijo pero sin + (compatibilidad con Ecuador).
+  if (d.indexOf(pais) === 0 && d.length > pais.length + 6) {
+    if (d.length > 15 || (pais === '1' && d.length !== 11)) throw fallo_('Número de teléfono no válido.');
+    return '+' + d;
+  }
   if (d.charAt(0) === '0') d = d.slice(1);
-  if (d.length < 7 || d.length > 12) throw fallo_('Número de teléfono no válido.');
+  if (d.length < 7 || pais.length + d.length > 15 || (pais === '1' && d.length !== 10)) throw fallo_('Número de teléfono no válido. Revise el código de país.');
   return '+' + pais + d;
 }
 
