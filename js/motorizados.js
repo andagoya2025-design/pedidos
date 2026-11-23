@@ -229,6 +229,38 @@
 
   /* =================== Mis entregas (motorizado) =================== */
   var mias = null;
+  var firmaEntregas = '', relojEntregas = null, consultaEntregasEnCurso = false;
+
+  /* Una sola fuente: respuesta confirmada del servidor. Sin mensajes ficticios,
+   * sin abrir WhatsApp por su cuenta y sin borrar la lista cuando falle la red. */
+  function firmaEstadoEntregas(r) {
+    return JSON.stringify({
+      pedidos: (r.pedidos || []).map(function (p) {
+        return [p.id, p.estado, p.motorizado_id, p.pago_verificado, p.total,
+          p.en_camino, p.entregado, p.direccion, p.referencia, p.detalle, p.pide_codigo];
+      }),
+      turno: r.turno || null, debe: r.debe || null,
+      motorizado: r.motorizado && r.motorizado.id
+    });
+  }
+  async function refrescarEntregasAutomaticamente() {
+    if (APP.vistaActual !== 'entregas' || document.hidden || (global.navigator && global.navigator.onLine === false) || consultaEntregasEnCurso) return;
+    consultaEntregasEnCurso = true;
+    try {
+      var nuevo = await DATOS.pedir('misEntregas', {});
+      if (APP.vistaActual !== 'entregas' || !UI.$('#en-cuerpo')) return;
+      var firma = firmaEstadoEntregas(nuevo);
+      mias = nuevo;
+      if (firma !== firmaEntregas) { firmaEntregas = firma; pintarMias(); }
+    } catch (e) { /* mantener el último estado visible, sin afirmar un estado nuevo */ }
+    finally { consultaEntregasEnCurso = false; }
+  }
+  function activarSincronizacionEntregas() {
+    if (relojEntregas) return;
+    relojEntregas = global.setInterval(refrescarEntregasAutomaticamente, 60000);
+    document.addEventListener('visibilitychange', function () { if (!document.hidden) refrescarEntregasAutomaticamente(); });
+    global.addEventListener('online', refrescarEntregasAutomaticamente);
+  }
 
   APP.vistas.entregas = {
     titulo: 'Mis entregas', icono: '📍', orden: 10, roles: ['motorizado'],
@@ -236,15 +268,18 @@
       cont.innerHTML = UI.encabezado('Mis entregas', 'Toque «Salí» al salir y «Entregado» al entregar') + '<div id="en-cuerpo">' + UI.esqueleto(3) + '</div>';
       UI.$('[data-actualizar]', cont).addEventListener('click', function (e) { UI.trabajando(e.currentTarget, cargarMias); });
       cargarMias();
+      activarSincronizacionEntregas();
     }
   };
 
   async function cargarMias() {
     try {
       mias = await DATOS.pedir('misEntregas', {});
+      firmaEntregas = firmaEstadoEntregas(mias);
       pintarMias();
     } catch (err) {
-      if (UI.$('#en-cuerpo')) UI.$('#en-cuerpo').innerHTML = '<div class="banda error">⚠️ <span>' + UI.esc(err.message) + '</span></div>';
+      if (UI.$('#en-cuerpo') && !mias) UI.$('#en-cuerpo').innerHTML = '<div class="banda error">⚠️ <span>' + UI.esc(err.message) + '</span></div>';
+      else UI.aviso('No se pudo actualizar Mis entregas. Comprueba la conexión.', 'error');
     }
   }
 
@@ -339,13 +374,14 @@
       var cobro = p.forma_pago === 'efectivo' ? ' Total a pagar: ' + UI.dinero(p.total) + ' en efectivo.' : '';
       var op = await UI.ventana({
         icono: '💬', titulo: 'Mensaje a ' + p.cliente_nombre, texto: 'Elige el mensaje: se abre WhatsApp ya escrito.',
-        botones: [
+        botones: (p.estado === 'En camino' ? [
           { texto: '🛵 Ya salí con tu pedido', valor: 'sali', clase: 'borde opcion-lista' },
           { texto: '📍 Ya llegué, estoy afuera', valor: 'llegue', clase: 'borde opcion-lista' },
-          { texto: '❓ No encuentro la dirección', valor: 'donde', clase: 'borde opcion-lista' },
+          { texto: '❓ No encuentro la dirección', valor: 'donde', clase: 'borde opcion-lista' }
+        ] : []).concat([
           { texto: '✍️ Escribir otro', valor: 'otro', clase: 'borde opcion-lista' },
           { texto: 'Cerrar', valor: null, clase: 'secundario' }
-        ]
+        ])
       });
       var textos = {
         sali: 'Hola ' + nombre + ', soy ' + mias.motorizado.nombre.split(' ')[0] + ' y ya salí con tu pedido ' + p.numero + ' 🛵.' + cobro,
@@ -373,6 +409,8 @@
       });
     }
     if (que === 'wa_sali') {
+      var actual = (mias.pedidos || []).filter(function (x) { return x.id === id; })[0];
+      if (!actual || actual.estado !== 'En camino') return UI.aviso('Primero confirma la salida en el sistema y actualiza Mis entregas.', 'error');
       UI.abrirWhatsApp(p.telefono, 'Hola ' + String(p.cliente_nombre || '').split(' ')[0] + ', ya salí con tu pedido ' + p.numero + ' 🛵.' + (p.forma_pago === 'efectivo' ? ' Total a pagar: ' + UI.dinero(p.total) + ' en efectivo.' : ''));
       return;
     }
