@@ -201,6 +201,7 @@
       try { global.history.replaceState(null, '', global.location.pathname); } catch (e) { /* sin historial */ }
       traerMisPedidos(cc).then(function () { pintarSeguimiento(true); });
     } else pintarSeguimiento();
+    iniciarRelojSeguimiento();
     if (localId) pintarMenu(); else pintarLocales();
   }
 
@@ -681,7 +682,7 @@
   var POLITICAS_DEFECTO = '🔒 Pago con transferencia o Deuna: tu pedido se prepara cuando confirmamos el pago en nuestra cuenta (la foto del comprobante sola no basta).\n' +
     '⏳ Si pagas desde otro banco, la acreditación puede tardar; preparamos apenas llegue.\n' +
     '🔢 Te damos un código de 4 números: dáselo al motorizado solo cuando tengas tu pedido en la mano.\n' +
-    '✏️ Una vez enviado, el pedido no se puede editar: para cambios escríbenos por WhatsApp.\n' +
+    '✏️ Si necesitas corregir el pedido, solicita ayuda por WhatsApp cuanto antes. El local debe confirmar cualquier cambio; durante la preparación o el reparto podría no ser posible.\n' +
     '↩️ Si tu pago no se acredita, el pedido se anula. Si anulamos un pedido ya pagado, te devolvemos el dinero.\n' +
     '🕒 La hora es aproximada y el envío depende de tu zona.';
   function textoPoliticas() { return String(cfg().politicas_texto || '').trim() || POLITICAS_DEFECTO; }
@@ -924,6 +925,24 @@
     }
   }
 
+  /* Fase 1: seguimiento sincronizado con el estado CONFIRMADO por Apps Script.
+   * No se intenta enviar mensajes de WhatsApp ni modificar pedidos desde aquí.
+   * Consulta cada 60 segundos solo con la pantalla visible y conexión. */
+  var relojSeguimiento = null, sincronizandoSeguimiento = false, secuenciaSeguimiento = 0;
+  function refrescarSeguimientoAutomatico() {
+    if (sincronizandoSeguimiento || !M || document.hidden || (global.navigator && global.navigator.onLine === false) || !misPedidos().some(activo)) return;
+    sincronizandoSeguimiento = true;
+    pintarSeguimiento(false).catch(function () { /* conserva el aviso de reintento de la pantalla */ }).then(function () {
+      sincronizandoSeguimiento = false;
+    }, function () { sincronizandoSeguimiento = false; });
+  }
+  function iniciarRelojSeguimiento() {
+    if (relojSeguimiento) return;
+    relojSeguimiento = global.setInterval(refrescarSeguimientoAutomatico, 60000);
+    document.addEventListener('visibilitychange', function () { if (!document.hidden) refrescarSeguimientoAutomatico(); });
+    global.addEventListener('online', refrescarSeguimientoAutomatico);
+  }
+
   /* ---------------- 3.1.5: «Mis pedidos» del cliente (guardado liviano en su teléfono) ---------------- */
   var PASOS_SEG = ['Recibido', 'Preparando', 'En camino', 'Entregado'];
   var FINALES = ['Entregado', 'Anulado'];
@@ -940,6 +959,7 @@
   function activo(x) { return FINALES.indexOf(x.e) < 0 || (x.e === 'Entregado' && !x.cal && Date.now() - (x.fe || x.f || 0) < 6 * 3600000); }
 
   async function pintarSeguimiento(abrir) {
+    var numeroConsulta = ++secuenciaSeguimiento;
     var cont = $('#seguimiento');
     if (!cont) return;
     var lista = misPedidos();
@@ -955,12 +975,15 @@
         r.pedidos.forEach(function (p, k) { res[conClave[k].n] = p; });
         for (var j = 0; j < act.length; j++) { // pedidos viejos sin clave: número + celular
           var x = act[j]; if (x.s || res[x.n]) continue;
-          try { res[x.n] = await DATOS.pedir('pedidoConsultar', { numero: x.n, telefono: x.tel || (MEM.leer('cliente') || {}).telefono || '' }); } catch (e) { res[x.n] = { no_existe: true }; }
+          try { res[x.n] = await DATOS.pedir('pedidoConsultar', { numero: x.n, telefono: x.tel || (MEM.leer('cliente') || {}).telefono || '' }); } catch (e) { res[x.n] = { error_consulta: true }; }
         }
+        // Evita regresar visualmente a un estado anterior por respuestas fuera de orden.
+        if (numeroConsulta !== secuenciaSeguimiento) return;
         var cambio2 = false;
         lista.forEach(function (x) {
           var p = res[x.n]; if (!p) return;
-          if (p.no_existe) { x.e = 'Anulado'; cambio2 = true; return; }
+          // No encontrar el enlace o fallar la red NO equivale a una anulación real.
+          if (p.no_existe || p.error_consulta) return;
           if (p.estado !== x.e) { x.e = p.estado; if (p.estado === 'Entregado') x.fe = Date.now(); cambio2 = true; }
           if (p.total && !x.t) { x.t = p.total; cambio2 = true; }
           if (p.seguimiento && !x.s) { x.s = p.seguimiento; cambio2 = true; }
@@ -969,12 +992,26 @@
         if (cambio2) guardarMisPedidos(lista);
         act = lista.filter(activo); hist = lista.filter(function (x) { return !activo(x); });
       } catch (err) {
+        if (numeroConsulta !== secuenciaSeguimiento) return;
+        // Una desconexión NO anula ni cambia el pedido: conservar último estado visible.
+        if (sincronizandoSeguimiento && cont.querySelector('.seg-caja')) {
+          if (!$('#seg-sin-conexion')) {
+            var aviso = document.createElement('div'); aviso.id = 'seg-sin-conexion'; aviso.className = 'banda aviso';
+            aviso.textContent = '⚠️ Sin conexión: se muestra el último estado consultado. Toca Actualizar para comprobarlo.';
+            cont.insertBefore(aviso, cont.firstChild);
+          }
+          return;
+        }
         cont.innerHTML = '<div class="seg-caja"><b>Mis pedidos</b><span class="item-sub">No se pudo consultar ahora. <button class="enlace" type="button" id="seg-act">Reintentar</button></span></div>';
         $('#seg-act').addEventListener('click', function () { pintarSeguimiento(true); });
         return;
       }
     }
-    cont.innerHTML = act.map(function (x) { return res[x.n] && !res[x.n].no_existe ? tarjetaSeguimiento(res[x.n], x) : ''; }).join('') +
+    cont.innerHTML = act.map(function (x) {
+      var estado = res[x.n];
+      return estado && !estado.no_existe && !estado.error_consulta ? tarjetaSeguimiento(estado, x) :
+        '<div class="seg-caja"><b>Tu pedido ' + UI.esc(x.n) + '</b><p class="item-sub">⚠️ No pudimos verificar el estado actual. Esto no significa que tu pedido esté anulado. Toca Actualizar para volver a consultar.</p></div>';
+    }).join('') +
       (hist.length ? '<details class="seg-caja mis-pedidos"' + (act.length ? '' : ' open') + '><summary><b>🧾 Mis pedidos anteriores</b> <small>(' + hist.length + ')</small></summary>' +
         '<div class="lista">' + hist.map(function (x) {
           var fecha = new Date(x.f || Date.now());
@@ -987,7 +1024,7 @@
     UI.$$('[data-seg-act]', cont).forEach(function (b) { b.addEventListener('click', function (e) { UI.trabajando(e.currentTarget, function () { return pintarSeguimiento(true); }); }); });
     UI.$$('[data-calificar]', cont).forEach(function (b) { b.addEventListener('click', function () { var x = lista.filter(function (y) { return y.n === b.getAttribute('data-calificar'); })[0]; if (x) calificar({ numero: x.n, telefono: x.tel || (MEM.leer('cliente') || {}).telefono || '', s: x.s }); }); });
     UI.$$('[data-comprobante]', cont).forEach(function (b) { b.addEventListener('click', function () { var p = res[b.getAttribute('data-comprobante')]; if (p) UI.abrirWhatsApp(cfg().whatsapp, 'Hola, envío el comprobante del pedido *' + p.numero + '* por ' + UI.dinero(p.total) + (p.cuenta_pago ? ' (a ' + p.cuenta_pago + ')' : '') + '. 👇'); }); });
-    UI.$$('[data-escribir]', cont).forEach(function (b) { b.addEventListener('click', function () { UI.abrirWhatsApp(cfg().whatsapp, 'Hola, sobre mi pedido *' + b.getAttribute('data-escribir') + '*: '); }); });
+    UI.$$('[data-escribir]', cont).forEach(function (b) { b.addEventListener('click', function () { var r = res[b.getAttribute('data-escribir')]; if (r && r.estado) UI.abrirWhatsApp(cfg().whatsapp, mensajeCambioWhatsApp(r)); }); });
     UI.$$('[data-repetir]', cont).forEach(function (b) { b.addEventListener('click', function () { var x = lista.filter(function (y) { return y.n === b.getAttribute('data-repetir'); })[0]; repetirDe(x); }); });
     var bb = $('#mp-borrar'); if (bb) bb.addEventListener('click', async function () {
       var ok = await UI.confirmar('¿Borrar tu historial?', 'Se borra la lista de pedidos de este teléfono. Tus pedidos ya hechos no se cancelan.', 'Sí, borrar', true);
@@ -995,6 +1032,37 @@
       guardarMisPedidos(misPedidos().filter(activo)); MEM.guardar('ultimo_pedido', null); UI.aviso('Historial borrado.', 'ok'); pintarSeguimiento();
     });
     if (abrir) cont.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  /* 3.1.7.1: avisos según el estado REAL. Contactar NO edita datos de un pedido. */
+  function avisoCambioSegunEstado(r) {
+    if (!UI.digitos(cfg().whatsapp)) return '';
+    var texto = '', boton = '';
+    if (r.estado === 'Recibido') {
+      texto = '¿Quieres corregir tu pedido? Solicítalo cuanto antes. El local debe confirmar si aún puede hacerlo; tu pedido no cambia automáticamente.';
+      boton = '✏️ Solicitar un cambio';
+    } else if (r.estado === 'Preparando') {
+      texto = 'Tu pedido ya se está preparando. Consulta si todavía es posible un ajuste: algunos cambios de platos, cantidades o precios ya no se pueden realizar.';
+      boton = '💬 Consultar un ajuste';
+    } else if (r.estado === 'En camino') {
+      texto = 'Tu pedido ya salió. No se cambian platos ni cobros desde aquí. Si hay un problema con la dirección o entrega, avisa para que el local consulte con el motorizado.';
+      boton = '📍 Reportar problema de entrega';
+    } else return '';
+    return '<p class="ayuda seg-aviso-cambios">' + UI.esc(texto) + ' <button class="enlace" type="button" data-escribir="' + UI.esc(r.numero) + '">' + UI.esc(boton) + '</button></p>';
+  }
+  function mensajeCambioWhatsApp(r) {
+    var base = 'Hola, consulto por mi pedido *' + String(r.numero || '') + '* (estado: ' + String(r.estado || 'pendiente') + '). ';
+    if (r.estado === 'Recibido') return base + 'Quisiera solicitar un cambio antes de iniciar la preparación. Entiendo que requiere su confirmación. Mi solicitud es: ';
+    if (r.estado === 'Preparando') return base + 'Quisiera consultar si todavía es posible hacer un ajuste. Entiendo que la preparación ya comenzó. Mi solicitud es: ';
+    if (r.estado === 'En camino') return base + 'Necesito comunicar un problema con la entrega. Entiendo que el pedido ya salió y no se modifica automáticamente. Detalle: ';
+    return base + 'Necesito ayuda con este pedido: ';
+  }
+  function avisoPagoConfirmado(r) {
+    if (r.estado === 'Recibido') return ' Tu pedido figura como Recibido. Te avisaremos cuando comience la preparación.';
+    if (r.estado === 'Preparando') return ' Tu pedido está en preparación.';
+    if (r.estado === 'En camino') return ' Tu pedido ya está en camino.';
+    if (r.estado === 'Entregado') return ' Tu pedido fue entregado.';
+    return '';
   }
 
   /* Tarjeta de seguimiento de un pedido en curso. */
@@ -1013,7 +1081,7 @@
             r.estado === 'En camino' ? (r.eta_moto ? '<b>Llega en unos ' + r.eta_moto.desde + ' a ' + r.eta_moto.hasta + ' min.</b> Tiempo orientativo; puede variar.' : (r.en_camino ? 'Salió hace ' + UI.minutosDesde(r.en_camino) + ' min. ' + (UI.minutosDesde(r.en_camino) > (Number(cfg().minutos_preparacion) || 20) + 30 ? 'Hay más tráfico de lo normal; seguimos atentos a tu entrega.' : 'Te avisaremos si hay cambios.') : 'Pronto estará en camino.')) :
             'Tiempo aproximado: <b>' + ((Number(r.tiempo_preparacion) || 20) + (Number(r.tiempo_zona) || 0)) + ' a ' + ((Number(r.tiempo_preparacion) || 20) + (Number(r.tiempo_zona) || 0) + 10) + ' min.</b> Puede variar') + '</p>' : '')) +
       (digital ? (r.pago_verificado
-        ? '<div class="pago-estado ok">✅ <span><b>Pago confirmado en nuestra cuenta.</b>' + (r.estado === 'Recibido' ? ' Ya preparamos tu pedido.' : '') + '</span></div>'
+        ? '<div class="pago-estado ok">✅ <span><b>Pago confirmado en nuestra cuenta.</b>' + UI.esc(avisoPagoConfirmado(r)) + '</span></div>'
         : '<div class="pago-estado espera">⏳ <span><b>Pago por confirmar.</b> Tu pedido se prepara cuando confirmemos el pago de <b>' + UI.esc(UI.dinero(r.total)) + '</b> en nuestra cuenta' + (r.cuenta_pago ? ' (' + UI.esc(r.cuenta_pago) + ')' : '') + '. Si pagaste desde otro banco puede tardar un poco.</span></div>' +
           (r.forma_pago === 'transferencia' ? tarjetasCuentasSolo(r) : '') +
           (UI.digitos(cfg().whatsapp) ? '<button class="btn chico bloque" type="button" data-comprobante="' + UI.esc(r.numero) + '" style="margin-top:8px">💬 Enviar comprobante por WhatsApp</button>' : '')) : '') +
@@ -1021,7 +1089,7 @@
       (r.codigo_entrega ? '<div class="codigo-entrega"><span>🔢 Tu código de entrega</span><b>' + UI.esc(r.codigo_entrega) + '</b><small>Dáselo al motorizado solo cuando tengas tu pedido en la mano.</small></div>' : '') +
       (r.estado === 'Entregado' && !r.calificacion ? '<button class="btn chico bloque" type="button" data-calificar="' + UI.esc(r.numero) + '" style="margin-top:10px">⭐ ¿Cómo estuvo? Califícanos</button>' : '') +
       (r.sellos_meta ? '<div class="sellos" title="Tarjeta de sellos">' + sellosHtml(r.sellos, r.sellos_meta) + '</div>' : '') +
-      (FINALES.indexOf(r.estado) < 0 && UI.digitos(cfg().whatsapp) ? '<p class="ayuda" style="margin:8px 0 0">¿Necesitas cambiar algo? <button class="enlace" type="button" data-escribir="' + UI.esc(r.numero) + '">Escríbenos por WhatsApp</button> (un pedido enviado ya no se edita aquí).</p>' : '') +
+      avisoCambioSegunEstado(r) +
       '</div>';
   }
 
