@@ -257,9 +257,12 @@
   }
 
   function cambiarLocal(id) {
-    if (envioPendiente && id !== localId) return UI.aviso('Hay un envío sin confirmar. Verifica primero ese pedido antes de cambiar de restaurante.', 'error');
-    if (id !== localId && cantidadTotal()) carrito = {}; // el carrito es por local
-    localId = id; categoria = ''; cambio(); entrega.zona = ''; marcarAgotados();
+    if (id === localId) return irA(1);
+    if (!localesConMenu().some(function (l) { return l.id === id; })) return UI.aviso('Este restaurante no está disponible.', 'error');
+    if (envioPendiente) return UI.aviso('Hay un envío sin confirmar. Verifica primero ese pedido antes de cambiar de restaurante.', 'error');
+    if (cantidadTotal() && !global.confirm('Cambiar de restaurante vaciará los productos de tu carrito actual. ¿Quieres continuar?')) return;
+    carrito = {}; // los productos pertenecen exclusivamente al restaurante anterior
+    localId = id; categoria = ''; busqueda = ''; cambio(); entrega.zona = ''; entrega.hora = ''; ubic = null; marcarAgotados();
     MEM.guardar('pedir_local', id);
     irA(1);
   }
