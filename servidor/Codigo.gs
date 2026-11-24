@@ -496,6 +496,7 @@ function accionConfigObtener_() {
 
 function accionConfigGuardar_(data, ctx) {
   var cambios = data.config || {};
+  if (Object.prototype.hasOwnProperty.call(cambios,'licencia_estado') || Object.prototype.hasOwnProperty.call(cambios,'licencia_vence')) throw fallo_('La licencia se administra por el proveedor.', 'LICENCIA');
   var permitidas = Object.keys(CONFIG_DEFECTO);
   var limpio = {};
   Object.keys(cambios).forEach(function (k) {
