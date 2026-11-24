@@ -1461,6 +1461,10 @@ function accionPedidoCambioResolver_(data, ctx) {
     if (!p) throw fallo_('Pedido no encontrado.', 'NO_EXISTE');
     if (decision !== 'Rechazada' && !politicaCambiosPedido_(p.estado, x.tipo).permitido)
       throw fallo_('El pedido cambió de estado. No se puede aprobar esta solicitud.', 'CAMBIO');
+    // Una aceptación de coordinación NO equivale a una aprobación económica.
+    // Impedir que se interprete como modificación efectiva o cobro autorizado.
+    if (decision === 'Aprobada para coordinar' && !/precio|importe|valor|total|cotiz|confirm|disponib/i.test(respuesta))
+      throw fallo_('Indica que se confirmarán disponibilidad y precio antes de modificar o cobrar.', 'CAMBIO');
     actualizarCampos_('pedido_cambios', x._fila, x, { estado: decision, resuelto: new Date(),
       resuelto_por: ctx.sesion.usuario, respuesta: respuesta });
     return { ok: true, data: { id: id, estado: decision, aplicado: false } };
