@@ -138,7 +138,7 @@
   function filaExtra(x) {
     return '<div class="extra-fila"><input class="entrada" data-ex-nombre maxlength="60" placeholder="Ej. Queso extra" value="' + UI.esc(x.nombre) + '">' +
       '<input class="entrada" data-ex-precio inputmode="decimal" placeholder="0.00" value="' + UI.esc(x.precio === '' ? '' : x.precio) + '">' +
-      '<button class="btn secundario icono" type="button" data-ex-quitar aria-label="Quitar extra">✕</button></div>';
+      '<button class="btn secundario icono" type="button" data-ex-quitar aria-label="Quitar extra">✕</button><label style="grid-column:1/-1">Máximo de porciones por plato <input class="entrada" type="number" min="1" max="10" inputmode="numeric" data-ex-max value="'+UI.esc(x.max_cantidad||1)+'"></label></div>';
   }
 
   async function editarPlato(p) {
@@ -194,9 +194,9 @@
         enviar.precio = UI.numero(enviar.precio);
         enviar.etiquetas = UI.$$('#pl-etiquetas .activo', v).map(function (b) { return b.getAttribute('data-et'); }).join(',');
         enviar.extras = UI.$$('.extra-fila', v).map(function (fila) {
-          return { nombre: UI.$('[data-ex-nombre]', fila).value.trim(), precio: UI.numero(UI.$('[data-ex-precio]', fila).value || 0) };
+          return { nombre: UI.$('[data-ex-nombre]', fila).value.trim(), precio: UI.numero(UI.$('[data-ex-precio]', fila).value || 0), max_cantidad:Number(UI.$('[data-ex-max]',fila).value) };
         }).filter(function (x) { return x.nombre; });
-        var malo = !enviar.nombre ? 'Escriba el nombre.' : !(enviar.precio >= 0) ? 'Escriba un precio válido.' : enviar.extras.some(function (x) { return !(x.precio >= 0); }) ? 'Revise el precio de los extras.' : '';
+        var malo = !enviar.nombre ? 'Escriba el nombre.' : !(enviar.precio >= 0) ? 'Escriba un precio válido.' : enviar.extras.some(function (x) { return !(x.precio >= 0)||!Number.isInteger(x.max_cantidad)||x.max_cantidad<1||x.max_cantidad>10; }) ? 'Revise el precio de los extras.' : '';
         if (malo) { UI.aviso(malo, 'error'); return false; }
         return true;
       } }])
