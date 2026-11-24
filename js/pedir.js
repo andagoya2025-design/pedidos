@@ -927,11 +927,13 @@
         var p = consulta.pedido;
         guardarMiPedido({ n: p.numero, tel: original.cliente.telefono, s: p.clave_seguimiento ? p.numero + '-' + p.clave_seguimiento : '', f: Date.now(), t: p.total, e: p.estado || 'Recibido', l: original.local_id,
           i: original.items.map(function (x) { var pl = plato(x.plato_id); return { p: x.plato_id, c: x.cantidad, x: x.extras, n: pl ? pl.nombre : '' }; }) });
-        envioPendiente = null; codigoEnvio = '';
+        MEM.guardar('ultimo_carrito', { local: original.local_id, items: original.items });
+        // La recuperación confirma un pedido YA creado: retirar del carrito los
+        // artículos enviados para no inducir al cliente a pagarlos otra vez.
+        carrito = {}; codigoEnvio = ''; envioPendiente = null; ubic = null; pago.propina = 0;
         try { global.sessionStorage.removeItem('mipedido_envio_pendiente'); } catch (e) { /* sin almacenamiento */ }
         UI.aviso('El restaurante ya recibió tu pedido ' + p.numero + '. No se ha creado otro.', 'exito');
-        pintarSeguimiento(true);
-        pintarMenu();
+        pintarExito(p);
         return;
       }
     } catch (err) {
