@@ -248,13 +248,13 @@
 
   function cuerpo() { return UI.$('#pd-cuerpo'); }
 
-  async function cargar() {
+  async function cargar(automatico) {
     var sesionCarga=APP.sesion, localCarga=APP.local, diaCarga=est.diaEntregado;
     var r = await Promise.allSettled([
       DATOS.pedir('pedidosListar', { local_id: APP.local, dia: est.diaEntregado || UI.hoy() }),
       DATOS.pedir('motorizadosListar', { local_id: APP.local })
     ]);
-    if (!cuerpo() || APP.sesion!==sesionCarga || APP.local!==localCarga || est.diaEntregado!==diaCarga) return false; // se cambió de pantalla o de contexto
+    if (!cuerpo() || APP.sesion!==sesionCarga || APP.local!==localCarga || est.diaEntregado!==diaCarga || (automatico===true && (document.visibilityState!=='visible' || document.querySelector('.velo') || DATOS.ocupado()))) return false; // se cambió de pantalla o de contexto
     if (r[0].status !== 'fulfilled') {
       // No borrar el tablero válido por una interrupción temporal de red.
       if (!est.datos) cuerpo().innerHTML = '<div class="banda error">⚠️ <span>' + UI.esc(r[0].reason.message) + '</span></div>';
@@ -471,7 +471,9 @@
         if (navigator.onLine === false) return;
         await vigiaAdmin(identidad+'|'+APP.vistaActual+'|'+(est.diaEntregado||''), async function () {
         if (APP.sesion!==s || (APP.local||s.local_id||'TODOS')!==local) return false;
-        var r = await DATOS.pedir('pedidosNuevos', { local_id: local });
+        var r;
+        try { r = await DATOS.pedir('pedidosNuevos', { local_id: local }); }
+        catch (e) { if (APP.sesion===s && (APP.local||s.local_id||'TODOS')===local) actualizarEstadoSolicitudes(null,true); return false; }
         if (APP.sesion !== s || (APP.local || s.local_id || 'TODOS') !== local) return;
         actualizarEstadoSolicitudes(r, false);
         if (Array.isArray(r.pedidos) && Array.isArray(r.solicitudes)) {
@@ -484,7 +486,7 @@
         ultimaMarca = r.ultimo || ultimaMarca;
         if (APP.vistaActual === 'pedidos' && est.datos && document.visibilityState === 'visible') {
           if (document.querySelector('.velo') || DATOS.ocupado()) return false;
-          return await cargar();
+          return await cargar(true);
         }
         return true;
         }, 15000);
