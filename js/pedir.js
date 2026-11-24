@@ -801,11 +801,14 @@
       cuponAplicado = null;
       if (!codigo) { totales(); return UI.aviso('Escribe un cupón.', 'error'); }
       try {
-        var r = await DATOS.pedir('cuponValidar', { cupon: codigo, local_id: localId, telefono: (checkoutMem['cliente'] || {}).telefono, items: items().map(function (it) { return { plato_id: it.plato.id, cantidad: it.cantidad, extras: it.extras }; }) });
+        var campo=$('#pe-cupon'),localCupon=localId,firmaCupon=JSON.stringify(items().map(function(it){return [it.plato.id,it.cantidad,it.extras,unitario(it)];})),telCupon=(checkoutMem['cliente']||{}).telefono;
+        var r = await DATOS.pedir('cuponValidar', { cupon: codigo, local_id: localId, telefono: telCupon, items: items().map(function (it) { return { plato_id: it.plato.id, cantidad: it.cantidad, extras: it.extras }; }) });
+        if(campo!==$('#pe-cupon')||campo.value.trim().toUpperCase()!==codigo||localId!==localCupon||telCupon!==(checkoutMem['cliente']||{}).telefono||firmaCupon!==JSON.stringify(items().map(function(it){return [it.plato.id,it.cantidad,it.extras,unitario(it)];})))return;
         cuponAplicado = { codigo: r.codigo, descuento: r.descuento };
+        if(efectivoPermitido()!==!!UI.$('[data-forma=efectivo]')){guardarNotas();pintarConfirmar();restaurarNotas();return;}
         $('#pe-cupon-estado').textContent = '✅ Cupón aplicado: −' + UI.dinero(r.descuento) + ' en platos.';
         totales();
-      } catch (err) { $('#pe-cupon-estado').textContent = '⚠️ ' + err.message; UI.aviso(err.message, 'error'); totales(); }
+      } catch (err) { if($('#pe-cupon-estado')&&$('#pe-cupon')===campo){$('#pe-cupon-estado').textContent='⚠️ '+err.message;UI.aviso(err.message,'error');totales();} }
     }); });
     $('#pe-cupon').addEventListener('input', function () { cuponAplicado = null; $('#pe-cupon-estado').textContent = 'Toca Aplicar para comprobar el cupón.'; totales(); });
     $('#ver-politicas').addEventListener('click', function (e) { e.preventDefault(); verPoliticas(); });
@@ -835,7 +838,7 @@
   function limpiarCheckout() { checkoutMem = {}; notasTmp = {}; cuponAplicado = null; entrega = {tipo:'',zona:'',mesa:params.get('mesa')||'',cuando:'ya',hora:''}; pago = {forma:'efectivo',propina:0}; }
   var notasTmp = {};
   function guardarNotas() { ['privacidad','politicas'].forEach(function(k){var el=$('#pe-'+k); if(el) guardarCheckout('acepta_'+k,el.checked);}); var promo=UI.$('[name=acepta_promos]'); if(promo) guardarCheckout('acepta_promos',promo.checked); notasTmp = { cupon: ($('#pe-cupon') || {}).value || '', notas: ($('#pe-notas') || {}).value || '' }; }
-  function restaurarNotas() { if ($('#pe-cupon')) $('#pe-cupon').value = notasTmp.cupon || ''; if ($('#pe-notas')) $('#pe-notas').value = notasTmp.notas || ''; }
+  function restaurarNotas() { if ($('#pe-cupon')) $('#pe-cupon').value = notasTmp.cupon || ''; if ($('#pe-notas')) $('#pe-notas').value = notasTmp.notas || ''; if(cuponAplicado&&$('#pe-cupon-estado')&&$('#pe-cupon').value.trim().toUpperCase()===cuponAplicado.codigo)$('#pe-cupon-estado').textContent='✅ Cupón aplicado: −'+UI.dinero(cuponAplicado.descuento)+' en platos.'; }
 
   function totales() {
     var m=importesCheckout();
@@ -915,17 +918,18 @@
       if(!sigueIgual()){UI.aviso('El pedido cambió mientras se verificaba. Revisa y vuelve a enviar.','error');return;}
       if(q.repetido&&q.pedido){datos.total_esperado=Number(q.pedido.total);}
       else {
-        if(!q||typeof q.total!=='number'||!Number.isFinite(q.total)||q.total<0)throw Error('No se recibió una cotización válida.');
-        if(Math.round(q.total*100)!==Math.round(importeMostrado*100)){
+        if(!q||typeof q.total!=='number'||!Number.isFinite(q.total)||q.total<0||!Array.isArray(q.detalle)||typeof q.firma!=='string')throw Error('No se recibió una cotización válida.');
+        var localItems=items(),cambioDetalle=q.detalle.length!==localItems.length||q.detalle.some(function(d,i){var it=localItems[i];return !it||String(d.plato_id)!==String(it.plato.id)||Number(d.cantidad)!==it.cantidad||Math.round(d.precio*100)!==Math.round(unitario(it)*100);});
+        if(cambioDetalle||Math.round(q.total*100)!==Math.round(importeMostrado*100)){
           var ok=await UI.ventana({titulo:'Confirma el importe actualizado',html:
-            '<p>El restaurante calculó el importe definitivo. Revisa antes de enviar.</p>'+
+            '<p>El restaurante calculó el importe definitivo. Revisa antes de enviar.</p>'+q.detalle.map(function(d){return '<p>'+UI.esc(d.cantidad+' × '+d.nombre+' · '+UI.dinero(d.precio)+' c/u · '+UI.dinero(d.total_linea))+(d.extras?'<br><small>'+UI.esc(d.extras)+'</small>':'')+'</p>';}).join('')+
             '<p>Subtotal: '+UI.esc(UI.dinero(q.subtotal))+' · Envío: '+UI.esc(UI.dinero(q.envio))+'</p>'+
             '<p>Descuento: '+UI.esc(UI.dinero(q.descuento))+' · Premio: '+UI.esc(UI.dinero(q.premio))+' · Propina: '+UI.esc(UI.dinero(q.propina))+'</p>'+
             '<p>IVA: '+UI.esc(UI.dinero(q.iva))+'</p><p><b>Total anterior: '+UI.esc(UI.dinero(importeMostrado))+'</b><br><b>Total actualizado: '+UI.esc(UI.dinero(q.total))+'</b></p>',
             botones:[{texto:'Volver',valor:false,clase:'secundario'},{texto:'Aceptar '+UI.dinero(q.total),valor:true}]});
           if(!ok)return;
         }
-        datos.total_esperado=q.total;
+        datos.total_esperado=q.total;datos.cotizacion_firma=q.firma;
       }
       if(!sigueIgual()){UI.aviso('El pedido cambió durante la confirmación. No se envió.','error');return;}
     }catch(err){UI.aviso(err.message||'No se pudo comprobar el importe. No se envió el pedido.','error');return;}
