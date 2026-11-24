@@ -605,3 +605,6 @@ details.otras-fechas[open] summary { margin-bottom: 10px; }
 /* Gestión visual de solicitudes en revisión */
 .ux-solicitud-pendiente{border:1px solid var(--borde);border-inline-start:3px solid var(--aviso);border-radius:12px;padding:12px;margin:10px 0;background:var(--superficie-2)}
 .ux-solicitud-pendiente small{display:block;margin:5px 0 9px;overflow-wrap:anywhere}
+
+/* Respuestas rápidas y gestión de solicitudes: alcance local */
+.ux-respuesta-rapida{display:grid;gap:8px;margin:12px 0}.ux-respuesta-rapida textarea,.ux-respuesta-rapida select{width:100%;font-size:16px}.ux-respuesta-rapida small{color:var(--texto-2);text-align:right}.ventana.ux-gestion-modal>.acciones{position:sticky;bottom:0;background:var(--superficie);padding:10px 0 6px;z-index:2;border-top:1px solid var(--borde)}
