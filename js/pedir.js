@@ -73,7 +73,7 @@
   function subtotal() { return Math.round(items().reduce(function (s, i) { return s + unitario(i) * i.cantidad; }, 0) * 100) / 100; }
   function cantidadTotal() { return items().reduce(function (s, i) { return s + i.cantidad; }, 0); }
   function cantidadPlato(pid) { return items().filter(function (i) { return i.plato.id === pid; }).reduce(function (s, i) { return s + i.cantidad; }, 0); }
-  function zonaElegida() { return entrega.tipo === 'domicilio' ? M.zonas.filter(function (z) { return z.id === entrega.zona; })[0] || null : null; }
+  function zonaElegida() { return entrega.tipo === 'domicilio' ? zonasDe(localId).filter(function (z) { return z.id === entrega.zona; })[0] || null : null; }
   function envio() { var z = zonaElegida(); return z ? z.costo : 0; }
   function propina() { return entrega.tipo === 'domicilio' && cfg().propinas !== 'NO' ? pago.propina : 0; }
   function cambio() { if (!envioPendiente) codigoEnvio = ''; cuponAplicado = null; }
@@ -1117,7 +1117,7 @@
           : '') +
         (sol.aplicado ? '<small>El adicional ya forma parte de tu pedido.</small>' : '<small>Esta solicitud aún no modifica el pedido ni autoriza un cobro automático.</small>') + '</div>';
     }).join('') : '<div class="seg-caja"><b>' + UI.esc(x.n) + '</b><div class="item-sub">No se pudo actualizar el estado. Conservamos el último estado conocido: ' + UI.esc(x.e) + '.</div><button class="enlace" type="button" data-seg-act>Reintentar</button></div>'; }).join('') +
-      (hist.length ? '<details class="seg-caja mis-pedidos"' + (act.length ? '' : ' open') + '><summary><b>🧾 Mis pedidos anteriores</b> <small>(' + hist.length + ')</small></summary>' +
+      (hist.length ? '<details class="seg-caja mis-pedidos"' + '' + '><summary><b>🧾 Mis pedidos anteriores</b> <small>(' + hist.length + ')</small></summary>' +
         '<div class="lista">' + hist.map(function (x) {
           var fecha = new Date(x.f || Date.now());
           return '<div class="mp-fila"><div class="item-cuerpo"><div class="item-titulo">' + UI.esc(x.n) + ' · ' + (x.t ? UI.esc(UI.dinero(x.t)) : '') + '</div>' +
