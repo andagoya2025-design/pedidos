@@ -18,8 +18,8 @@
  * ============================================================
  */
 
-var APP_VERSION = '3.1.14';
-var APP_VERSION_NUM = 30114; // 3.1.0 -> 30100 (la pantalla compara con su mínimo)
+var APP_VERSION = '3.1.16';
+var APP_VERSION_NUM = 30116; // 3.1.0 -> 30100 (la pantalla compara con su mínimo)
 var SESION_SEGUNDOS = 21600;  // 6 h; se renueva con cada uso
 var ROLES = ['dueno', 'cajero', 'motorizado'];
 
@@ -1489,7 +1489,7 @@ function accionPedidoCambiosConsultar_(data) {
         quote = { id: String(x.cotizacion_id), lineas: guardada.lineas, total_actual: guardada.total_actual,
           adicional: guardada.adicional, subtotal_adicional: guardada.subtotal_adicional,
           iva_adicional: guardada.iva_adicional, total_estimado: guardada.total_estimado,
-          vence: guardada.vence, integral:guardada.integral===true, antes:guardada.antes, despues:guardada.despues, inventario_reservado: false, cobro_autorizado: false };
+          vence: guardada.vence, mensaje:guardada.mensaje||'', desglose:guardada.desglose||null, integral:guardada.integral===true, antes:guardada.antes, despues:guardada.despues, inventario_reservado: false, cobro_autorizado: false };
       } catch (e) { quote = null; }
     }
     return { id: String(x.id), tipo: String(x.tipo), detalle: String(x.detalle), estado: String(x.estado),
@@ -1524,7 +1524,7 @@ function accionPedidoCambiosListar_(data, ctx) {
     return { id: String(x.id), numero: String(x.numero), local_id: String(x.local_id), tipo: String(x.tipo),
       detalle: String(x.detalle), items_solicitados: leerSeleccionSolicitud_(x), estado: String(x.estado), pedido_estado: estados[String(x.pedido_id)] || '',
       creado: iso_(x.creado), respuesta: String(x.respuesta || ''), cotizacion_id: String(x.cotizacion_id || ''),
-      forma_pago: pagos[String(x.pedido_id)] || '', pago_verificado: verificados[String(x.pedido_id)]===true, cotizacion:(function(){try{var q=JSON.parse(String(x.cotizacion_json||'null'));return q?{total_actual:q.total_actual,total_estimado:q.total_estimado,adicional:q.adicional,integral:q.integral===true,antes:q.antes,despues:q.despues,lineas:q.lineas}:null;}catch(e){return null;}})(), aplicado: String(x.estado) === 'Aplicada',
+      forma_pago: pagos[String(x.pedido_id)] || '', pago_verificado: verificados[String(x.pedido_id)]===true, cotizacion:(function(){try{var q=JSON.parse(String(x.cotizacion_json||'null'));return q?{total_actual:q.total_actual,total_estimado:q.total_estimado,adicional:q.adicional,integral:q.integral===true,mensaje:q.mensaje||'',desglose:q.desglose||null,antes:q.antes,despues:q.despues,lineas:q.lineas}:null;}catch(e){return null;}})(), aplicado: String(x.estado) === 'Aplicada',
       adicional: numero_(x.adicional_final) || (function () {
         try { return numero_(JSON.parse(String(x.cotizacion_json || '{}')).adicional); } catch (e) { return 0; }
       })() };
@@ -1557,7 +1557,8 @@ function planCambioIntegral_(p,t,sel,filas,platos,cfg,agotados) {
   if(t==='cancelar'){bajas=antes.slice();despues=[];}
   if(t!=='cancelar'&&!despues.some(function(d){return d.cantidad>0;}))throw fallo_('Para retirar todos los productos, usa cancelar.');
   var subtotal=redondear_(despues.reduce(function(a,d){return a+d.total_linea;},0)),pct=numero_(cfg.iva_porcentaje),incl=siNo_(cfg.precios_incluyen_iva),grav=t==='cancelar'?0:redondear_(subtotal+numero_(p.envio)),base=incl?redondear_(grav/(1+pct/100)):grav,iva=incl?redondear_(grav-base):redondear_(grav*pct/100+1e-9),total=t==='cancelar'?0:redondear_(grav+numero_(p.propina)+(incl?0:iva)),delta=redondear_(total-numero_(p.total));
-  return {integral:true,tipo:t,seleccion:sel,antes:antes,despues:despues.filter(function(d){return d.cantidad>0;}),bajas:bajas,lineas:altas,total_actual:redondear_(p.total),total_estimado:total,adicional:delta,subtotal:subtotal,base_iva:base,iva:iva,subtotal_adicional:redondear_(subtotal-numero_(p.subtotal)),iva_adicional:redondear_(iva-numero_(p.iva)),estado_pedido:String(p.estado)};
+  var desglose={anterior:{subtotal:redondear_(p.subtotal),envio:redondear_(p.envio),descuento:redondear_(p.descuento),premio:redondear_(p.premio),propina:redondear_(p.propina),iva:redondear_(p.iva),total:redondear_(p.total)},propuesto:{subtotal:subtotal,envio:t==='cancelar'?0:redondear_(p.envio),descuento:0,premio:0,propina:t==='cancelar'?0:redondear_(p.propina),iva:iva,total:total}};
+  return {integral:true,desglose:desglose,tipo:t,seleccion:sel,antes:antes,despues:despues.filter(function(d){return d.cantidad>0;}),bajas:bajas,lineas:altas,total_actual:redondear_(p.total),total_estimado:total,adicional:delta,subtotal:subtotal,base_iva:base,iva:iva,subtotal_adicional:redondear_(subtotal-numero_(p.subtotal)),iva_adicional:redondear_(iva-numero_(p.iva)),estado_pedido:String(p.estado)};
 }
 function cotizarIntegral_(x,p,sel) {
   return planCambioIntegral_(p,String(x.tipo),sel,leerTabla_('pedido_detalle').filter(function(d){return String(d.pedido_id)===String(p.id);}),leerTabla_('platos'),leerConfig_(),agotadosPorLocal_()[String(p.local_id)]||{});
@@ -1700,7 +1701,7 @@ function accionPedidoCambioProponer_(data, ctx) {
       vence: new Date(ahora.getTime() + 30 * 60000).toISOString()
     };
     if(String(x.estado)==='Cotizada')throw fallo_('La propuesta ya fue enviada. Espera la decisión del cliente o ciérrala expresamente.');
-    if(r.integral){if(data.total_esperado===undefined||redondear_(data.total_esperado)!==r.total_estimado)throw fallo_('El precio cambió. Revisa la propuesta nuevamente.');quote=Object.assign({},r,{id:token,vence:quote.vence});}
+    if(r.integral){if(data.total_esperado===undefined||redondear_(data.total_esperado)!==r.total_estimado)throw fallo_('El precio cambió. Revisa la propuesta nuevamente.');var mensaje=limpiarTexto_(data.mensaje,501);if(mensaje.length>500)throw fallo_('Mensaje máximo 500 caracteres.');quote=Object.assign({},r,{id:token,vence:quote.vence,mensaje:mensaje||'Hemos revisado tu solicitud. Confirma si estás de acuerdo con el nuevo pedido.'});}
     actualizarCampos_('pedido_cambios', x._fila, x, {
       estado: 'Cotizada', cotizacion_id: token, cotizacion_json: JSON.stringify(quote),
       cotizacion_fecha: ahora, cliente_confirmo_fecha: '',
