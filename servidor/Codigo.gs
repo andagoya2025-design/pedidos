@@ -1417,6 +1417,22 @@ function accionPedidoCambiosConsultar_(data) {
       creado: iso_(x.creado), respuesta: String(x.respuesta || ''), aplicado: false };
   }) } };
 }
+/* Al avanzar el pedido, cerrar solicitudes que la nueva etapa prohíbe.
+ * Nunca despachar con una modificación imposible marcada como pendiente. */
+function cerrarCambiosIncompatibles_(p, nuevoEstado, usuario) {
+  if (!SpreadsheetApp.getActive().getSheetByName('pedido_cambios')) return 0;
+  var n = 0;
+  cambiosPedido_().forEach(function (x) {
+    if (String(x.pedido_id) !== String(p.id) || String(x.estado) !== 'Pendiente') return;
+    if (politicaCambiosPedido_(nuevoEstado, String(x.tipo)).permitido) return;
+    actualizarCampos_('pedido_cambios', x._fila, x, {
+      estado: 'Rechazada', resuelto: new Date(), resuelto_por: usuario,
+      respuesta: 'La solicitud no se aplicó: el pedido avanzó a ' + nuevoEstado + '. Consulta al restaurante las alternativas.'
+    });
+    n++;
+  });
+  return n;
+}
 function accionPedidoCambiosListar_(data, ctx) {
   var local = localDeSesion_(ctx, data.local_id);
   var pedidos = leerTabla_('pedidos');
@@ -1914,6 +1930,7 @@ function accionPedidoEstado_(data, ctx) {
     if (a === 'En camino' && !String(p.codigo_entrega || '')) cambios.codigo_entrega = nuevoCodigoEntrega_();
     cambios[{ 'Preparando': 'preparando', 'En camino': 'en_camino', 'Entregado': 'entregado' }[a]] = new Date();
     actualizarCampos_('pedidos', p._fila, p, cambios);
+    cerrarCambiosIncompatibles_(p, a, ctx.sesion.usuario);
     if (a === 'Entregado') sumarEntregaCliente_(p, 1);
     p = buscarPedido_(data.id, ctx);
   } finally { lock.releaseLock(); }
