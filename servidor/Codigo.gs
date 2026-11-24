@@ -1496,6 +1496,13 @@ function cambiosPedido_() {
 }
 /* Selección estructurada: nunca confiar en precios ni nombres del cliente. */
 function seleccionSolicitud_(tipo, items, p) {
+  if(items&&typeof items==='object'&&!Array.isArray(items)){
+    if(['cambiar','reducir','quitar'].indexOf(tipo)<0||!Array.isArray(items.retirar)||!Array.isArray(items.agregar)||items.retirar.length+items.agregar.length>30)throw fallo_('Selección de cambio inválida.','CANTIDAD');
+    var originales=detallePorPedido_([String(p.id)])[String(p.id)]||[],usados=Object.create(null);
+    var retirar=items.retirar.map(function(it){var d=it&&originales.filter(function(v){return String(v.id)===String(it.id);})[0],n=it&&it.cantidad;if(!d||usados[String(d.id)]||!Number.isSafeInteger(n)||n<1||n>Number(d.cantidad)||tipo==='quitar'&&n!==Number(d.cantidad)||tipo==='reducir'&&n>=Number(d.cantidad))throw fallo_('Producto o cantidad de retiro inválida.','CANTIDAD');usados[String(d.id)]=true;return {id:String(d.id),cantidad:n};}).sort(function(a,b){return a.id.localeCompare(b.id);});
+    if(!retirar.length||tipo==='cambiar'&&!items.agregar.length||tipo!=='cambiar'&&items.agregar.length)throw fallo_('Selecciona los productos correctos para el cambio.','CAMBIO');
+    return {retirar:retirar,agregar:items.agregar.length?seleccionSolicitud_('agregar',items.agregar,p):[]};
+  }
   if (items == null || (Array.isArray(items) && !items.length)) return [];
   if (!Array.isArray(items) || items.length > 30) throw fallo_('Máximo 30 líneas.', 'CANTIDAD');
   if (['agregar','aumentar'].indexOf(tipo) < 0) return [];
@@ -1517,7 +1524,7 @@ function seleccionSolicitud_(tipo, items, p) {
   return Object.keys(agrupados).sort().map(function(k){return agrupados[k];});
 }
 function leerSeleccionSolicitud_(x) {
-  try {var a=JSON.parse(String(x.seleccion_json||'[]'));return Array.isArray(a)?a:[];} catch(e){return [];}
+  try {var a=JSON.parse(String(x.seleccion_json||'[]'));return Array.isArray(a)||a&&Array.isArray(a.retirar)&&Array.isArray(a.agregar)?a:[];} catch(e){return [];}
 }
 function accionPedidoCambioSolicitar_(data) {
   if (!estaInstalado_()) throw fallo_('Sistema no instalado.', 'NO_INSTALADO');
@@ -1535,7 +1542,7 @@ function accionPedidoCambioSolicitar_(data) {
     if (!politica.permitido) throw fallo_(politica.mensaje, 'CAMBIO');
     var historial = cambiosPedido_().filter(function (x) { return String(x.pedido_id) === String(p.id); });
     if (historial.some(function (x) { return String(x.estado) === 'Aplicada'; })) throw fallo_('Ya utilizaste tu oportunidad de modificar el pedido. Comunícate con el restaurante.', 'CAMBIO_DEFINITIVO');
-    var seleccion = seleccionSolicitud_(tipo, data.items, p), seleccionJson=JSON.stringify(seleccion);
+    var seleccion = seleccionSolicitud_(tipo, data.seleccion!==undefined?data.seleccion:data.items, p), seleccionJson=JSON.stringify(seleccion);
     if(seleccionJson.length>45000)throw fallo_('La selección supera la capacidad técnica. Divide la solicitud.','CANTIDAD');
     var pendientes = historial.filter(function (x) { return String(x.pedido_id) === String(p.id) && ['Pendiente', 'Aprobada para coordinar', 'Cotizada', 'Confirmada cliente', 'Aplicando'].indexOf(String(x.estado)) >= 0; });
     if (pendientes.length) {
@@ -1601,7 +1608,7 @@ function accionPedidoCambiosListar_(data, ctx) {
     return (local === 'TODOS' || String(x.local_id) === local) && ['Pendiente','Aprobada para coordinar','Cotizada','Confirmada cliente','Aplicando'].indexOf(String(x.estado))>=0;
   }).map(function (x) {
     return { id: String(x.id), numero: String(x.numero), local_id: String(x.local_id), tipo: String(x.tipo),
-      detalle: String(x.detalle), items_solicitados: leerSeleccionSolicitud_(x), estado: String(x.estado), pedido_estado: estados[String(x.pedido_id)] || '',
+      detalle: String(x.detalle), items_solicitados: (function(a){return Array.isArray(a)?a:a.agregar;})(leerSeleccionSolicitud_(x)), retiros_solicitados: (function(a){return Array.isArray(a)?[]:a.retirar;})(leerSeleccionSolicitud_(x)), estado: String(x.estado), pedido_estado: estados[String(x.pedido_id)] || '',
       creado: iso_(x.creado), respuesta: String(x.respuesta || ''), cotizacion_id: String(x.cotizacion_id || ''),
       forma_pago: pagos[String(x.pedido_id)] || '', conciliacion_simple:true, pago_verificado: verificados[String(x.pedido_id)]===true, cotizacion:(function(){try{var q=JSON.parse(String(x.cotizacion_json||'null'));return q?{total_actual:q.total_actual,total_estimado:q.total_estimado,adicional:q.adicional,integral:q.integral===true,mensaje:q.mensaje||'',desglose:q.desglose||null,antes:q.antes,despues:q.despues,lineas:q.lineas}:null;}catch(e){return null;}})(), aplicado: String(x.estado) === 'Aplicada',
       adicional: numero_(x.adicional_final) || (function () {
