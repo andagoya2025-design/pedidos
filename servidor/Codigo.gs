@@ -1373,6 +1373,7 @@ function accionPedidoPoliticaCambios_(data) {
   if (politica.permitido) {
     var original = leerTabla_('pedidos').filter(function (v) { return String(v.numero) === String(p.numero); })[0];
     if (!original) throw fallo_('Pedido no encontrado.', 'NO_EXISTE');
+    if (cambiosPedido_().some(function (x) { return String(x.pedido_id) === String(original.id) && String(x.estado) === 'Aplicada'; })) return { ok: true, data: { numero: p.numero, estado: p.estado, tipo: tipo, permitido: false, modalidad: 'cambio_definitivo', mensaje: 'Ya utilizaste tu oportunidad de modificar el pedido. Comunícate con el restaurante.', aplicado: true } };
     salida.local_id = String(original.local_id);
     salida.detalle = detallePorPedido_([String(original.id)])[String(original.id)] || [];
     salida.total = redondear_(original.total);
@@ -1458,8 +1459,10 @@ function accionPedidoCambioSolicitar_(data) {
     if (!p) throw fallo_('Pedido no encontrado.', 'NO_EXISTE');
     var politica = politicaCambiosPedido_(String(p.estado), tipo);
     if (!politica.permitido) throw fallo_(politica.mensaje, 'CAMBIO');
+    var historial = cambiosPedido_().filter(function (x) { return String(x.pedido_id) === String(p.id); });
+    if (historial.some(function (x) { return String(x.estado) === 'Aplicada'; })) throw fallo_('Ya utilizaste tu oportunidad de modificar el pedido. Comunícate con el restaurante.', 'CAMBIO_DEFINITIVO');
     var seleccion = seleccionSolicitud_(tipo, data.items, p), seleccionJson=JSON.stringify(seleccion);
-    var pendientes = cambiosPedido_().filter(function (x) { return String(x.pedido_id) === String(p.id) && ['Pendiente', 'Aprobada para coordinar', 'Cotizada', 'Confirmada cliente', 'Aplicando'].indexOf(String(x.estado)) >= 0; });
+    var pendientes = historial.filter(function (x) { return String(x.pedido_id) === String(p.id) && ['Pendiente', 'Aprobada para coordinar', 'Cotizada', 'Confirmada cliente', 'Aplicando'].indexOf(String(x.estado)) >= 0; });
     if (pendientes.length) {
       var igual = pendientes.filter(function (x) { return String(x.tipo) === tipo && String(x.detalle) === detalle && JSON.stringify(leerSeleccionSolicitud_(x)) === seleccionJson; })[0];
       if (igual) return { ok: true, data: { id: String(igual.id), estado: String(igual.estado), repetida: true, aplicado: false } };
@@ -1480,9 +1483,10 @@ function accionPedidoCambiosConsultar_(data) {
   var numero = String(consulta.data.numero);
   var p = leerTabla_('pedidos').filter(function (x) { return String(x.numero) === numero; })[0];
   if (!p) throw fallo_('Pedido no encontrado.', 'NO_EXISTE');
-  return { ok: true, data: { numero: numero, solicitudes: cambiosPedido_().filter(function (x) {
-    return String(x.pedido_id) === String(p.id);
-  }).slice(-10).map(function (x) {
+  var historial = cambiosPedido_().filter(function (x) { return String(x.pedido_id) === String(p.id); });
+  var recientes = historial.slice(-10), aplicada = historial.find(function (x) { return String(x.estado) === 'Aplicada'; });
+  if (aplicada && recientes.indexOf(aplicada) < 0) recientes.unshift(aplicada);
+  return { ok: true, data: { numero: numero, solicitudes: recientes.map(function (x) {
     var quote = null;
     if (['Cotizada', 'Confirmada cliente', 'Aplicando', 'Aplicada'].indexOf(String(x.estado)) >= 0 && x.cotizacion_json) {
       try { var guardada = JSON.parse(String(x.cotizacion_json));
@@ -1812,6 +1816,7 @@ function accionPedidoCambioAplicar_(data, ctx) {
     var p = leerTabla_('pedidos').filter(function (v) { return String(v.id) === String(x.pedido_id); })[0];
     if (!p || !politicaCambiosPedido_(p.estado, x.tipo).permitido)
       throw fallo_('El pedido ya no admite este adicional.', 'CAMBIO');
+    if (cambiosPedido_().some(function (v) { return String(v.pedido_id) === String(p.id) && String(v.id) !== id && String(v.estado) === 'Aplicada'; })) throw fallo_('Este pedido ya tuvo una modificación definitiva. Revisa la solicitud anterior.', 'CAMBIO_DEFINITIVO');
     if (p.liquidacion_id) throw fallo_('El pedido ya fue liquidado; no se permite modificar su importe.', 'CAJA');
     var quote;
     try { quote = JSON.parse(String(x.cotizacion_json)); } catch (e) { throw fallo_('Cotización dañada; no aplicar.', 'CAMBIO'); }
