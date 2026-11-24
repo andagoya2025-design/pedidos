@@ -1884,6 +1884,7 @@ function accionPedidoCambioResolver_(data, ctx) {
     if (!p) throw fallo_('Pedido no encontrado.', 'NO_EXISTE');
     if (decision === 'Aprobada para coordinar' && !politicaCambiosPedido_(p.estado, x.tipo).permitido)
       throw fallo_('El pedido cambió de estado. No se puede aprobar esta solicitud.', 'CAMBIO');
+    if(String(x.estado)==='Confirmada cliente'&&esDigital_(p.forma_pago)&&data.conciliado!==true)throw fallo_('Confirma la conciliación del ajuste bancario antes de cerrar una propuesta aceptada.');
     // Una aceptación de coordinación NO equivale a una aprobación económica.
     // Impedir que se interprete como modificación efectiva o cobro autorizado.
     if (decision === 'Aprobada para coordinar' && !/precio|importe|valor|total|cotiz|confirm|disponib/i.test(respuesta))
