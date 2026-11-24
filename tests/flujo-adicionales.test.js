@@ -9,7 +9,7 @@ const source = fs.readFileSync(path.join(__dirname, '..', 'servidor', 'Codigo.gs
 const from = source.indexOf('function validarStockAdicional_(');
 const to = source.indexOf('function accionPedidoCambioResolver_(', from);
 assert.ok(from >= 0 && to > from, 'No se encontró la aplicación de adicionales');
-const code = source.slice(from, to);
+const code = source.slice(source.indexOf('function pagoCambioIntegral_('),source.indexOf('function aplicarIntegral_('))+'\n'+source.slice(from, to);
 
 function escenario(opts = {}) {
   const lineas = [{ plato_id: 'A', nombre: 'Pizza', cantidad: 2, extras: [], precio: 5, total_linea: 10 }];
@@ -78,7 +78,7 @@ function escenario(opts = {}) {
   const apply = (data={}) => fn({
     id:'SOL1',cotizacion_id:'token-1',
     pago_adicional_verificado:data.pagoAdicional === true,
-    referencia_pago_extra:data.referencia || ''
+    referencia_pago_extra:data.referencia || '', ...data.simple
   },{sesion:{usuario:'cajero'},dispositivo:'test'});
   return {apply,cambio,pedido,writes,quote};
 }
@@ -162,3 +162,5 @@ test('impuestos excluidos se suman en el total adicional', () => {
   assert.equal(e.pedido.base_iva,27.39);
   assert.equal(e.pedido.iva,4.11);
 });
+
+test('cotización antigua también admite confirmación bancaria simple',()=>{const e=escenario({pago:'deuna'});e.apply({simple:{conciliacion_pago:'ajuste_verificado',pago_previo_verificado:true,total_confirmado:30,confirmacion_bancaria:true}});assert.equal(e.pedido.total,30);assert.equal(e.cambio.referencia_pago_extra,'');});
