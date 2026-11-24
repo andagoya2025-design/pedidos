@@ -1465,7 +1465,10 @@ function accionPedidoCambioCotizar_(data, ctx) {
   var platos = {};
   leerTabla_('platos').forEach(function (v) { platos[String(v.id)] = v; });
   var agotados = agotadosPorLocal_()[String(p.local_id)] || {};
-  var subtotal = 0, lineas = [];
+  var subtotal = 0, lineas = [], clavesCotizadas = {};
+  // Para aumentar se debe identificar una línea existente con los mismos extras.
+  // No permitir que un aumento cree productos nuevos ni exceda el límite por línea.
+  var detalleActual = x.tipo === 'aumentar' ? (detallePorPedido_([String(p.id)])[String(p.id)] || []) : [];
   items.forEach(function (it) {
     var plato = platos[String(it.plato_id)];
     var cantidad = Number(it.cantidad);
@@ -1488,6 +1491,19 @@ function accionPedidoCambioCotizar_(data, ctx) {
       costoExtras += numero_(ex.precio);
       nombres.push(String(ex.nombre));
     });
+    var claveLinea = String(plato.id) + '|' + nombres.map(claveComparar_).sort().join('|');
+    if (clavesCotizadas[claveLinea]) throw fallo_('Producto repetido en la cotización. Agrupa las cantidades.', 'DUPLICADO');
+    clavesCotizadas[claveLinea] = true;
+    if (x.tipo === 'aumentar') {
+      var existentes = detalleActual.filter(function (v) {
+        return String(v.plato_id) === String(plato.id) &&
+          String(v.extras || '').split(',').map(function (n) { return claveComparar_(n.trim()); }).filter(Boolean).sort().join('|') ===
+          nombres.map(claveComparar_).sort().join('|');
+      });
+      if (!existentes.length) throw fallo_('Para aumentar, el producto y sus extras deben existir en el pedido. Usa agregar para productos nuevos.', 'CAMBIO');
+      var cantidadActual = existentes.reduce(function (n, v) { return n + numero_(v.cantidad); }, 0);
+      if (cantidadActual + cantidad > 50) throw fallo_('El aumento supera 50 unidades de este producto.', 'CANTIDAD');
+    }
     var unitario = redondear_(numero_(plato.precio) + costoExtras);
     var total = redondear_(unitario * cantidad);
     subtotal = redondear_(subtotal + total);
