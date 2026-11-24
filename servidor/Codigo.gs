@@ -18,8 +18,8 @@
  * ============================================================
  */
 
-var APP_VERSION = '3.1.16';
-var APP_VERSION_NUM = 30116; // 3.1.0 -> 30100 (la pantalla compara con su mínimo)
+var APP_VERSION = '3.1.18';
+var APP_VERSION_NUM = 30118; // 3.1.0 -> 30100 (la pantalla compara con su mínimo)
 var SESION_SEGUNDOS = 21600;  // 6 h; se renueva con cada uso
 var ROLES = ['dueno', 'cajero', 'motorizado'];
 
@@ -1524,7 +1524,7 @@ function accionPedidoCambiosListar_(data, ctx) {
     return { id: String(x.id), numero: String(x.numero), local_id: String(x.local_id), tipo: String(x.tipo),
       detalle: String(x.detalle), items_solicitados: leerSeleccionSolicitud_(x), estado: String(x.estado), pedido_estado: estados[String(x.pedido_id)] || '',
       creado: iso_(x.creado), respuesta: String(x.respuesta || ''), cotizacion_id: String(x.cotizacion_id || ''),
-      forma_pago: pagos[String(x.pedido_id)] || '', pago_verificado: verificados[String(x.pedido_id)]===true, cotizacion:(function(){try{var q=JSON.parse(String(x.cotizacion_json||'null'));return q?{total_actual:q.total_actual,total_estimado:q.total_estimado,adicional:q.adicional,integral:q.integral===true,mensaje:q.mensaje||'',desglose:q.desglose||null,antes:q.antes,despues:q.despues,lineas:q.lineas}:null;}catch(e){return null;}})(), aplicado: String(x.estado) === 'Aplicada',
+      forma_pago: pagos[String(x.pedido_id)] || '', conciliacion_simple:true, pago_verificado: verificados[String(x.pedido_id)]===true, cotizacion:(function(){try{var q=JSON.parse(String(x.cotizacion_json||'null'));return q?{total_actual:q.total_actual,total_estimado:q.total_estimado,adicional:q.adicional,integral:q.integral===true,mensaje:q.mensaje||'',desglose:q.desglose||null,antes:q.antes,despues:q.despues,lineas:q.lineas}:null;}catch(e){return null;}})(), aplicado: String(x.estado) === 'Aplicada',
       adicional: numero_(x.adicional_final) || (function () {
         try { return numero_(JSON.parse(String(x.cotizacion_json || '{}')).adicional); } catch (e) { return 0; }
       })() };
@@ -1564,14 +1564,28 @@ function cotizarIntegral_(x,p,sel) {
   return planCambioIntegral_(p,String(x.tipo),sel,leerTabla_('pedido_detalle').filter(function(d){return String(d.pedido_id)===String(p.id);}),leerTabla_('platos'),leerConfig_(),agotadosPorLocal_()[String(p.local_id)]||{});
 }
 function pagoCambioIntegral_(p,q,data) {
-  if(!esDigital_(p.forma_pago))return {verificado:false,ref:''};
-  var ref=limpiarTexto_(data.referencia_pago_extra,100);
+  if(!esDigital_(p.forma_pago))return {verificado:false,ref:'',modo:'efectivo'};
+  var ref=limpiarTexto_(data.referencia_pago_extra,100),modo=String(data.conciliacion_pago||'');
+  // Nuevo flujo: la decisión explícita corresponde al importe mostrado y al estado vigente.
+  if(modo){
+    if(typeof data.pago_previo_verificado!=='boolean'||data.pago_previo_verificado!==(p.pago_verificado===true))throw fallo_('El estado del pago cambió. Actualiza la solicitud.');
+    if(typeof data.total_confirmado!=='number'||!isFinite(data.total_confirmado)||redondear_(data.total_confirmado)!==redondear_(q.total_estimado))throw fallo_('El importe cambió. Actualiza la solicitud.');
+    if(p.pago_verificado===true){
+      if(numero_(q.adicional)===0&&modo==='sin_ajuste')return {verificado:true,ref:'',modo:modo};
+      if(numero_(q.adicional)!==0&&modo==='ajuste_verificado'&&data.confirmacion_bancaria===true)return {verificado:true,ref:ref,modo:modo};
+      throw fallo_('Confirma en el banco el ajuste real antes de aplicar.');
+    }
+    if(modo==='sin_deposito'&&data.confirmacion_bancaria===true)return {verificado:false,ref:'',modo:modo};
+    if(modo==='total_recibido'&&data.confirmacion_bancaria===true&&numero_(q.total_estimado)>0)return {verificado:true,ref:ref,modo:modo};
+    throw fallo_('Confirma si el nuevo total se recibió o aún no existe ningún depósito.');
+  }
+  // Compatibilidad con pantallas antiguas: no inventar referencias ni omitir sus controles.
   if(p.pago_verificado===true){
     if(q.adicional!==0&&(data.pago_adicional_verificado!==true||ref.length<4))throw fallo_('Verifica el ajuste bancario real e ingresa su referencia.');
-    return {verificado:true,ref:ref};
+    return {verificado:true,ref:ref,modo:q.adicional===0?'sin_ajuste':'ajuste_verificado'};
   }
   if(data.sin_pago_previo!==true)throw fallo_('Confirma que no existe ningún depósito previo antes de actualizar el total.');
-  return {verificado:false,ref:''};
+  return {verificado:false,ref:'',modo:'sin_deposito'};
 }
 function aplicarIntegral_(x,p,q,data,ctx) {
   var nuevo=cotizarIntegral_(x,p,q.seleccion);
@@ -1597,9 +1611,9 @@ function aplicarIntegral_(x,p,q,data,ctx) {
     var inv=q.lineas.length?descontarInventario_(String(p.id),String(p.numero),String(p.local_id),q.lineas,1,usuario):false;
     actualizarCampos_('pedidos',p._fila,p,{subtotal:q.subtotal,base_iva:q.base_iva,iva:q.iva,total:q.total_estimado,pago_verificado:pago.verificado,pago_verificado_fecha:pago.verificado?(q.adicional===0?p.pago_verificado_fecha||new Date():new Date()):'',inventario_descontado:p.inventario_descontado===true||inv});
   }
-  actualizarCampos_('pedido_cambios',x._fila,x,{estado:'Aplicada',aplicado_fecha:new Date(),aplicado_por:usuario,adicional_final:q.adicional,referencia_pago_extra:pago.ref,resuelto:new Date(),resuelto_por:usuario,respuesta:q.tipo==='cancelar'?'Pedido cancelado.':'Modificación aplicada. '+(pago.verificado?'Pago conciliado.':'Consulta el total actualizado del pedido.')});
+  actualizarCampos_('pedido_cambios',x._fila,x,{estado:'Aplicada',aplicado_fecha:new Date(),aplicado_por:usuario,adicional_final:q.adicional,referencia_pago_extra:pago.ref,resuelto:new Date(),resuelto_por:usuario,respuesta:q.tipo==='cancelar'?'Pedido cancelado. '+(pago.modo==='ajuste_verificado'?'Devolución verificada por el restaurante.':''):'Modificación aplicada. '+(pago.verificado?'Pago conciliado por el restaurante.':'Consulta el total actualizado del pedido.')});
   CacheService.getScriptCache().remove('POPULAR_30');limpiarMenuCache_();
-  bitacora_(ctx.sesion,'PEDIDOS','CAMBIO_INTEGRAL',p.numero+' · '+q.tipo+' · '+q.adicional,ctx.dispositivo);
+  bitacora_(ctx.sesion,'PEDIDOS','CAMBIO_INTEGRAL',p.numero+' · '+q.tipo+' · '+q.adicional+' · '+pago.modo+' · total '+q.total_estimado,ctx.dispositivo);
   return {ok:true,data:{id:String(x.id),estado:'Aplicada',aplicado:true,adicional:q.adicional,total_nuevo:q.total_estimado,pago_verificado:pago.verificado}};
 }
 
@@ -1814,11 +1828,15 @@ function accionPedidoCambioAplicar_(data, ctx) {
         redondear_(recalculada.total_estimado) !== redondear_(quote.total_estimado) ||
         JSON.stringify(recalculada.lineas) !== JSON.stringify(quote.lineas))
       throw fallo_('Cambió el precio, los productos o los impuestos. Es necesaria una nueva cotización aceptada.', 'PRECIO_CAMBIO');
-    var refPago = limpiarTexto_(data.referencia_pago_extra, 100); if(esDigital_(p.forma_pago)&&p.pago_verificado!==true)refPago='';
-    if (esDigital_(p.forma_pago)) {
-      if (p.pago_verificado !== true && data.sin_pago_previo !== true) throw fallo_('Primero verifica el pago original.', 'PAGO_SIN_VERIFICAR');
-      if (p.pago_verificado === true && (data.pago_adicional_verificado !== true || refPago.length < 4))
-        throw fallo_('Confirma en el banco o Deuna el pago adicional e ingresa referencia (mínimo 4 caracteres).', 'PAGO_ADICIONAL');
+    var pagoLegacy;
+    if(data.conciliacion_pago)pagoLegacy=pagoCambioIntegral_(p,quote,data);
+    else {
+      var refPago=limpiarTexto_(data.referencia_pago_extra,100);if(esDigital_(p.forma_pago)&&p.pago_verificado!==true)refPago='';
+      if(esDigital_(p.forma_pago)){
+        if(p.pago_verificado!==true&&data.sin_pago_previo!==true)throw fallo_('Primero verifica el pago original.','PAGO_SIN_VERIFICAR');
+        if(p.pago_verificado===true&&(data.pago_adicional_verificado!==true||refPago.length<4))throw fallo_('Confirma en el banco o Deuna el pago adicional e ingresa referencia (mínimo 4 caracteres).','PAGO_ADICIONAL');
+      }
+      pagoLegacy={verificado:esDigital_(p.forma_pago)&&p.pago_verificado===true,ref:refPago,modo:esDigital_(p.forma_pago)?p.pago_verificado===true?'ajuste_verificado':'sin_deposito':'efectivo'};
     }
     var detalle = quote.lineas.map(function (v, i) {
       return { id: 'ADIC-' + String(token).replace(/[^A-Za-z0-9]/g, '') + '-' + i,
@@ -1850,22 +1868,23 @@ function accionPedidoCambioAplicar_(data, ctx) {
       base_iva: redondear_(numero_(p.base_iva) + baseExtra),
       iva: redondear_(numero_(p.iva) + ivaExtra),
       total: totalNuevo,
+      pago_verificado:pagoLegacy.verificado,pago_verificado_fecha:pagoLegacy.verificado?new Date():'',
       inventario_descontado: p.inventario_descontado === true || inventario
     });
     actualizarCampos_('pedido_cambios', x._fila, x, {
       estado: 'Aplicada', aplicado_fecha: new Date(), aplicado_por: String(ctx.sesion.usuario),
-      adicional_final: redondear_(quote.adicional), referencia_pago_extra: refPago,
+      adicional_final: redondear_(quote.adicional), referencia_pago_extra: pagoLegacy.ref,
       resuelto: new Date(), resuelto_por: String(ctx.sesion.usuario),
       respuesta: 'Adicional incorporado al pedido. ' + (esDigital_(p.forma_pago)
-        ? (p.pago_verificado===true?'Personal verificó manualmente el pago adicional.':'Total actualizado; pago pendiente de verificar.') : 'Importe añadido al total pendiente de cobro en efectivo.')
+        ? (pagoLegacy.verificado?'Personal verificó manualmente el pago.':'Total actualizado; pago pendiente de verificar.') : 'Importe añadido al total pendiente de cobro en efectivo.')
     });
     CacheService.getScriptCache().remove('POPULAR_30');
     limpiarMenuCache_();
     resultado = { id: id, estado: 'Aplicada', aplicado: true, repetida: false,
       adicional: redondear_(quote.adicional), total_nuevo: totalNuevo,
-      pago_verificado: esDigital_(p.forma_pago) && p.pago_verificado===true };
+      pago_verificado: pagoLegacy.verificado, conciliacion_pago:pagoLegacy.modo };
   } finally { lock.releaseLock(); }
-  bitacora_(ctx.sesion, 'PEDIDOS', 'ADICIONAL_APLICADO', resultado.id + ' · ' + UI_dinero_(resultado.adicional), ctx.dispositivo);
+  bitacora_(ctx.sesion, 'PEDIDOS', 'ADICIONAL_APLICADO', resultado.id + ' · ' + UI_dinero_(resultado.adicional)+' · '+resultado.conciliacion_pago+' · total '+resultado.total_nuevo, ctx.dispositivo);
   return { ok: true, data: resultado };
 }
 
