@@ -1524,7 +1524,7 @@ function accionPedidoCambiosListar_(data, ctx) {
     return { id: String(x.id), numero: String(x.numero), local_id: String(x.local_id), tipo: String(x.tipo),
       detalle: String(x.detalle), items_solicitados: leerSeleccionSolicitud_(x), estado: String(x.estado), pedido_estado: estados[String(x.pedido_id)] || '',
       creado: iso_(x.creado), respuesta: String(x.respuesta || ''), cotizacion_id: String(x.cotizacion_id || ''),
-      forma_pago: pagos[String(x.pedido_id)] || '', pago_verificado: verificados[String(x.pedido_id)]===true, cotizacion:(function(){try{var q=JSON.parse(String(x.cotizacion_json||'null'));return q?{total_actual:q.total_actual,total_estimado:q.total_estimado,adicional:q.adicional,integral:q.integral===true,antes:q.antes,despues:q.despues}:null;}catch(e){return null;}})(), aplicado: String(x.estado) === 'Aplicada',
+      forma_pago: pagos[String(x.pedido_id)] || '', pago_verificado: verificados[String(x.pedido_id)]===true, cotizacion:(function(){try{var q=JSON.parse(String(x.cotizacion_json||'null'));return q?{total_actual:q.total_actual,total_estimado:q.total_estimado,adicional:q.adicional,integral:q.integral===true,antes:q.antes,despues:q.despues,lineas:q.lineas}:null;}catch(e){return null;}})(), aplicado: String(x.estado) === 'Aplicada',
       adicional: numero_(x.adicional_final) || (function () {
         try { return numero_(JSON.parse(String(x.cotizacion_json || '{}')).adicional); } catch (e) { return 0; }
       })() };
