@@ -354,6 +354,17 @@
   }
   function sinTildes(t) { return String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); }
 
+  /* Subtotal visual por producto: suma todas sus combinaciones, con los mismos centavos del carrito. */
+  function subtotalTarjetaPreenvio(pid) {
+    return items().filter(function(it){return it.plato.id===pid;}).reduce(function(total,it){
+      return total+Math.round(unitario(it)*100)*it.cantidad;
+    },0)/100;
+  }
+  function importeTarjetaPreenvio(p,cant) {
+    if(!cant)return '';
+    return '<div class="preenvio-subtotal-tarjeta" aria-live="polite"><span>'+cant+' '+(cant===1?'unidad':'unidades')+' · Subtotal seleccionado</span><b>'+UI.esc(UI.dinero(subtotalTarjetaPreenvio(p.id)))+'</b></div>';
+  }
+
   function pintarPlatos() {
     var todos = platosDe(localId);
     var q = sinTildes(busqueda.trim());
@@ -373,7 +384,7 @@
         (p.agotado ? '<span class="etiqueta">Agotado</span>' :
           (cant && !p.extras.length ? '<div class="contador"><button type="button" data-menos="' + UI.esc(p.id) + '" aria-label="Quitar uno">−</button><input type="number" inputmode="numeric" min="0" max="1000" data-cant-plato="' + UI.esc(p.id) + '" aria-label="Cantidad de ' + UI.esc(p.nombre) + '" value="' + cant + '"><button type="button" data-mas="' + UI.esc(p.id) + '" aria-label="Agregar uno">＋</button></div>'
             : '<button class="btn chico btn-agregar" type="button" data-agregar="' + UI.esc(p.id) + '">' + (cant ? '＋ Otro' : '＋ Agregar') + '</button>')) +
-        '</div>' + (cant && p.extras.length && !envioPendiente ? '<button class="btn secundario chico plato-editar-seleccion" type="button" data-editar-plato="' + UI.esc(p.id) + '">Editar o quitar · ' + cant + ' en pedido</button>' : '') + '</div></article>';
+        '</div>' + importeTarjetaPreenvio(p,cant) + (cant && p.extras.length && !envioPendiente ? '<button class="btn secundario chico plato-editar-seleccion" type="button" data-editar-plato="' + UI.esc(p.id) + '">Editar o quitar · ' + cant + ' en pedido</button>' : '') + '</div></article>';
     }).join('') : UI.vacio('🔎', q ? 'No encontramos «' + busqueda + '». Prueba con otra palabra.' : 'No hay platos en esta categoría.');
     UI.$$('[data-agregar]', cont).forEach(function (b) { b.addEventListener('click', function () { agregar(b.getAttribute('data-agregar'), b); }); });
     UI.$$('[data-mas]', cont).forEach(function (b) { b.addEventListener('click', function () { sumar(b.getAttribute('data-mas'), 1); }); });
