@@ -1107,7 +1107,9 @@
               '" data-numero-cambio="' + UI.esc(x.n) + '">Aceptar importe</button> ' +
               '<button class="btn secundario chico" type="button" data-rechazar-cambio="' + UI.esc(sol.id) +
               '" data-numero-cambio="' + UI.esc(x.n) + '">Rechazar</button>'
-            : '<p><b>Importe aceptado por ti.</b> Pendiente de gestión y verificación del pago en el restaurante.</p>')
+            : (sol.aplicado ? '<p><b>Adicional aplicado al pedido.</b> El total actualizado aparece en el seguimiento.</p>' :
+              sol.estado === 'Aplicando' ? '<p><b>Aplicación en revisión.</b> El restaurante debe conciliarla antes de despachar.</p>' :
+              '<p><b>Importe aceptado por ti.</b> Pendiente de gestión y verificación del pago en el restaurante.</p>'))
           : '') +
         '<small>Esta solicitud no modifica el pedido ni autoriza un cobro automático.</small></div>';
     }).join('') : '<div class="seg-caja"><b>' + UI.esc(x.n) + '</b><div class="item-sub">No se pudo actualizar el estado. Conservamos el último estado conocido: ' + UI.esc(x.e) + '.</div><button class="enlace" type="button" data-seg-act>Reintentar</button></div>'; }).join('') +
