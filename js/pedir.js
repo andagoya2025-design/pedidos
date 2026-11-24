@@ -183,6 +183,7 @@
     try {
       M = await DATOS.pedir('menuPublico', {});
     } catch (err) {
+      pintarSeguimiento(false).catch(function(){});
       return bloqueo('No pudimos cargar el menú', err.message + ' Toque para intentar de nuevo.', true);
     }
     var c = cfg();
@@ -1031,17 +1032,37 @@
     var u = MEM.leer('ultimo_pedido'); // pedidos hechos antes de la 3.1.5
     if (u && u.numero && !l.some(function (x) { return x.n === u.numero; })) l.unshift({ n: u.numero, s: u.s || '', tel: u.telefono || '', f: u.fecha || Date.now(), t: 0, e: 'Recibido', i: [] });
     var corte = Date.now() - diasHistorial() * 86400000;
-    return l.filter(function (x) { return x && x.n && (x.f || 0) >= corte; }).slice(0, 30);
+    return l.filter(function (x) { return x && x.n && (FINALES.indexOf(x.e) < 0 || (x.f || 0) >= corte); }).sort(function(a,b){return Number(activo(b))-Number(activo(a)) || Number(b.f||0)-Number(a.f||0);}).slice(0, 30);
   }
   function guardarMisPedidos(l) { MEM.guardar('mis_pedidos', l.slice(0, 30)); }
   function guardarMiPedido(x) { var l = misPedidos().filter(function (y) { return y.n !== x.n; }); l.unshift(x); guardarMisPedidos(l); }
   function activo(x) { return FINALES.indexOf(x.e) < 0 || (x.e === 'Entregado' && !x.cal && Date.now() - (x.fe || x.f || 0) < 6 * 3600000); }
 
-  async function pintarSeguimiento(abrir) {
+  var segEnCurso = null, segPendiente = false, segAbrir = false, segTimer = null;
+  function pintarSeguimiento(abrir) {
+    if (segEnCurso) { segPendiente = true; segAbrir = segAbrir || !!abrir; return segEnCurso; }
+    segEnCurso = consultarSeguimiento(abrir).finally(function () {
+      segEnCurso = null;
+      if (segPendiente) { var a = segAbrir; segPendiente = false; segAbrir = false; pintarSeguimiento(a).catch(function(){}); }
+    });
+    return segEnCurso;
+  }
+  function refrescarSeguimiento() {
+    if (document.hidden || navigator.onLine === false || !misPedidos().some(activo) || segEnCurso || document.querySelector('.velo') || document.querySelector('#seguimiento [aria-busy="true"]')) return;
+    pintarSeguimiento(false).catch(function(){});
+  }
+  function iniciarSeguimientoAutomatico() {
+    if (segTimer !== null) return;
+    segTimer = setInterval(refrescarSeguimiento, 15000);
+    document.addEventListener('visibilitychange', refrescarSeguimiento);
+    global.addEventListener('pageshow', refrescarSeguimiento);
+    global.addEventListener('online', refrescarSeguimiento);
+  }
+  async function consultarSeguimiento(abrir) {
     var cont = $('#seguimiento');
     if (!cont) return;
     var lista = misPedidos();
-    if (!lista.length) { cont.hidden = true; cont.innerHTML = ''; return; }
+    if (!lista.length) { cont.hidden = true; cont.innerHTML = ''; var acceso = $('#btn-mi-pedido'); if(acceso) acceso.hidden=true; return; }
     cont.hidden = false;
     var act = lista.filter(activo), hist = lista.filter(function (x) { return !activo(x); });
     var res = {};
@@ -1081,7 +1102,11 @@
           if (p.seguimiento && !x.s) { x.s = p.seguimiento; cambio2 = true; }
           if (p.calificacion && !x.cal) { x.cal = p.calificacion; cambio2 = true; }
         });
-        if (cambio2) guardarMisPedidos(lista);
+        if (cambio2) {
+          var actual = misPedidos(), porNumero = Object.create(null);
+          lista.forEach(function(x){ porNumero[x.n]=x; });
+          guardarMisPedidos(actual.map(function(x){ return porNumero[x.n] ? Object.assign({},x,porNumero[x.n]) : x; }));
+        }
         act = lista.filter(activo); hist = lista.filter(function (x) { return !activo(x); });
       } catch (err) {
         cont.innerHTML = '<div class="seg-caja"><b>Mis pedidos</b><span class="item-sub">No se pudo consultar ahora. <button class="enlace" type="button" id="seg-act">Reintentar</button></span></div>';
@@ -1099,7 +1124,8 @@
         if (respuesta.numero === x.n) solicitudesPorPedido[x.n] = respuesta.solicitudes || [];
       } catch (e) { /* Seguimiento sigue funcionando si falla la consulta de solicitudes. */ }
     }));
-    cont.innerHTML = act.map(function (x) { return res[x.n] && !res[x.n].no_existe && !res[x.n].consulta_error ? tarjetaSeguimiento(res[x.n], x) + (solicitudesPorPedido[x.n] || []).slice(-3).map(function (sol) {
+    var acceso = $('#btn-mi-pedido'); if (acceso) { acceso.hidden = !act.length; acceso.textContent = 'Mi pedido activo (' + act.length + ')'; }
+    cont.innerHTML = (act.length ? '<p class="ayuda">Seguimiento automático cada 15 segundos mientras la app está abierta.</p>' : '') + act.map(function (x) { return res[x.n] && !res[x.n].no_existe && !res[x.n].consulta_error ? tarjetaSeguimiento(res[x.n], x) + (solicitudesPorPedido[x.n] || []).slice(-3).map(function (sol) {
       return '<div class="seg-caja"><b>📝 Solicitud: ' + UI.esc(sol.tipo) + '</b>' +
         '<div class="item-sub">Estado: ' + UI.esc(sol.estado) + '</div>' +
         '<p>' + UI.esc(sol.detalle) + '</p>' +
@@ -1464,6 +1490,9 @@
       await sugerir();
       irA(2);
     });
+    var acceso = $('#btn-mi-pedido'); if(acceso) acceso.addEventListener('click',function(){ pintarSeguimiento(true).catch(function(){}); });
+    iniciarSeguimientoAutomatico();
+    if (misPedidos().some(activo)) pintarSeguimiento(false).catch(function(){});
     iniciar();
   });
 })(window);
