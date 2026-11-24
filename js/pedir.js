@@ -896,24 +896,33 @@
         ubicacion_fuente: dom && ubic ? ubic.fuente : '', ubicacion_enlace: dom && ubic && ubic.enlace ? ubic.enlace : '' }
     };
     // Cotización de sólo lectura. El servidor vuelve a validar bajo candado antes de escribir.
+    function firmaCheckout(){
+      return JSON.stringify([localId,entrega,pago,ubic,checkoutMem['cliente'],UI.leerFormulario(f),
+        !!priv.checked,!!(pol&&pol.checked),!!(promos&&promos.checked),
+        items().map(function(it){return [it.plato.id,it.cantidad,it.extras,unitario(it)];}),cuponAplicado,totalActual()]);
+    }
+    var firmaOriginal=firmaCheckout(),importeMostrado=totalActual();
+    function sigueIgual(){return f===$('#form-pedido')&&firmaCheckout()===firmaOriginal;}
     cotizacionEnCurso=true;
     boton.disabled=true;
     try{
       var q=await DATOS.pedir('pedidoCotizar',datos);
+      if(!sigueIgual()){UI.aviso('El pedido cambió mientras se verificaba. Revisa y vuelve a enviar.','error');return;}
       if(q.repetido&&q.pedido){datos.total_esperado=Number(q.pedido.total);}
       else {
         if(!q||typeof q.total!=='number'||!Number.isFinite(q.total)||q.total<0)throw Error('No se recibió una cotización válida.');
-        if(Math.round(q.total*100)!==Math.round(totalActual()*100)){
+        if(Math.round(q.total*100)!==Math.round(importeMostrado*100)){
           var ok=await UI.ventana({titulo:'Confirma el importe actualizado',html:
             '<p>El restaurante calculó el importe definitivo. Revisa antes de enviar.</p>'+
             '<p>Subtotal: '+UI.esc(UI.dinero(q.subtotal))+' · Envío: '+UI.esc(UI.dinero(q.envio))+'</p>'+
             '<p>Descuento: '+UI.esc(UI.dinero(q.descuento))+' · Premio: '+UI.esc(UI.dinero(q.premio))+' · Propina: '+UI.esc(UI.dinero(q.propina))+'</p>'+
-            '<p>IVA: '+UI.esc(UI.dinero(q.iva))+'</p><p><b>Total anterior: '+UI.esc(UI.dinero(totalActual()))+'</b><br><b>Total actualizado: '+UI.esc(UI.dinero(q.total))+'</b></p>',
+            '<p>IVA: '+UI.esc(UI.dinero(q.iva))+'</p><p><b>Total anterior: '+UI.esc(UI.dinero(importeMostrado))+'</b><br><b>Total actualizado: '+UI.esc(UI.dinero(q.total))+'</b></p>',
             botones:[{texto:'Volver',valor:false,clase:'secundario'},{texto:'Aceptar '+UI.dinero(q.total),valor:true}]});
           if(!ok)return;
         }
         datos.total_esperado=q.total;
       }
+      if(!sigueIgual()){UI.aviso('El pedido cambió durante la confirmación. No se envió.','error');return;}
     }catch(err){UI.aviso(err.message||'No se pudo comprobar el importe. No se envió el pedido.','error');return;}
     finally{cotizacionEnCurso=false;boton.disabled=false;}
     // Si la respuesta anterior se perdió, reintentar exactamente la misma carga.
