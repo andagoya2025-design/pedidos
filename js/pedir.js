@@ -71,6 +71,7 @@
   }
   function items() { return Object.keys(carrito).map(function (k) { return carrito[k]; }).filter(function (i) { return i.cantidad > 0; }); }
   function subtotal() { return Math.round(items().reduce(function (s, i) { return s + unitario(i) * i.cantidad; }, 0) * 100) / 100; }
+  global.MIPEDIDO_ACTUALIZACION_SEGURA = function(){ return !envioPendiente && !recuperacionEnCurso && cantidadTotal() === 0 && paso === 1; };
   function cantidadTotal() { return items().reduce(function (s, i) { return s + i.cantidad; }, 0); }
   function cantidadPlato(pid) { return items().filter(function (i) { return i.plato.id === pid; }).reduce(function (s, i) { return s + i.cantidad; }, 0); }
   function zonaElegida() { return entrega.tipo === 'domicilio' ? zonasDe(localId).filter(function (z) { return z.id === entrega.zona; })[0] || null : null; }
