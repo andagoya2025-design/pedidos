@@ -1059,6 +1059,7 @@
   }
   var historialRevisado=Object.create(null);
   var segEnCurso = null, segPendiente = false, segAbrir = false, segTimer = null;
+  var vigiaSeg = DATOS.crearVigiaSync();
   function pintarSeguimiento(abrir) {
     if (segEnCurso) { segPendiente = true; segAbrir = segAbrir || !!abrir; return segEnCurso; }
     segEnCurso = consultarSeguimiento(abrir).finally(function () {
@@ -1069,11 +1070,16 @@
   }
   function refrescarSeguimiento() {
     if (document.hidden || navigator.onLine === false || !misPedidos().some(activo) || segEnCurso || document.querySelector('.velo') || document.querySelector('#seguimiento [aria-busy="true"]')) return;
-    pintarSeguimiento(false).catch(function(){});
+    if (DATOS.ocupado()) return;
+    var clave = misPedidos().filter(activo).map(identidadSeguimiento).sort().join('|');
+    vigiaSeg(clave, function () {
+      if (document.hidden || navigator.onLine === false || document.querySelector('.velo') || document.querySelector('#seguimiento [aria-busy="true"]')) return false;
+      return pintarSeguimiento(false);
+    }, 15000).catch(function(){});
   }
   function iniciarSeguimientoAutomatico() {
     if (segTimer !== null) return;
-    segTimer = setInterval(refrescarSeguimiento, 15000);
+    segTimer = setInterval(refrescarSeguimiento, 3000);
     document.addEventListener('visibilitychange', refrescarSeguimiento);
     global.addEventListener('pageshow', refrescarSeguimiento);
     global.addEventListener('online', refrescarSeguimiento);
@@ -1293,6 +1299,7 @@
       guardarMisPedidos(misPedidos().filter(activo)); MEM.guardar('ultimo_pedido', null); UI.aviso('Historial borrado.', 'ok'); pintarSeguimiento();
     });
     if (abrir) cont.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    return act.every(function (x) { return res[x.n] && !res[x.n].consulta_error && !res[x.n].no_existe && Array.isArray(solicitudesPorPedido[x.n]); });
   }
 
   // Orientación honesta mientras no exista una operación de cambios autorizada en el servidor.
