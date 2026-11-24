@@ -1982,6 +1982,16 @@ function accionPedidoEstado_(data, ctx) {
     if (desde && String(p.estado) !== desde) throw fallo_('Este pedido cambió a «' + p.estado + '». Toque Actualizar.', 'CAMBIO');
     if (!(permitidos[String(p.estado)] || []).some(function (x) { return x === a; })) throw fallo_('No se puede pasar de «' + p.estado + '» a «' + a + '».');
     if (a === 'En camino' && !p.motorizado_id) throw fallo_('Asigne un motorizado antes de despachar.');
+    // Nunca enviar al motorizado mientras hay un cambio que aún requiere respuesta.
+    // El personal debe resolverlo explícitamente; no se rechaza silenciosamente al despachar.
+    if (a === 'En camino' || a === 'Entregado') {
+      var solicitudesAbiertas = cambiosPedido_().filter(function (x) {
+        return String(x.pedido_id) === String(p.id) && String(x.estado) === 'Pendiente';
+      });
+      if (solicitudesAbiertas.length)
+        throw fallo_('Este pedido tiene ' + solicitudesAbiertas.length +
+          ' solicitud(es) de cambio pendiente(s). Resuélvelas antes de despachar o entregar.', 'CAMBIO_PENDIENTE');
+    }
     if (a === 'Entregado' && String(p.estado) === 'Preparando' && (p.zona_id || p.motorizado_id)) throw fallo_('Este pedido es a domicilio: primero debe salir «En camino».');
     if (a === 'En camino' || (a === 'Entregado' && String(p.estado) === 'Preparando')) exigirPagoVerificado_(p);
     if (a === 'Preparando' && siNo_(leerConfig_().verificar_antes_preparar)) exigirPagoVerificado_(p, true); // 3.1.5
