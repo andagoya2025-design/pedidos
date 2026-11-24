@@ -1499,7 +1499,9 @@ function accionPedidoCambioCotizar_(data, ctx) {
     adicional: subtotal, total_estimado: redondear_(numero_(p.total) + subtotal),
     lineas: lineas, inventario_reservado: false, aplicado: false,
     requiere_confirmacion_cliente: true, pago_adicional_pendiente: subtotal > 0,
-    aviso: 'Cotización provisional. Confirmar con el cliente, verificar stock y conciliar el pago antes de aplicar.' } };
+    // El total estimado NO incluye una eventual nueva comisión, promoción o recálculo de impuestos.
+    total_definitivo: false, cobro_autorizado: false,
+    aviso: 'Cotización provisional, no es un cobro. Confirmar con el cliente el importe final, impuestos, promociones, disponibilidad y forma de pago antes de aplicar.' } };
 }
 function accionPedidoCambioResolver_(data, ctx) {
   var id = limpiarTexto_(data.id, 80), decision = limpiarTexto_(data.decision, 40);
