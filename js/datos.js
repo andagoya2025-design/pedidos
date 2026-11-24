@@ -87,7 +87,12 @@
    * DATOS.pedir(accion, data, { guardar: true|false })
    * Devuelve data si ok; si no, lanza Error con mensaje claro y .codigo.
    */
+  var operacionesActivas = 0;
   async function pedir(accion, data, opciones) {
+    operacionesActivas++;
+    try { return await pedirInterno(accion,data,opciones); } finally { operacionesActivas--; }
+  }
+  async function pedirInterno(accion, data, opciones) {
     opciones = opciones || {};
     var guardar = !!opciones.guardar;
     if (guardar && scriptViejo) {
@@ -127,6 +132,7 @@
 
   global.DATOS = {
     pedir: pedir,
+    ocupado: function(){return operacionesActivas > 0;},
     estado: estado,
     scriptViejo: function () { return scriptViejo; }
   };

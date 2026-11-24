@@ -8,7 +8,7 @@
  * - Nunca guarda datos del negocio: los pedidos van siempre al servidor.
  * ============================================================
  */
-var VERSION = 'app-3.1.18-seguimiento1';
+var VERSION = 'app-3.1.19-cotizacion1';
 var FOTOS = 'fotos-1';      // 3.1: fotos de platos y mapas (sobrevive a las actualizaciones)
 var MAX_FOTOS = 150;
 
@@ -62,7 +62,7 @@ var ARCHIVOS = [
 
 self.addEventListener('install', function (e) {
   e.waitUntil(
-    caches.open(VERSION).then(function (c) { return c.addAll(ARCHIVOS.map(function(p){return new Request(p,{cache:'reload'});})); }).then(function () { return self.skipWaiting(); })
+    caches.open(VERSION).then(function (c) { return c.addAll(ARCHIVOS.map(function(p){return new Request(new URL(p,self.registration.scope).href,{cache:'reload'});})); }).then(function () { return self.skipWaiting(); })
   );
 });
 

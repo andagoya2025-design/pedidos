@@ -18,8 +18,8 @@
  * ============================================================
  */
 
-var APP_VERSION = '3.1.8';
-var APP_VERSION_NUM = 30108; // 3.1.0 -> 30100 (la pantalla compara con su mínimo)
+var APP_VERSION = '3.1.9';
+var APP_VERSION_NUM = 30109; // 3.1.0 -> 30100 (la pantalla compara con su mínimo)
 var SESION_SEGUNDOS = 21600;  // 6 h; se renueva con cada uso
 var ROLES = ['dueno', 'cajero', 'motorizado'];
 
@@ -1388,7 +1388,7 @@ HOJAS.pedido_cambios = [
   ['tipo','t'], ['detalle','t'], ['estado','t'], ['creado','d'],
   ['resuelto','d'], ['resuelto_por','t'], ['respuesta','t'],
   ['cotizacion_id','t'], ['cotizacion_json','t'], ['cotizacion_fecha','d'], ['cliente_confirmo_fecha','d'],
-  ['aplicado_fecha','d'], ['aplicado_por','t'], ['referencia_pago_extra','t'], ['adicional_final','m']
+  ['aplicado_fecha','d'], ['aplicado_por','t'], ['referencia_pago_extra','t'], ['adicional_final','m'], ['seleccion_json','t']
 ];
 function hojaCambios_() {
   var ss = SpreadsheetApp.getActive();
@@ -1419,6 +1419,32 @@ function cambiosPedido_() {
   hojaCambios_();
   return leerTabla_('pedido_cambios');
 }
+/* Selección estructurada: nunca confiar en precios ni nombres del cliente. */
+function seleccionSolicitud_(tipo, items, p) {
+  if (items == null || (Array.isArray(items) && !items.length)) return [];
+  if (!Array.isArray(items) || items.length > 30) throw fallo_('Máximo 30 líneas.', 'CANTIDAD');
+  if (['agregar','aumentar'].indexOf(tipo) < 0) return [];
+  var platos = leerTabla_('platos'), originales = detallePorPedido_([String(p.id)])[String(p.id)] || [];
+  var agotados = agotadosPorLocal_()[String(p.local_id)] || {}, agrupados = Object.create(null);
+  items.forEach(function(it) {
+    if (!it || !Number.isInteger(it.cantidad) || it.cantidad < 1 || it.cantidad > 50) throw fallo_('Cantidad inválida.', 'CANTIDAD');
+    var plato = platos.filter(function(v){return String(v.id)===String(it.plato_id);})[0];
+    if (!plato || plato.activo !== true || plato.agotado === true || agotados[String(plato.id)] || (String(plato.local_id)!=='TODOS' && String(plato.local_id)!==String(p.local_id))) throw fallo_('Producto no disponible.', 'AGOTADO');
+    var disponibles = leerExtras_(plato.extras_json), vistos = Object.create(null);
+    if (!Array.isArray(it.extras) || it.extras.length>20) throw fallo_('Extras inválidos.', 'EXTRAS');
+    var extras = it.extras.map(function(n){var k=claveComparar_(n), ex=disponibles.filter(function(e){return claveComparar_(e.nombre)===k;})[0];if(!ex||vistos[k])throw fallo_('Extra inválido o repetido.', 'EXTRAS');vistos[k]=true;return String(ex.nombre);}).sort();
+    var key=JSON.stringify([String(plato.id),extras]), linea=agrupados[key]||(agrupados[key]={plato_id:String(plato.id),cantidad:0,extras:extras});
+    linea.cantidad+=it.cantidad;
+    var existentes=originales.filter(function(v){return String(v.plato_id)===linea.plato_id && String(v.extras||'').split(',').map(function(n){return claveComparar_(n.trim());}).filter(Boolean).sort().join('|')===extras.map(claveComparar_).sort().join('|');});
+    var actual=existentes.reduce(function(n,v){return n+numero_(v.cantidad);},0);
+    if(tipo==='aumentar'&&!existentes.length)throw fallo_('Usa agregar para productos nuevos.', 'CAMBIO');
+    if(linea.cantidad+(tipo==='aumentar'?actual:0)>50)throw fallo_('Máximo 50 unidades por variante.', 'CANTIDAD');
+  });
+  return Object.keys(agrupados).sort().map(function(k){return agrupados[k];});
+}
+function leerSeleccionSolicitud_(x) {
+  try {var a=JSON.parse(String(x.seleccion_json||'[]'));return Array.isArray(a)?a:[];} catch(e){return [];}
+}
 function accionPedidoCambioSolicitar_(data) {
   if (!estaInstalado_()) throw fallo_('Sistema no instalado.', 'NO_INSTALADO');
   var tipo = limpiarTexto_(data.tipo, 20);
@@ -1432,14 +1458,18 @@ function accionPedidoCambioSolicitar_(data) {
     if (!p) throw fallo_('Pedido no encontrado.', 'NO_EXISTE');
     var politica = politicaCambiosPedido_(String(p.estado), tipo);
     if (!politica.permitido) throw fallo_(politica.mensaje, 'CAMBIO');
+    var seleccion = seleccionSolicitud_(tipo, data.items, p), seleccionJson=JSON.stringify(seleccion);
     var pendientes = cambiosPedido_().filter(function (x) { return String(x.pedido_id) === String(p.id) && ['Pendiente', 'Aprobada para coordinar', 'Cotizada', 'Confirmada cliente', 'Aplicando'].indexOf(String(x.estado)) >= 0; });
     if (pendientes.length) {
-      var igual = pendientes.filter(function (x) { return String(x.tipo) === tipo && String(x.detalle) === detalle; })[0];
+      var igual = pendientes.filter(function (x) { return String(x.tipo) === tipo && String(x.detalle) === detalle && JSON.stringify(leerSeleccionSolicitud_(x)) === seleccionJson; })[0];
       if (igual) return { ok: true, data: { id: String(igual.id), estado: String(igual.estado), repetida: true, aplicado: false } };
       throw fallo_('Ya tienes una solicitud pendiente. Espera la respuesta del restaurante.', 'PENDIENTE');
     }
     var id = Utilities.getUuid();
-    agregarFilas_('pedido_cambios', [[id, p.id, p.numero, p.local_id, tipo, detalle, 'Pendiente', new Date(), '', '', '']]);
+    var fila=[id,p.id,p.numero,p.local_id,tipo,detalle,'Pendiente',new Date(),'','',''];
+    while(fila.length<HOJAS.pedido_cambios.length-1)fila.push('');
+    fila.push(seleccionJson);
+    agregarFilas_('pedido_cambios',[fila]);
     return { ok: true, data: { id: id, estado: 'Pendiente', aplicado: false } };
   } finally { lock.releaseLock(); }
 }
@@ -1492,7 +1522,7 @@ function accionPedidoCambiosListar_(data, ctx) {
     return local === 'TODOS' || String(x.local_id) === local;
   }).slice(-200).map(function (x) {
     return { id: String(x.id), numero: String(x.numero), local_id: String(x.local_id), tipo: String(x.tipo),
-      detalle: String(x.detalle), estado: String(x.estado), pedido_estado: estados[String(x.pedido_id)] || '',
+      detalle: String(x.detalle), items_solicitados: leerSeleccionSolicitud_(x), estado: String(x.estado), pedido_estado: estados[String(x.pedido_id)] || '',
       creado: iso_(x.creado), respuesta: String(x.respuesta || ''), cotizacion_id: String(x.cotizacion_id || ''),
       forma_pago: pagos[String(x.pedido_id)] || '', aplicado: String(x.estado) === 'Aplicada',
       adicional: numero_(x.adicional_final) || (function () {

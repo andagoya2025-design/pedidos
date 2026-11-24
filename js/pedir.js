@@ -71,6 +71,7 @@
   }
   function items() { return Object.keys(carrito).map(function (k) { return carrito[k]; }).filter(function (i) { return i.cantidad > 0; }); }
   function subtotal() { return Math.round(items().reduce(function (s, i) { return s + unitario(i) * i.cantidad; }, 0) * 100) / 100; }
+  global.MIPEDIDO_ACTUALIZACION_SEGURA = function(){ return !envioPendiente && !recuperacionEnCurso && cantidadTotal() === 0 && paso === 1; };
   function cantidadTotal() { return items().reduce(function (s, i) { return s + i.cantidad; }, 0); }
   function cantidadPlato(pid) { return items().filter(function (i) { return i.plato.id === pid; }).reduce(function (s, i) { return s + i.cantidad; }, 0); }
   function zonaElegida() { return entrega.tipo === 'domicilio' ? zonasDe(localId).filter(function (z) { return z.id === entrega.zona; })[0] || null : null; }
@@ -1244,13 +1245,14 @@
       if (politica.permitido) {
         var detalle = await editorCambio(tipo, politica);
         if (detalle === null || detalle === undefined) return;
-        detalle = String(detalle).trim();
+        var seleccionCambio = detalle.items || [];
+        detalle = String(detalle.texto || '').trim();
         if (detalle.length < 5 || detalle.length > 500) return UI.aviso('Describe el cambio entre 5 y 500 caracteres.', 'error');
         try {
           b.disabled = true;
           var solicitud = await DATOS.pedir('pedidoCambioSolicitar', x.s ?
-            { s: x.s, tipo: tipo, detalle: detalle } :
-            { numero: numero, telefono: x.tel || (checkoutMem['cliente'] || {}).telefono || '', tipo: tipo, detalle: detalle }, { guardar: true });
+            { s: x.s, tipo: tipo, detalle: detalle, items: seleccionCambio } :
+            { numero: numero, telefono: x.tel || (checkoutMem['cliente'] || {}).telefono || '', tipo: tipo, detalle: detalle, items: seleccionCambio }, { guardar: true });
           if (solicitud.estado === 'Pendiente' || solicitud.repetida === true) {
             UI.aviso(solicitud.repetida ? 'Tu solicitud ya está pendiente de respuesta.' : 'Solicitud enviada al restaurante. Espera su confirmación; tu pedido no cambió todavía.', 'exito');
             await pintarSeguimiento(false);
@@ -1306,7 +1308,7 @@
         var max = limite ? Math.max(0, Math.floor(Number(p.cantidad) || 0) - (tipo === 'reducir' ? 1 : 0)) : 50;
         if (tipo === 'aumentar' && prefijo === 'o') max = Math.max(0, 50 - Number(p.cantidad || 0));
         return '<div class="ux-cambio-fila" data-busqueda="' + UI.esc(String(p.nombre || '').toLowerCase()) + '"><div class="ux-cambio-nombre"><b>' + UI.esc(p.nombre) + '</b><small>' + UI.esc(UI.dinero(p.precio)) + (prefijo === 'o' ? ' · En pedido: ' + UI.esc(p.cantidad) + (p.extras ? ' · ' + UI.esc(p.extras) : '') : '') + '</small></div><div class="ux-cambio-controles"><button type="button" class="btn secundario chico" data-ux-step="-1" aria-label="Disminuir">−</button><input aria-label="Cantidad de ' + UI.esc(p.nombre) + '" type="number" min="0" max="' + max + '" value="0" inputmode="numeric" data-ux-cant="' + prefijo + i + '"><button type="button" class="btn secundario chico" data-ux-step="1" aria-label="Aumentar">+</button></div>' +
-          (prefijo === 'n' && Array.isArray(p.extras) && p.extras.length ? '<div class="ux-cambio-extras">' + p.extras.map(function (e,j) { return '<label><input type="checkbox" data-ux-extra="' + i + '-' + j + '"> ' + UI.esc(e.nombre) + ' (+' + UI.esc(UI.dinero(e.precio)) + ')</label>'; }).join('') + '</div>' : '') + '</div>';
+          (prefijo === 'n' && Array.isArray(p.extras) && p.extras.length ? '<div class="ux-cambio-extras" hidden>' + p.extras.map(function (e,j) { return '<label><input type="checkbox" data-ux-extra="' + i + '-' + j + '"> ' + UI.esc(e.nombre) + ' (+' + UI.esc(UI.dinero(e.precio)) + ')</label>'; }).join('') + '</div>' : '') + '</div>';
       }).join('');
     }
     var html = (filas.length ? '<h3>Productos del pedido</h3><div class="ux-cambio-lista">' + controles(filas, 'o', tipo !== 'aumentar') + '</div>' : '') +
@@ -1314,7 +1316,7 @@
       '<label for="ux-nota">' + (tipo === 'cancelar' ? 'Motivo de cancelación' : 'Notas o solicitud manual (opcional si seleccionas productos)') + '</label><textarea id="ux-nota" maxlength="500" rows="2" placeholder="' + (tipo === 'cancelar' ? 'Describe el motivo' : 'Ej. Sin cebolla') + '"></textarea><p class="ayuda" data-ux-resumen aria-live="polite"></p>';
     var detalle = null;
     function leer(velo) {
-      var partes = [], originales = 0, agregados = 0, estimado = 0;
+      var partes = [], originales = 0, agregados = 0, estimado = 0, itemsSeleccionados = [];
       function recoger(lista, prefijo) {
         lista.forEach(function (p,i) {
           var el = velo.querySelector('[data-ux-cant="' + prefijo + i + '"]');
@@ -1330,6 +1332,7 @@
             precio += elegidos.reduce(function(s,e){ return s + Number(e.precio || 0); },0);
             agregados += n;
           } else { originales += n; }
+          if (tipo === 'agregar' || tipo === 'aumentar') itemsSeleccionados.push({plato_id:String(p.id || p.plato_id),cantidad:n,extras:extras.split(',').map(function(e){return e.trim();}).filter(Boolean)});
           estimado += n * precio * (prefijo === 'o' && tipo !== 'aumentar' ? -1 : 1);
           partes.push((prefijo === 'n' ? 'Agregar ' : tipo === 'aumentar' ? 'Aumentar ' : tipo === 'cambiar' ? 'Sustituir ' : 'Retirar ') + n + ' × ' + p.nombre + (extras ? ' (' + extras + ')' : ''));
         });
@@ -1337,17 +1340,17 @@
       recoger(filas,'o'); recoger(nuevos,'n');
       var nota = velo.querySelector('#ux-nota').value.trim();
       if (nota) partes.push(nota);
-      return { texto: partes.join('; '), originales: originales, agregados: agregados, estimado: estimado };
+      return { texto: partes.join('; '), originales: originales, agregados: agregados, estimado: estimado, items: itemsSeleccionados };
     }
     var ok = await UI.ventana({ titulo: titulos[tipo] || 'Solicitar cambio', texto: 'Selecciona las cantidades o escribe tu solicitud. El restaurante debe aprobarla antes de modificar el pedido.', html: html,
       botones: [{ texto: 'Volver', valor: null, clase: 'secundario' }, { texto: 'Enviar solicitud', valor: true, antes: function(velo) {
         try { var v = leer(velo); if (tipo === 'cambiar' && (v.originales || v.agregados) && !(v.originales && v.agregados)) throw Error('Selecciona el producto original y su sustituto.');
           if (v.texto.length < 5 || v.texto.length > 500) throw Error('Describe el cambio entre 5 y 500 caracteres.');
-          detalle = v.texto; return true;
+          detalle = {texto:v.texto,items:v.items}; return true;
         } catch(e) { UI.aviso(e.message,'error'); return false; }
       }}],
       alAbrir: function(velo) {
-        function resumen() { try { var v = leer(velo); velo.querySelector('[data-ux-resumen]').textContent = (v.originales || v.agregados) ? 'Diferencia orientativa de productos: ' + UI.dinero(v.estimado) + '. No incluye ajustes de impuestos o descuentos.' : ''; } catch(e) {} }
+        function resumen() { UI.$('[data-ux-menu] .ux-cambio-fila',velo).forEach(function(f){var n=f.querySelector('[data-ux-cant]'), ex=f.querySelector('.ux-cambio-extras');if(ex){ex.hidden=!(Number(n.value)>0);if(ex.hidden)UI.$('input',ex).forEach(function(b){b.checked=false;});}}); try { var v = leer(velo); velo.querySelector('[data-ux-resumen]').textContent = (v.originales || v.agregados) ? 'Diferencia orientativa de productos: ' + UI.dinero(v.estimado) + '. No incluye ajustes de impuestos o descuentos.' : ''; } catch(e) {} }
         velo.addEventListener('click',function(e){ var b=e.target.closest('[data-ux-step]'); if(!b)return; var el=b.parentNode.querySelector('input'); el.value=Math.max(0,Math.min(Number(el.max),Number(el.value||0)+Number(b.getAttribute('data-ux-step')))); el.dispatchEvent(new Event('input',{bubbles:true})); });
         velo.addEventListener('input',function(e){ if(e.target.hasAttribute('data-ux-buscar')) { var q=e.target.value.toLowerCase(); UI.$('[data-ux-menu] [data-busqueda]',velo).forEach(function(f){ f.hidden=f.getAttribute('data-busqueda').indexOf(q)<0; }); } resumen(); });
         velo.addEventListener('change',resumen);
