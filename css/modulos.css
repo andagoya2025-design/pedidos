@@ -601,3 +601,7 @@ details.otras-fechas[open] summary { margin-bottom: 10px; }
 .ux-resumen-item{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:7px 0;border-bottom:1px solid var(--borde)}
 .ux-resumen-item>span{min-width:0;overflow-wrap:anywhere}.ux-resumen-item>b{white-space:nowrap}.ux-resumen-item small{display:block;font-size:.8rem;opacity:.85}
 .ux-total-pedido{font-size:1.15rem;font-weight:700}.ux-solicitud-pedido{border-inline-start:3px solid var(--acento)}
+
+/* Gestión visual de solicitudes en revisión */
+.ux-solicitud-pendiente{border:1px solid var(--borde);border-inline-start:3px solid var(--aviso);border-radius:12px;padding:12px;margin:10px 0;background:var(--superficie-2)}
+.ux-solicitud-pendiente small{display:block;margin:5px 0 9px;overflow-wrap:anywhere}
