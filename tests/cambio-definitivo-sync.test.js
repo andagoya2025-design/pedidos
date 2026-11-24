@@ -1,0 +1,33 @@
+'use strict';
+const test=require('node:test'), assert=require('node:assert/strict'), fs=require('node:fs'), path=require('node:path');
+const read=p=>fs.readFileSync(path.join(__dirname,'..',p),'utf8');
+const gs=read('servidor/Codigo.gs'), cl=read('js/pedir.js'), dt=read('js/datos.js');
+function extraer(s,a,b){const i=s.indexOf(a),j=s.indexOf(b,i+1);assert.ok(i>=0&&j>i,a);return s.slice(i,j);}
+const solicitud=extraer(gs,'function accionPedidoCambioSolicitar_(', '\nfunction accionPedidoCambiosConsultar_(');
+function solicitar(tipo,estado){
+ let escrituras=0;
+ const d={estaInstalado_:()=>true,limpiarTexto_:v=>String(v),fallo_:(m,c)=>Object.assign(new Error(m),{codigo:c}),candado_:()=>({releaseLock(){}}),accionPedidoConsultar_:()=>({data:{numero:'PED-0002'}}),leerTabla_:()=>[{id:'P1',numero:'PED-0002',estado:'Recibido',local_id:'L1'}],politicaCambiosPedido_:()=>({permitido:true}),seleccionSolicitud_:()=>[],cambiosPedido_:()=>estado==='ninguna'?[]:[{pedido_id:estado==='otro pedido'?'P2':'P1',id:'S1',estado:estado==='otro pedido'?'Aplicada':estado,tipo:'cambiar',detalle:'Cambio previo'}],leerSeleccionSolicitud_:()=>[],Utilities:{getUuid:()=> 'S2'},HOJAS:{pedido_cambios:Array(20)},agregarFilas_:()=>escrituras++};
+ const fn=new Function(...Object.keys(d),solicitud+';return accionPedidoCambioSolicitar_')(...Object.values(d));
+ let ok=false,codigo='';try{ok=fn({tipo,detalle:'Nueva solicitud'}).ok}catch(e){codigo=e.codigo}
+ return {ok,codigo,escrituras};
+}
+for(const tipo of ['agregar','aumentar','cambiar','quitar','reducir','cancelar'])for(const estado of ['Aplicada','Confirmada cliente','Aplicando','Pendiente','Cotizada','Aprobada para coordinar','Rechazada','otro pedido','ninguna']){
+ test(tipo+' / '+estado,()=>{const r=solicitar(tipo,estado),ok=['Rechazada','otro pedido','ninguna'].includes(estado);assert.equal(r.ok,ok);assert.equal(r.escrituras,ok?1:0);if(estado==='Aplicada')assert.equal(r.codigo,'CAMBIO_DEFINITIVO');});
+}
+const ui=new Function('UI','mensajeCambioPedido',extraer(cl,'  function solicitudAbierta(','  function tarjetaSeguimiento(')+';return estadoSolicitudHtml')({esc:String},()=> 'Solicitar');
+for(const [name,sols,ok] of [['aplicada',[{estado:'Aplicada',aplicado:true}],false],['legado',[{estado:'Aplicada'}],false],['rechazada',[{estado:'Rechazada'}],true],['nueva',[],true],['pendiente',[{estado:'Pendiente'}],false],['confirmada',[{estado:'Confirmada cliente'}],false],['error',undefined,false]])test('UI '+name,()=>assert.equal(ui(sols,{numero:'PED-0002',estado:'Recibido'}).includes('data-escribir='),ok));
+function vigia(){
+ let now=100000,revision='revision-001',signals=0,reads=0,fail=false,signalError='',defer=null,scope='A';
+ const code=extraer(dt,'  function crearVigiaSync()', '  global.DATOS =');
+ const fn=new Function('pedir','Date',code+';return crearVigiaSync()')(async()=>{signals++;if(signalError)throw Object.assign(new Error('fallo'),{codigo:signalError});return {revision};},{now:()=>now});
+ return {poll:()=>fn(scope,async()=>{reads++;if(defer)await defer();return !fail},15000),advance:n=>now+=n,revision:v=>revision=v,fail:v=>fail=v,error:v=>signalError=v,defer:v=>defer=v,scope:v=>scope=v,stats:()=>({signals,reads})};
+}
+test('señal: primera carga y cambios, sin descargar datos idénticos',async()=>{const v=vigia();await v.poll();for(let i=0;i<4;i++){v.advance(3000);await v.poll()}assert.equal(v.stats().reads,1);v.revision('revision-002');await v.poll();assert.equal(v.stats().reads,2);});
+test('señal: comprobación periódica aunque la señal no cambie',async()=>{const v=vigia();await v.poll();v.advance(15000);await v.poll();assert.equal(v.stats().reads,2);});
+test('señal: servidor anterior no reconocido, usa fallback y no insiste',async()=>{const v=vigia();v.error('ACCION');await v.poll();v.advance(3000);await v.poll();assert.equal(v.stats().signals,1);assert.equal(v.stats().reads,1);v.advance(12000);await v.poll();assert.equal(v.stats().reads,2);});
+test('señal: caché vacía conserva lectura periódica',async()=>{const v=vigia();v.revision('');await v.poll();v.advance(3000);await v.poll();assert.equal(v.stats().reads,1);v.advance(12000);await v.poll();assert.equal(v.stats().reads,2);});
+test('señal: no confirma revisión si falla lectura, reintenta con espera',async()=>{const v=vigia();await v.poll();v.revision('revision-002');v.fail(true);await v.poll();v.advance(3000);await v.poll();assert.equal(v.stats().reads,2);v.advance(3000);v.fail(false);await v.poll();assert.equal(v.stats().reads,3);});
+test('señal: una lectura a la vez y cambio durante descarga',async()=>{const v=vigia();let release;v.defer(()=>new Promise(r=>release=r));const p=v.poll();await Promise.resolve();await v.poll();assert.equal(v.stats().reads,1);v.revision('revision-002');release();await p;v.defer(null);await v.poll();assert.equal(v.stats().reads,2);});
+test('señal: cambiar de contexto obliga a leer otra vez',async()=>{const v=vigia();await v.poll();v.scope('B');await v.poll();assert.equal(v.stats().reads,2);});
+test('señal servidor: revisiones sin datos, escritura relevante y fallo de caché',()=>{let value='',flushes=0,puts=0,fail=false;const cache={get:()=>value,put:(k,v)=>{if(fail)throw Error('cache');value=v;puts++},remove:()=>{value=''}};const code=extraer(gs,'function accionSyncRevision_(', '\nfunction responder_(');const x=new Function('CacheService','SpreadsheetApp','Utilities','var syncPendiente_=false;'+code+';return {leer:accionSyncRevision_,marcar:marcarRevisionSync_,publicar:publicarRevisionSync_,pendiente:()=>syncPendiente_}')({getScriptCache:()=>cache},{flush:()=>flushes++},{getUuid:()=> 'revision-001'});assert.deepEqual(x.leer().data,{revision:''});x.marcar('bitacora');assert.equal(x.pendiente(),false);x.marcar('pedidos');assert.equal(x.pendiente(),true);x.publicar();assert.equal(flushes,1);assert.equal(puts,1);assert.equal(x.leer().data.revision,'revision-001');fail=true;x.marcar('pedido_cambios');x.publicar();assert.equal(x.leer().data.revision,'');});
+test('paquete: TXT idéntico a fuente, versión de pantalla y caché nuevas',()=>{assert.equal(gs,read('servidor/Codigo_MiPedido_3.1.19.txt'));assert.match(gs,/APP_VERSION_NUM = 30119/);assert.match(read('js/config.js'),/versionPantalla: '3.1.19'/);assert.match(read('sw.js'),/app-3.1.29-sync-cambio-definitivo/);});
