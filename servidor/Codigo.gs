@@ -1556,7 +1556,7 @@ function planCambioIntegral_(p,t,sel,filas,platos,cfg,agotados) {
   });
   if(t==='cancelar'){bajas=antes.slice();despues=[];}
   if(t!=='cancelar'&&!despues.some(function(d){return d.cantidad>0;}))throw fallo_('Para retirar todos los productos, usa cancelar.');
-  var subtotal=redondear_(despues.reduce(function(a,d){return a+d.total_linea;},0)),pct=numero_(cfg.iva_porcentaje),incl=siNo_(cfg.precios_incluyen_iva),grav=t==='cancelar'?0:redondear_(subtotal+numero_(p.envio)),base=incl?redondear_(grav/(1+pct/100)):grav,iva=incl?redondear_(grav-base):redondear_(grav*pct/100),total=t==='cancelar'?0:redondear_(grav+numero_(p.propina)+(incl?0:iva)),delta=redondear_(total-numero_(p.total));
+  var subtotal=redondear_(despues.reduce(function(a,d){return a+d.total_linea;},0)),pct=numero_(cfg.iva_porcentaje),incl=siNo_(cfg.precios_incluyen_iva),grav=t==='cancelar'?0:redondear_(subtotal+numero_(p.envio)),base=incl?redondear_(grav/(1+pct/100)):grav,iva=incl?redondear_(grav-base):redondear_(grav*pct/100+1e-9),total=t==='cancelar'?0:redondear_(grav+numero_(p.propina)+(incl?0:iva)),delta=redondear_(total-numero_(p.total));
   return {integral:true,tipo:t,seleccion:sel,antes:antes,despues:despues.filter(function(d){return d.cantidad>0;}),bajas:bajas,lineas:altas,total_actual:redondear_(p.total),total_estimado:total,adicional:delta,subtotal:subtotal,base_iva:base,iva:iva,subtotal_adicional:redondear_(subtotal-numero_(p.subtotal)),iva_adicional:redondear_(iva-numero_(p.iva)),estado_pedido:String(p.estado)};
 }
 function cotizarIntegral_(x,p,sel) {
@@ -1576,6 +1576,7 @@ function aplicarIntegral_(x,p,q,data,ctx) {
   var nuevo=cotizarIntegral_(x,p,q.seleccion);
   if(['antes','despues','bajas','lineas','total_estimado','adicional','subtotal','base_iva','iva'].some(function(k){return JSON.stringify(nuevo[k])!==JSON.stringify(q[k]);}))throw fallo_('El detalle, precio o impuesto cambió. Cierra sin aplicar y solicita una nueva propuesta.');
   var pago=pagoCambioIntegral_(p,q,data),usuario=String(ctx.sesion.usuario);
+  if(p.inventario_descontado!==true&&q.lineas.length){var recetaIds=leerTabla_('recetas_plato').filter(function(rec){return numero_(rec.cantidad)>0;});if(q.antes.some(function(d){return recetaIds.some(function(rec){return String(rec.plato_id)===String(d.plato_id);});}))throw fallo_('Inventario original sin descuento confirmado. Requiere conciliación.');}
   validarStockAdicional_(String(p.local_id),q.lineas);
   var rows=leerTabla_('pedido_detalle').filter(function(d){return String(d.pedido_id)===String(p.id);});
   var nuevos=q.despues.filter(function(d){return !d.id;}).map(function(d,i){return Object.assign({},d,{id:'ADIC-'+String(q.id).replace(/[^A-Za-z0-9]/g,'')+'-'+i});});
@@ -1593,7 +1594,7 @@ function aplicarIntegral_(x,p,q,data,ctx) {
     if(nuevos.length)agregarFilas_('pedido_detalle',nuevos.map(function(d){return [d.id,p.id,d.plato_id,d.nombre,d.precio,d.cantidad,d.extras,d.total_linea];}));
     if(p.inventario_descontado===true&&q.bajas.length)descontarInventario_(String(p.id),String(p.numero),String(p.local_id),q.bajas,-1,usuario);
     var inv=q.lineas.length?descontarInventario_(String(p.id),String(p.numero),String(p.local_id),q.lineas,1,usuario):false;
-    actualizarCampos_('pedidos',p._fila,p,{subtotal:q.subtotal,base_iva:q.base_iva,iva:q.iva,total:q.total_estimado,pago_verificado:pago.verificado,pago_verificado_fecha:pago.verificado?new Date():'',inventario_descontado:p.inventario_descontado===true||inv});
+    actualizarCampos_('pedidos',p._fila,p,{subtotal:q.subtotal,base_iva:q.base_iva,iva:q.iva,total:q.total_estimado,pago_verificado:pago.verificado,pago_verificado_fecha:pago.verificado?(q.adicional===0?p.pago_verificado_fecha||new Date():new Date()):'',inventario_descontado:p.inventario_descontado===true||inv});
   }
   actualizarCampos_('pedido_cambios',x._fila,x,{estado:'Aplicada',aplicado_fecha:new Date(),aplicado_por:usuario,adicional_final:q.adicional,referencia_pago_extra:pago.ref,resuelto:new Date(),resuelto_por:usuario,respuesta:q.tipo==='cancelar'?'Pedido cancelado.':'Modificación aplicada. '+(pago.verificado?'Pago conciliado.':'Consulta el total actualizado del pedido.')});
   CacheService.getScriptCache().remove('POPULAR_30');limpiarMenuCache_();
@@ -1698,7 +1699,8 @@ function accionPedidoCambioProponer_(data, ctx) {
       total_estimado: r.total_estimado, lineas: r.lineas,
       vence: new Date(ahora.getTime() + 30 * 60000).toISOString()
     };
-    if(r.integral){if(String(x.estado)==='Cotizada')throw fallo_('La propuesta ya fue enviada. Espera la decisión del cliente o ciérrala expresamente.');if(data.total_esperado===undefined||redondear_(data.total_esperado)!==r.total_estimado)throw fallo_('El precio cambió. Revisa la propuesta nuevamente.');quote=Object.assign({},r,{id:token,vence:quote.vence});}
+    if(String(x.estado)==='Cotizada')throw fallo_('La propuesta ya fue enviada. Espera la decisión del cliente o ciérrala expresamente.');
+    if(r.integral){if(data.total_esperado===undefined||redondear_(data.total_esperado)!==r.total_estimado)throw fallo_('El precio cambió. Revisa la propuesta nuevamente.');quote=Object.assign({},r,{id:token,vence:quote.vence});}
     actualizarCampos_('pedido_cambios', x._fila, x, {
       estado: 'Cotizada', cotizacion_id: token, cotizacion_json: JSON.stringify(quote),
       cotizacion_fecha: ahora, cliente_confirmo_fecha: '',
@@ -2433,6 +2435,7 @@ function accionPedidoAnular_(data, ctx) {
     if (SpreadsheetApp.getActive().getSheetByName('pedido_cambios') && cambiosPedido_().some(function (x) {
       return String(x.pedido_id) === String(p.id) && String(x.estado) === 'Aplicando';
     })) throw fallo_('Este pedido tiene una aplicación de adicionales incompleta. Conciliar antes de anular o devolver stock.', 'REVISION_MANUAL');
+    if (SpreadsheetApp.getActive().getSheetByName('pedido_cambios') && cambiosPedido_().some(function(x){return String(x.pedido_id)===String(p.id)&&['Pendiente','Aprobada para coordinar','Cotizada','Confirmada cliente'].indexOf(String(x.estado))>=0;}))throw fallo_('Resuelve primero la modificación pendiente antes de anular el pedido.');
     if (String(p.estado) === 'Entregado' && ctx.sesion.rol !== 'dueno') throw fallo_('Un pedido entregado solo lo anula el dueño.', 'PERMISO');
     if (p.liquidacion_id) throw fallo_('El efectivo de este pedido ya se liquidó en caja: no se puede anular.');
     var eraEntregado = String(p.estado) === 'Entregado';
