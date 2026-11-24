@@ -3,7 +3,7 @@ const test=require('node:test');
 const assert=require('node:assert/strict');
 const source=require('node:fs').readFileSync(require('node:path').join(__dirname,'../servidor/Codigo.gs'),'utf8');
 function extraer(n){const i=source.indexOf('function '+n+'('),j=source.indexOf('\nfunction ',i+1);assert.ok(i>=0,n);return source.slice(i,j<0?source.length:j);}
-const code=source.slice(source.indexOf('function planCambioIntegral_('),source.indexOf('function accionPedidoCambioResolver_('))+'\n'+extraer('politicaCambiosPedido_')+'\n'+extraer('descontarInventario_')+'\n'+extraer('detallePorPedido_');
+const code=source.slice(source.indexOf('function planCambioIntegral_('),source.indexOf('function accionPedidoCambioResolver_('))+'\n'+extraer('politicaCambiosPedido_')+'\n'+extraer('descontarInventario_')+'\n'+extraer('detallePorPedido_')+'\n'+extraer('maxExtra_')+'\n'+extraer('validarExtrasPedido_');
 function escenario(o={}){
  const p={id:'P1',numero:'PED-0002',local_id:'L1',cliente_id:'C1',estado:'Recibido',forma_pago:o.forma||'transferencia',pago_verificado:!!o.pagado,total:7.5,subtotal:4.5,envio:3,base_iva:6.52,iva:.98,propina:0,inventario_descontado:true,_fila:2,...o.p};
  const x={id:'S1',numero:p.numero,pedido_id:p.id,local_id:p.local_id,tipo:o.tipo||'cambiar',estado:'Pendiente',_fila:2};
@@ -54,3 +54,5 @@ test('devolución confirmada sin referencia',()=>{let e=escenario({tipo:'quitar'
 test('no se acepta confirmación de importe o estado anterior',()=>{let e=escenario(),q=e.proponer();e.confirmar(q);let n=e.writes.length;assert.throws(()=>simple(e,q,'total_recibido',{total_confirmado:7.5}),/importe cambió/);assert.throws(()=>simple(e,q,'total_recibido',{pago_previo_verificado:true}),/estado del pago cambió/);assert.equal(e.writes.length,n);});
 test('confirmación bancaria debe ser explícita',()=>{let e=escenario({pagado:true}),q=e.proponer();e.confirmar(q);let n=e.writes.length;assert.throws(()=>simple(e,q,'ajuste_verificado',{confirmacion_bancaria:false}),/Confirma en el banco/);assert.equal(e.writes.length,n);});
 test('no se puede afirmar pago total de cero en cancelación',()=>{let e=escenario({tipo:'cancelar'}),q=e.proponer({retirar:[],agregar:[]});e.confirmar(q);assert.throws(()=>simple(e,q,'total_recibido'),/Confirma si/);simple(e,q,'sin_deposito');assert.equal(e.p.estado,'Anulado');});
+
+test('extras múltiples conservan variantes en cotización y aplicación',()=>{let e=escenario({forma:'efectivo',tipo:'agregar'});e.db.platos[2].extras_json[0].max_cantidad=3;let q=e.proponer({retirar:[],agregar:[{plato_id:'C',cantidad:1,extras:['Huevo','Huevo']}]});assert.equal(q.total_estimado,12.5);e.confirmar(q);e.aplicar(q);assert.equal(e.p.total,12.5);assert.ok(e.detalle().some(d=>d.extras==='Huevo, Huevo'&&d.cantidad===1&&d.precio===5));});
