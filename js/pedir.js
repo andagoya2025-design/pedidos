@@ -255,6 +255,7 @@
   }
 
   function cambiarLocal(id) {
+    if (envioPendiente && id !== localId) return UI.aviso('Hay un envío sin confirmar. Verifica primero ese pedido antes de cambiar de restaurante.', 'error');
     if (id !== localId && cantidadTotal()) carrito = {}; // el carrito es por local
     localId = id; categoria = ''; cambio(); entrega.zona = ''; marcarAgotados();
     MEM.guardar('pedir_local', id);
@@ -275,8 +276,9 @@
     var hayVendidos = platosDe(localId).some(function (p) { return (M.populares || []).indexOf(p.id) >= 0; });
     if (categoria !== '_top' && (!categoria || !cats.some(function (c) { return c.id === categoria; }))) categoria = hayVendidos ? '_top' : (cats.length ? cats[0].id : '');
     var varios = localesConMenu().length > 1;
-    var rep = ultimoCarrito();
+    var rep = envioPendiente ? null : ultimoCarrito();
     cuerpo().innerHTML = pasos() +
+      (envioPendiente ? '<div class="banda aviso-cerrado" role="alert">⚠️ <span><b>Pedido anterior sin confirmar.</b> No hagas otro pedido hasta verificar si llegó al restaurante. El reintento conserva los productos y el código originales.</span></div>' : '') +
       (varios ? '<button class="btn secundario chico" type="button" id="btn-cambiar-local" style="margin-bottom:8px">📍 ' + UI.esc(local().nombre) + ' · cambiar</button>' : '<p class="subtitulo" style="margin:0 0 6px">📍 ' + UI.esc(local().nombre) + '</p>') +
       (entrega.tipo === 'mesa' && entrega.mesa ? '<div class="banda" style="margin:0 0 10px">🍽️ <span>Estás en la <b>mesa ' + UI.esc(entrega.mesa) + '</b>. Pide aquí y te lo llevamos.</span></div>' : '') +
       (local().pausado ? '<div class="banda aviso-cerrado" style="margin:0 0 10px">⏸ <span>' + UI.esc(local().mensaje_pausa || 'Este local pausó los pedidos por hoy.') + '</span></div>' : '') +
