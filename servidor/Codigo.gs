@@ -160,6 +160,7 @@ var ACCIONES = {
   pedidoCambiosConsultar: { tipo: 'publica', fn: accionPedidoCambiosConsultar_ },
   pedidoCambioCotizar: { tipo: 'sesion', roles: ['dueno', 'cajero'], fn: accionPedidoCambioCotizar_ },
   pedidoCambioProponer: { tipo: 'sesion', roles: ['dueno', 'cajero'], fn: accionPedidoCambioProponer_ },
+  pedidoCambioAplicar: { tipo: 'sesion', roles: ['dueno', 'cajero'], fn: accionPedidoCambioAplicar_ },
   pedidoCambioConfirmar: { tipo: 'publica', fn: accionPedidoCambioConfirmar_ },
   pedidoCambiosListar: { tipo: 'sesion', roles: ['dueno', 'cajero'], fn: accionPedidoCambiosListar_ },
   pedidoCambioResolver: { tipo: 'sesion', roles: ['dueno', 'cajero'], fn: accionPedidoCambioResolver_ },
@@ -1373,7 +1374,8 @@ HOJAS.pedido_cambios = [
   ['id','t'], ['pedido_id','t'], ['numero','t'], ['local_id','t'],
   ['tipo','t'], ['detalle','t'], ['estado','t'], ['creado','d'],
   ['resuelto','d'], ['resuelto_por','t'], ['respuesta','t'],
-  ['cotizacion_id','t'], ['cotizacion_json','t'], ['cotizacion_fecha','d'], ['cliente_confirmo_fecha','d']
+  ['cotizacion_id','t'], ['cotizacion_json','t'], ['cotizacion_fecha','d'], ['cliente_confirmo_fecha','d'],
+  ['aplicado_fecha','d'], ['aplicado_por','t'], ['referencia_pago_extra','t'], ['adicional_final','m']
 ];
 function hojaCambios_() {
   var ss = SpreadsheetApp.getActive();
@@ -1439,7 +1441,7 @@ function accionPedidoCambiosConsultar_(data) {
     return String(x.pedido_id) === String(p.id);
   }).slice(-10).map(function (x) {
     var quote = null;
-    if (['Cotizada', 'Confirmada cliente'].indexOf(String(x.estado)) >= 0 && x.cotizacion_json) {
+    if (['Cotizada', 'Confirmada cliente', 'Aplicando', 'Aplicada'].indexOf(String(x.estado)) >= 0 && x.cotizacion_json) {
       try { var guardada = JSON.parse(String(x.cotizacion_json));
         quote = { id: String(x.cotizacion_id), lineas: guardada.lineas, total_actual: guardada.total_actual,
           adicional: guardada.adicional, subtotal_adicional: guardada.subtotal_adicional,
@@ -1448,7 +1450,8 @@ function accionPedidoCambiosConsultar_(data) {
       } catch (e) { quote = null; }
     }
     return { id: String(x.id), tipo: String(x.tipo), detalle: String(x.detalle), estado: String(x.estado),
-      creado: iso_(x.creado), respuesta: String(x.respuesta || ''), cotizacion: quote, aplicado: false };
+      creado: iso_(x.creado), respuesta: String(x.respuesta || ''), cotizacion: quote,
+      aplicado: String(x.estado) === 'Aplicada' };
   }) } };
 }
 /* Al avanzar el pedido, cerrar solicitudes que la nueva etapa prohíbe.
@@ -1457,7 +1460,7 @@ function cerrarCambiosIncompatibles_(p, nuevoEstado, usuario) {
   if (!SpreadsheetApp.getActive().getSheetByName('pedido_cambios')) return 0;
   var n = 0;
   cambiosPedido_().forEach(function (x) {
-    if (String(x.pedido_id) !== String(p.id) || ['Pendiente', 'Aprobada para coordinar', 'Cotizada', 'Confirmada cliente'].indexOf(String(x.estado)) < 0) return;
+    if (String(x.pedido_id) !== String(p.id) || ['Pendiente', 'Aprobada para coordinar', 'Cotizada', 'Confirmada cliente', 'Aplicando'].indexOf(String(x.estado)) < 0) return;
     if (politicaCambiosPedido_(nuevoEstado, String(x.tipo)).permitido) return;
     actualizarCampos_('pedido_cambios', x._fila, x, {
       estado: 'Rechazada', resuelto: new Date(), resuelto_por: usuario,
@@ -1470,14 +1473,18 @@ function cerrarCambiosIncompatibles_(p, nuevoEstado, usuario) {
 function accionPedidoCambiosListar_(data, ctx) {
   var local = localDeSesion_(ctx, data.local_id);
   var pedidos = leerTabla_('pedidos');
-  var estados = {};
-  pedidos.forEach(function (p) { estados[String(p.id)] = String(p.estado); });
+  var estados = {}, pagos = {};
+  pedidos.forEach(function (p) { estados[String(p.id)] = String(p.estado); pagos[String(p.id)] = String(p.forma_pago); });
   return { ok: true, data: { solicitudes: cambiosPedido_().filter(function (x) {
     return local === 'TODOS' || String(x.local_id) === local;
   }).slice(-200).map(function (x) {
     return { id: String(x.id), numero: String(x.numero), local_id: String(x.local_id), tipo: String(x.tipo),
       detalle: String(x.detalle), estado: String(x.estado), pedido_estado: estados[String(x.pedido_id)] || '',
-      creado: iso_(x.creado), respuesta: String(x.respuesta || ''), cotizacion_id: String(x.cotizacion_id || ''), aplicado: false };
+      creado: iso_(x.creado), respuesta: String(x.respuesta || ''), cotizacion_id: String(x.cotizacion_id || ''),
+      forma_pago: pagos[String(x.pedido_id)] || '', aplicado: String(x.estado) === 'Aplicada',
+      adicional: numero_(x.adicional_final) || (function () {
+        try { return numero_(JSON.parse(String(x.cotizacion_json || '{}')).adicional); } catch (e) { return 0; }
+      })() };
   }) } };
 }
 /* Cotización de adicionales: no cambia el pedido ni reserva inventario.
@@ -1487,7 +1494,7 @@ function accionPedidoCambioCotizar_(data, ctx) {
   var x = cambiosPedido_().filter(function (v) { return String(v.id) === solicitudId; })[0];
   if (!x) throw fallo_('Solicitud no encontrada.', 'NO_EXISTE');
   if (!puedeVerLocal_(ctx, String(x.local_id))) throw fallo_('Sin permiso para este local.', 'PERMISO');
-  if (['Pendiente', 'Aprobada para coordinar', 'Cotizada'].indexOf(String(x.estado)) < 0) throw fallo_('La solicitud ya fue resuelta.', 'CAMBIO');
+  if (['Pendiente', 'Aprobada para coordinar', 'Cotizada', 'Confirmada cliente'].indexOf(String(x.estado)) < 0) throw fallo_('La solicitud ya fue resuelta.', 'CAMBIO');
   if (['agregar', 'aumentar'].indexOf(String(x.tipo)) < 0)
     throw fallo_('Esta cotización solo admite productos adicionales o aumento de cantidades.', 'CAMBIO');
   var p = leerTabla_('pedidos').filter(function (v) { return String(v.id) === String(x.pedido_id); })[0];
@@ -1624,6 +1631,123 @@ function accionPedidoCambioConfirmar_(data) {
     return { ok: true, data: { estado: aceptada ? 'Confirmada cliente' : 'Rechazada',
       repetida: false, aplicado: false, pago_verificado: false } };
   } finally { lock.releaseLock(); }
+}
+
+/* Comprobar el STOCK AGREGADO antes de escribir cualquier fila.
+ * Mismo criterio de recetas y equivalentes por local que descontarInventario_. */
+function validarStockAdicional_(localId, detalle) {
+  var recetas = leerTabla_('recetas_plato').filter(function (r) { return numero_(r.cantidad) > 0; });
+  var insumos = leerTabla_('insumos'), porId = {}, porNombre = {}, consumo = {};
+  insumos.forEach(function (i) {
+    porId[String(i.id)] = i;
+    if (String(i.local_id) === String(localId)) porNombre[claveComparar_(i.nombre)] = i;
+  });
+  detalle.forEach(function (d) {
+    recetas.forEach(function (rec) {
+      if (String(rec.plato_id) !== String(d.plato_id)) return;
+      var ins = porId[String(rec.insumo_id)];
+      if (ins && String(ins.local_id) !== String(localId)) ins = porNombre[claveComparar_(ins.nombre)];
+      if (!ins) return; // Sin inventario configurado en este local: mismo criterio de venta existente.
+      var id = String(ins.id);
+      consumo[id] = (consumo[id] || 0) + numero_(rec.cantidad) * numero_(d.cantidad);
+    });
+  });
+  Object.keys(consumo).forEach(function (id) {
+    var requerido = Math.round(consumo[id] * 1000) / 1000;
+    if (numero_(porId[id].stock) + 0.000001 < requerido)
+      throw fallo_('Inventario insuficiente para el adicional: ' + String(porId[id].nombre) + '.', 'AGOTADO');
+  });
+  return consumo;
+}
+
+/* Aplicación de adicionales aceptados: rol autorizado, doble autorización del
+ * pago digital, revalidación exacta de menú/IVA/stock y protección contra reintentos.
+ * Google Sheets no soporta transacciones: el estado Aplicando bloquea despachos y
+ * obliga a conciliación manual si un fallo interrumpe alguna escritura. */
+function accionPedidoCambioAplicar_(data, ctx) {
+  var lock = candado_(), resultado;
+  try {
+    var id = limpiarTexto_(data.id, 80);
+    var token = limpiarTexto_(data.cotizacion_id, 80);
+    var x = cambiosPedido_().filter(function (v) { return String(v.id) === id; })[0];
+    if (!x || !puedeVerLocal_(ctx, String(x.local_id))) throw fallo_('Solicitud no encontrada o sin permiso.', 'PERMISO');
+    if (!token || String(x.cotizacion_id) !== token) throw fallo_('La cotización fue reemplazada.', 'CAMBIO');
+    if (String(x.estado) === 'Aplicada')
+      return { ok: true, data: { id: id, estado: 'Aplicada', repetida: true, aplicado: true } };
+    if (String(x.estado) === 'Aplicando')
+      throw fallo_('La aplicación quedó incompleta. Bloquea el despacho y solicita conciliación técnica de detalle, importes, pago e inventario antes de reintentar.', 'REVISION_MANUAL');
+    if (String(x.estado) !== 'Confirmada cliente' || !(x.cliente_confirmo_fecha instanceof Date))
+      throw fallo_('Primero debe aceptar el cliente una cotización vigente.', 'CONFIRMACION');
+    var p = leerTabla_('pedidos').filter(function (v) { return String(v.id) === String(x.pedido_id); })[0];
+    if (!p || !politicaCambiosPedido_(p.estado, x.tipo).permitido)
+      throw fallo_('El pedido ya no admite este adicional.', 'CAMBIO');
+    if (p.liquidacion_id) throw fallo_('El pedido ya fue liquidado; no se permite modificar su importe.', 'CAJA');
+    var quote;
+    try { quote = JSON.parse(String(x.cotizacion_json)); } catch (e) { throw fallo_('Cotización dañada; no aplicar.', 'CAMBIO'); }
+    if (String(quote.id) !== token || !Array.isArray(quote.lineas) || !quote.lineas.length ||
+        !(numero_(quote.adicional) > 0)) throw fallo_('Cotización incompleta.', 'CAMBIO');
+    if (redondear_(p.total) !== redondear_(quote.total_actual))
+      throw fallo_('El total original cambió; detén la aplicación y cotiza de nuevo.', 'CAMBIO');
+    var original = quote.lineas.map(function (v) {
+      return { plato_id: String(v.plato_id), cantidad: Number(v.cantidad), extras: v.extras };
+    });
+    var recalculada = accionPedidoCambioCotizar_({ id: id, items: original }, ctx).data;
+    if (redondear_(recalculada.adicional) !== redondear_(quote.adicional) ||
+        redondear_(recalculada.total_estimado) !== redondear_(quote.total_estimado) ||
+        JSON.stringify(recalculada.lineas) !== JSON.stringify(quote.lineas))
+      throw fallo_('Cambió el precio, los productos o los impuestos. Es necesaria una nueva cotización aceptada.', 'PRECIO_CAMBIO');
+    var refPago = limpiarTexto_(data.referencia_pago_extra, 100);
+    if (esDigital_(p.forma_pago)) {
+      if (p.pago_verificado !== true) throw fallo_('Primero verifica el pago original.', 'PAGO_SIN_VERIFICAR');
+      if (data.pago_adicional_verificado !== true || refPago.length < 4)
+        throw fallo_('Confirma en el banco o Deuna el pago adicional e ingresa referencia (mínimo 4 caracteres).', 'PAGO_ADICIONAL');
+    }
+    var detalle = quote.lineas.map(function (v, i) {
+      return { id: 'ADIC-' + String(token).replace(/[^A-Za-z0-9]/g, '') + '-' + i,
+        plato_id: String(v.plato_id), nombre: String(v.nombre), precio: numero_(v.precio),
+        cantidad: Number(v.cantidad), extras: (v.extras || []).join(', '),
+        total_linea: numero_(v.total_linea) };
+    });
+    var ids = {};
+    detalle.forEach(function (d) { ids[d.id] = true; });
+    if (leerTabla_('pedido_detalle').some(function (v) { return !!ids[String(v.id)]; }))
+      throw fallo_('Ya existen detalles del adicional; requiere conciliación, no duplicar.', 'REVISION_MANUAL');
+    validarStockAdicional_(String(p.local_id), detalle);
+    // Desde este punto, ante cualquier fallo, no se repite automáticamente.
+    actualizarCampos_('pedido_cambios', x._fila, x, {
+      estado: 'Aplicando', respuesta: 'Aplicación iniciada: pendiente de completar registros y conciliar si hay error.'
+    });
+    agregarFilas_('pedido_detalle', detalle.map(function (v) {
+      return [v.id, p.id, v.plato_id, v.nombre, v.precio, v.cantidad, v.extras, v.total_linea];
+    }));
+    var inventario = descontarInventario_(String(p.id), String(p.numero), String(p.local_id), detalle, 1, ctx.sesion.usuario);
+    var cfg = leerConfig_();
+    var baseExtra = siNo_(cfg.precios_incluyen_iva)
+      ? redondear_(numero_(quote.subtotal_adicional) / (1 + numero_(cfg.iva_porcentaje) / 100))
+      : redondear_(quote.subtotal_adicional);
+    var ivaExtra = redondear_(numero_(quote.adicional) - baseExtra);
+    actualizarCampos_('pedidos', p._fila, p, {
+      subtotal: redondear_(numero_(p.subtotal) + numero_(quote.subtotal_adicional)),
+      base_iva: redondear_(numero_(p.base_iva) + baseExtra),
+      iva: redondear_(numero_(p.iva) + ivaExtra),
+      total: redondear_(numero_(p.total) + numero_(quote.adicional)),
+      inventario_descontado: p.inventario_descontado === true || inventario
+    });
+    actualizarCampos_('pedido_cambios', x._fila, x, {
+      estado: 'Aplicada', aplicado_fecha: new Date(), aplicado_por: String(ctx.sesion.usuario),
+      adicional_final: redondear_(quote.adicional), referencia_pago_extra: refPago,
+      resuelto: new Date(), resuelto_por: String(ctx.sesion.usuario),
+      respuesta: 'Adicional incorporado al pedido. ' + (esDigital_(p.forma_pago)
+        ? 'Personal verificó manualmente el pago adicional.' : 'Importe añadido al total pendiente de cobro en efectivo.')
+    });
+    CacheService.getScriptCache().remove('POPULAR_30');
+    limpiarMenuCache_();
+    resultado = { id: id, estado: 'Aplicada', aplicado: true, repetida: false,
+      adicional: redondear_(quote.adicional), total_nuevo: redondear_(numero_(p.total) + numero_(quote.adicional)),
+      pago_verificado: esDigital_(p.forma_pago) };
+  } finally { lock.releaseLock(); }
+  bitacora_(ctx.sesion, 'PEDIDOS', 'ADICIONAL_APLICADO', resultado.id + ' · ' + UI_dinero_(resultado.adicional), ctx.dispositivo);
+  return { ok: true, data: resultado };
 }
 
 function accionPedidoCambioResolver_(data, ctx) {
