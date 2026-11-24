@@ -908,7 +908,8 @@
         pintarExito(r.pedido, detalle);
       } catch (err) {
         // El código de envío se conserva: si vuelve a intentar, no se duplica.
-        UI.ventana({ icono: '⚠️', titulo: 'No pudimos confirmar el envío', texto: 'No sabemos si el pedido llegó al restaurante. No hagas otro pedido todavía. Puedes reintentar el envío original con el mismo código, aunque hayas cambiado el carrito. No hagas un pedido nuevo hasta confirmar el anterior. Detalle: ' + err.message, botones: [{ texto: 'Entendido', valor: true }] });
+        var decision = await UI.ventana({ icono: '⚠️', titulo: 'No pudimos confirmar el envío', texto: 'Comprueba el pedido original antes de crear otro. No se duplicará el envío.', botones: [{ texto: 'Cerrar', valor: null, clase: 'secundario' }, { texto: 'Comprobar pedido', valor: 'comprobar' }] });
+        if (decision === 'comprobar' && !recuperacionEnCurso) await recuperarEnvio(boton);
       }
     });
   }
@@ -940,7 +941,10 @@
         codigoEnvio = ''; envioPendiente = null;
         try { global.sessionStorage.removeItem('mipedido_envio_pendiente'); } catch (e) { /* sin almacenamiento */ }
         UI.aviso('Pedido ' + p.numero + ' localizado. No se ha creado otro.', 'exito');
-        if (esMismoCarrito) pintarExito(p);
+        if (esMismoCarrito) {
+          // Recuperación: no mostrar instrucciones de pago nuevas para un pedido ya existente.
+          pintarMenu(); pintarSeguimiento(true);
+        }
         else { pintarMenu(); pintarSeguimiento(true); }
         return;
       }
