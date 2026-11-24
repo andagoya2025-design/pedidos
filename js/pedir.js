@@ -373,7 +373,7 @@
         (p.agotado ? '<span class="etiqueta">Agotado</span>' :
           (cant && !p.extras.length ? '<div class="contador"><button type="button" data-menos="' + UI.esc(p.id) + '" aria-label="Quitar uno">−</button><input type="number" inputmode="numeric" min="0" max="1000" data-cant-plato="' + UI.esc(p.id) + '" aria-label="Cantidad de ' + UI.esc(p.nombre) + '" value="' + cant + '"><button type="button" data-mas="' + UI.esc(p.id) + '" aria-label="Agregar uno">＋</button></div>'
             : '<button class="btn chico btn-agregar" type="button" data-agregar="' + UI.esc(p.id) + '">' + (cant ? '＋ Otro' : '＋ Agregar') + '</button>')) +
-        '</div>' + (cant && p.extras.length ? '<button class="btn secundario chico plato-editar-seleccion" type="button" data-editar-plato="' + UI.esc(p.id) + '">Editar o quitar · ' + cant + ' en pedido</button>' : '') + '</div></article>';
+        '</div>' + (cant && p.extras.length && !envioPendiente ? '<button class="btn secundario chico plato-editar-seleccion" type="button" data-editar-plato="' + UI.esc(p.id) + '">Editar o quitar · ' + cant + ' en pedido</button>' : '') + '</div></article>';
     }).join('') : UI.vacio('🔎', q ? 'No encontramos «' + busqueda + '». Prueba con otra palabra.' : 'No hay platos en esta categoría.');
     UI.$$('[data-agregar]', cont).forEach(function (b) { b.addEventListener('click', function () { agregar(b.getAttribute('data-agregar'), b); }); });
     UI.$$('[data-mas]', cont).forEach(function (b) { b.addEventListener('click', function () { sumar(b.getAttribute('data-mas'), 1); }); });
