@@ -1502,7 +1502,7 @@ function accionPedidoCambioCotizar_(data, ctx) {
     aviso: 'Cotización provisional. Confirmar con el cliente, verificar stock y conciliar el pago antes de aplicar.' } };
 }
 function accionPedidoCambioResolver_(data, ctx) {
-  var id = limpiarTexto_(data.id, 80), decision = limpiarTexto_(data.decision, 20);
+  var id = limpiarTexto_(data.id, 80), decision = limpiarTexto_(data.decision, 40);
   var respuesta = limpiarTexto_(data.respuesta, 500);
   if (['Aprobada para coordinar', 'Rechazada', 'Cerrada sin aplicar'].indexOf(decision) < 0) throw fallo_('Decisión no válida.');
   if (respuesta.length < 5) throw fallo_('Indica al cliente el motivo o los siguientes pasos.');
