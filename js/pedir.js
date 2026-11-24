@@ -1082,7 +1082,23 @@
         return;
       }
     }
-    cont.innerHTML = act.map(function (x) { return res[x.n] && !res[x.n].no_existe && !res[x.n].consulta_error ? tarjetaSeguimiento(res[x.n], x) : '<div class="seg-caja"><b>' + UI.esc(x.n) + '</b><div class="item-sub">No se pudo actualizar el estado. Conservamos el último estado conocido: ' + UI.esc(x.e) + '.</div><button class="enlace" type="button" data-seg-act>Reintentar</button></div>'; }).join('') +
+    // Consultar respuestas sin bloquear el seguimiento ni ocultar el último estado
+    // válido cuando la bandeja de solicitudes no está disponible.
+    var solicitudesPorPedido = {};
+    await Promise.all(act.filter(function (x) { return res[x.n] && !res[x.n].consulta_error && !res[x.n].no_existe; }).map(async function (x) {
+      try {
+        var respuesta = await DATOS.pedir('pedidoCambiosConsultar', x.s ? { s: x.s } :
+          { numero: x.n, telefono: x.tel || (MEM.leer('cliente') || {}).telefono || '' });
+        if (respuesta.numero === x.n) solicitudesPorPedido[x.n] = respuesta.solicitudes || [];
+      } catch (e) { /* Seguimiento sigue funcionando si falla la consulta de solicitudes. */ }
+    }));
+    cont.innerHTML = act.map(function (x) { return res[x.n] && !res[x.n].no_existe && !res[x.n].consulta_error ? tarjetaSeguimiento(res[x.n], x) + (solicitudesPorPedido[x.n] || []).slice(-3).map(function (sol) {
+      return '<div class="seg-caja"><b>📝 Solicitud: ' + UI.esc(sol.tipo) + '</b>' +
+        '<div class="item-sub">Estado: ' + UI.esc(sol.estado) + '</div>' +
+        '<p>' + UI.esc(sol.detalle) + '</p>' +
+        (sol.respuesta ? '<p><b>Respuesta del restaurante:</b> ' + UI.esc(sol.respuesta) + '</p>' : '') +
+        '<small>El pedido no se modifica hasta que el restaurante confirme los ajustes finales.</small></div>';
+    }).join('') : '<div class="seg-caja"><b>' + UI.esc(x.n) + '</b><div class="item-sub">No se pudo actualizar el estado. Conservamos el último estado conocido: ' + UI.esc(x.e) + '.</div><button class="enlace" type="button" data-seg-act>Reintentar</button></div>'; }).join('') +
       (hist.length ? '<details class="seg-caja mis-pedidos"' + (act.length ? '' : ' open') + '><summary><b>🧾 Mis pedidos anteriores</b> <small>(' + hist.length + ')</small></summary>' +
         '<div class="lista">' + hist.map(function (x) {
           var fecha = new Date(x.f || Date.now());
