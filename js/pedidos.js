@@ -91,7 +91,7 @@
     v.addEventListener('input',actualizar);
     v.addEventListener('click',function(){actualizar();});
     actualizar();
-    if(!UI.$('.ux-premium-seleccion',v).length)boton.click();
+    if(!v.querySelector('.ux-premium-seleccion [data-cantidad^="r"]')||!v.querySelector('.ux-premium-seleccion [data-cantidad^="a"]'))boton.click();
   }
   async function cotizarSolicitud(x,pedido) {
     if(!pedido||!Array.isArray(pedido.detalle))return UI.aviso('Actualiza el pedido antes de cotizar.','error');
