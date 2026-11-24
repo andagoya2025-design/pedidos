@@ -1205,6 +1205,7 @@ function cotizarLineasCreacion_(items, platos, localId, sinInsumos) {
     if(!Number.isInteger(cant)||cant<1||cant>1000)throw fallo_('Cantidad no válida en «'+p.nombre+'».','CANTIDAD');
     if(!isFinite(Number(p.precio))||Number(p.precio)<0)throw fallo_('Precio inválido.','PRECIO');
     var elegidos=validarExtrasPedido_(it.extras,leerExtras_(p.extras_json)),nombres=elegidos.nombres,cent=Math.round(redondear_(p.precio)*100)+elegidos.centavos;
+    if(nombres.join(', ').length>45000)throw fallo_('El detalle de extras supera la capacidad técnica. Divide el pedido en líneas más pequeñas.','CANTIDAD');
     var key=JSON.stringify([String(p.id),nombres.map(claveComparar_).sort()]);
     variantes[key]=(variantes[key]||0)+cant;
     if(variantes[key]>1000)throw fallo_('Máximo técnico de 1000 unidades por variante.','CANTIDAD');
@@ -1521,7 +1522,8 @@ function leerSeleccionSolicitud_(x) {
 function accionPedidoCambioSolicitar_(data) {
   if (!estaInstalado_()) throw fallo_('Sistema no instalado.', 'NO_INSTALADO');
   var tipo = limpiarTexto_(data.tipo, 20);
-  var detalle = limpiarTexto_(data.detalle, 500);
+  var detalle = limpiarTexto_(data.detalle, 501);
+  if(detalle.length>500)throw fallo_('La descripción del cambio supera 500 caracteres.','CANTIDAD');
   if (detalle.length < 5) throw fallo_('Describe qué productos y cantidades necesitas.');
   var lock = candado_();
   try {
@@ -1534,6 +1536,7 @@ function accionPedidoCambioSolicitar_(data) {
     var historial = cambiosPedido_().filter(function (x) { return String(x.pedido_id) === String(p.id); });
     if (historial.some(function (x) { return String(x.estado) === 'Aplicada'; })) throw fallo_('Ya utilizaste tu oportunidad de modificar el pedido. Comunícate con el restaurante.', 'CAMBIO_DEFINITIVO');
     var seleccion = seleccionSolicitud_(tipo, data.items, p), seleccionJson=JSON.stringify(seleccion);
+    if(seleccionJson.length>45000)throw fallo_('La selección supera la capacidad técnica. Divide la solicitud.','CANTIDAD');
     var pendientes = historial.filter(function (x) { return String(x.pedido_id) === String(p.id) && ['Pendiente', 'Aprobada para coordinar', 'Cotizada', 'Confirmada cliente', 'Aplicando'].indexOf(String(x.estado)) >= 0; });
     if (pendientes.length) {
       var igual = pendientes.filter(function (x) { return String(x.tipo) === tipo && String(x.detalle) === detalle && JSON.stringify(leerSeleccionSolicitud_(x)) === seleccionJson; })[0];
@@ -1624,6 +1627,7 @@ function planCambioIntegral_(p,t,sel,filas,platos,cfg,agotados) {
   function clave(id,ex){return JSON.stringify([String(id),ex.map(claveComparar_).sort()]);}
   agregar.forEach(function(it){var n=Number(it.cantidad),pl=platos.filter(function(v){return String(v.id)===String(it.plato_id);})[0];if(!Number.isInteger(n)||n<1||n>1000||!pl||pl.activo!==true||pl.agotado===true||agotados[String(pl.id)]||String(pl.local_id)!=='TODOS'&&String(pl.local_id)!==String(p.local_id))throw fallo_('Producto no disponible o cantidad inválida.');
     var ex=validarExtrasPedido_(it.extras,leerExtras_(pl.extras_json)),nombres=ex.nombres,precio=(Math.round(redondear_(pl.precio)*100)+ex.centavos)/100;
+    if(nombres.join(', ').length>45000)throw fallo_('El detalle de extras supera la capacidad técnica.','CANTIDAD');
     var k=clave(pl.id,nombres),exist=despues.filter(function(v){return v.cantidad>0&&clave(v.plato_id,v.extras.split(',').map(function(x){return x.trim();}).filter(Boolean))===k;});
     if(variantes[k]||t==='aumentar'&&!exist.length||exist.reduce(function(a,v){return a+v.cantidad;},0)+n>1000)throw fallo_('Variante duplicada, ajena al pedido o cantidad excesiva.');
     variantes[k]=true;precio=redondear_(precio);var alta={plato_id:String(pl.id),nombre:String(pl.nombre),cantidad:n,precio:precio,extras:nombres,total_linea:redondear_(precio*n)};altas.push(alta);
@@ -1722,6 +1726,7 @@ function accionPedidoCambioCotizar_(data, ctx) {
         (String(plato.local_id) !== 'TODOS' && String(plato.local_id) !== String(p.local_id)))
       throw fallo_('Un producto no está disponible.', 'AGOTADO');
     var extrasVal=validarExtrasPedido_(it.extras,leerExtras_(plato.extras_json)),costoExtras=extrasVal.centavos/100,nombres=extrasVal.nombres;
+    if(nombres.join(', ').length>45000)throw fallo_('El detalle de extras supera la capacidad técnica.','CANTIDAD');
     var claveLinea = String(plato.id) + '|' + nombres.map(claveComparar_).sort().join('|');
     if (clavesCotizadas[claveLinea]) throw fallo_('Producto repetido en la cotización. Agrupa las cantidades.', 'DUPLICADO');
     clavesCotizadas[claveLinea] = true;
@@ -1778,8 +1783,9 @@ function accionPedidoCambioProponer_(data, ctx) {
     };
     if(String(x.estado)==='Cotizada')throw fallo_('La propuesta ya fue enviada. Espera la decisión del cliente o ciérrala expresamente.');
     if(r.integral){if(data.total_esperado===undefined||redondear_(data.total_esperado)!==r.total_estimado)throw fallo_('El precio cambió. Revisa la propuesta nuevamente.');var mensaje=limpiarTexto_(data.mensaje,501);if(mensaje.length>500)throw fallo_('Mensaje máximo 500 caracteres.');quote=Object.assign({},r,{id:token,vence:quote.vence,mensaje:mensaje||'Hemos revisado tu solicitud. Confirma si estás de acuerdo con el nuevo pedido.'});}
+    var quoteJson=JSON.stringify(quote);if(quoteJson.length>45000)throw fallo_('La propuesta supera la capacidad técnica de almacenamiento; no se emitió ni se modificó el pedido.','CANTIDAD');
     actualizarCampos_('pedido_cambios', x._fila, x, {
-      estado: 'Cotizada', cotizacion_id: token, cotizacion_json: JSON.stringify(quote),
+      estado: 'Cotizada', cotizacion_id: token, cotizacion_json: quoteJson,
       cotizacion_fecha: ahora, cliente_confirmo_fecha: '',
       respuesta: r.integral?'Tu modificación está disponible. Acepta o rechaza la propuesta definitiva.':'Cotización disponible: confirma el importe en Mis pedidos. No se ha cobrado ni aplicado ningún adicional.'
     });
