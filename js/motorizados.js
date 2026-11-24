@@ -231,7 +231,7 @@
   var mias = null;
   var timerEntregas = null, consultandoEntregas = false;
   var vigiaMoto = DATOS.crearVigiaSync();
-  function programarActualizacionEntregas() {
+  function programarActualizacionEntregas(inmediato) {
     if (timerEntregas) clearTimeout(timerEntregas);
     timerEntregas = setTimeout(function () {
       timerEntregas = null;
@@ -244,8 +244,13 @@
         },30000).catch(function(){});
       }
       programarActualizacionEntregas();
-    }, document.visibilityState === 'visible' ? 3000 : 30000);
+    }, inmediato === true ? 0 : (document.visibilityState === 'visible' ? 3000 : 30000));
   }
+  function reanudarEntregas() {
+    if (APP.vistaActual === 'entregas' && APP.sesion && APP.sesion.rol === 'motorizado' && document.visibilityState === 'visible' && navigator.onLine !== false) programarActualizacionEntregas(true);
+  }
+  document.addEventListener('visibilitychange', reanudarEntregas);
+  global.addEventListener('online', reanudarEntregas);
 
   APP.vistas.entregas = {
     titulo: 'Mis entregas', icono: '📍', orden: 10, roles: ['motorizado'],
