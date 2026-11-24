@@ -8,7 +8,7 @@
  * - Nunca guarda datos del negocio: los pedidos van siempre al servidor.
  * ============================================================
  */
-var VERSION = 'app-3.1.13';
+var VERSION = 'app-3.1.14-fase1b';
 var FOTOS = 'fotos-1';      // 3.1: fotos de platos y mapas (sobrevive a las actualizaciones)
 var MAX_FOTOS = 150;
 
@@ -18,6 +18,8 @@ var ARCHIVOS = [
   'instalar.html',
   'pedir.html',
   'manifest.json',
+  'manifest-cliente.json',
+  'js/pwa-cliente.js',
   'css/app.css',
   'css/modulos.css',
   'js/config.js',
