@@ -99,7 +99,7 @@
       throw ErrorApp('El sistema se está actualizando. No se guardó nada; intente en unos minutos.', 'ACTUALIZANDO');
     }
     var cuerpo = { accion: accion, data: data || {}, token: perfil === 'cliente' ? '' : (MEMORIA.leer('token') || ''), dispositivo: dispositivo() };
-    var intentos = guardar ? 1 : 3;
+    var intentos = guardar || opciones.sinReintento ? 1 : 3;
     var ultimo;
     for (var i = 0; i < intentos; i++) {
       try {
@@ -130,8 +130,37 @@
     return pedir('estado', {}, { guardar: false });
   }
 
+  // Cada pantalla conserva su propio cursor. Una señal no sustituye la lectura autenticada.
+  function crearVigiaSync() {
+    var contexto = '', revision = '', ultima = 0, proximaSenal = 0, proximaCompleta = 0, ocupado = false;
+    return async function (clave, cargar, intervalo) {
+      if (ocupado) return false;
+      if (clave !== contexto) { contexto = clave; revision = ''; ultima = 0; proximaSenal = 0; proximaCompleta = 0; }
+      ocupado = true;
+      try {
+        var ahora = Date.now(), nueva = '';
+        if (ahora >= proximaSenal) {
+          try {
+            var r = await pedir('syncRevision', {}, { sinReintento: true });
+            nueva = typeof r.revision === 'string' && /^[a-zA-Z0-9-]{8,100}$/.test(r.revision) ? r.revision : '';
+          } catch (e) { proximaSenal = Date.now() + (e.codigo === 'ACCION' ? 60000 : 10000); }
+        }
+        ahora = Date.now();
+        var cambio = nueva && nueva !== revision;
+        if (ahora < proximaCompleta || (!cambio && ultima && ahora - ultima < intervalo)) return false;
+        try {
+          var ok = await cargar();
+          if (ok !== true) { proximaCompleta = Date.now() + 6000; return false; }
+          // Registrar la revisión ANTERIOR a la descarga: no perder cambios concurrentes.
+          ultima = Date.now(); revision = nueva; proximaCompleta = 0;
+          return true;
+        } catch (e) { proximaCompleta = Date.now() + 6000; return false; }
+      } finally { ocupado = false; }
+    };
+  }
   global.DATOS = {
     pedir: pedir,
+    crearVigiaSync: crearVigiaSync,
     ocupado: function(){return operacionesActivas > 0;},
     estado: estado,
     scriptViejo: function () { return scriptViejo; }
