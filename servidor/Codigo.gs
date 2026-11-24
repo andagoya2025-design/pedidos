@@ -2098,10 +2098,25 @@ function validarCupon316_(codigo, localId, telefono, subtotal, pedidos) {
   var d = String(c.tipo) === 'porcentaje' ? redondear_(subtotal * numero_(c.valor) / 100) : redondear_(c.valor);
   return { descuento: Math.min(subtotal, d), fila: c };
 }
+function limitarCuponIntentos_(localId, tel) {
+  var lock = candado_();
+  try {
+    var cache = CacheService.getScriptCache();
+    var local = 'cup-int-local:' + localId;
+    var cliente = 'cup-int-tel:' + localId + ':' + (tel || 'anonimo');
+    var n = Number(cache.get(cliente) || 0), g = Number(cache.get(local) || 0);
+    if (n >= (tel ? 10 : 30) || g >= 120)
+      throw fallo_('Demasiados intentos de cupón. Espere unos minutos.', 'FRENO');
+    cache.put(cliente, String(n+1), 300);
+    cache.put(local, String(g+1), 300);
+  } finally { lock.releaseLock(); }
+}
+
 function accionCuponValidar_(data) {
   var localId = limpiarTexto_(data.local_id, 40), codigo = limpiarTexto_(data.cupon, 30).toUpperCase();
   if (!codigo) throw fallo_('Escriba un cupón.', 'CUPON');
   var tel = data.telefono ? normalizarTelefono_(data.telefono, leerConfig_().pais_codigo) : '';
+  limitarCuponIntentos_(localId, tel);
   var productos = {}; leerTabla_('platos').forEach(function (p) { productos[String(p.id)] = p; });
   var subtotal = 0;
   (Array.isArray(data.items) ? data.items : []).slice(0, 60).forEach(function (it) {
