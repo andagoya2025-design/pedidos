@@ -24,6 +24,7 @@
   var carrito = {};             // clave -> { plato, extras:[nombres], cantidad }
   var codigoEnvio = '';         // se crea al confirmar y se reusa hasta que el pedido entra
   var envioPendiente = null;    // carga original inmutable para reintentos tras una respuesta incierta
+  var recuperacionEnCurso = false; // impedir consultas y reintentos simultáneos
   // Solo esta pestaña: recuperar un envío incierto al recargar, con caducidad de 24 h.
   try {
     var recuperado = JSON.parse(global.sessionStorage.getItem('mipedido_envio_pendiente') || 'null');
@@ -915,7 +916,11 @@
   async function recuperarEnvio(boton) {
     if (!envioPendiente) return UI.aviso('No hay ningún envío pendiente de recuperación.', 'error');
     if (envioPendiente.local_id !== localId) return UI.aviso('El envío pendiente pertenece a otro local. No se puede reintentar desde este menú.', 'error');
+    if (recuperacionEnCurso) return;
+    recuperacionEnCurso = true;
+    if (boton) boton.disabled = true;
     var original = envioPendiente;
+    try {
     try {
       var consulta = await DATOS.pedir('pedidoRecuperar', { op_id: original.op_id, telefono: original.cliente.telefono });
       if (consulta.encontrado && consulta.pedido) {
@@ -935,6 +940,10 @@
     }
     // El servidor no encontró el código: reintentar la carga ORIGINAL, protegida por op_id.
     await procesarEnvio(original, boton);
+    } finally {
+      recuperacionEnCurso = false;
+      if (boton && boton.isConnected) boton.disabled = false;
+    }
   }
 
   function textoWhatsApp(p) {
