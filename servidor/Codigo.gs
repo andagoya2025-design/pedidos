@@ -1985,9 +1985,10 @@ function accionPedidoEstado_(data, ctx) {
     // Nunca enviar al motorizado mientras hay un cambio que aún requiere respuesta.
     // El personal debe resolverlo explícitamente; no se rechaza silenciosamente al despachar.
     if (a === 'En camino' || a === 'Entregado') {
-      var solicitudesAbiertas = cambiosPedido_().filter(function (x) {
-        return String(x.pedido_id) === String(p.id) && String(x.estado) === 'Pendiente';
-      });
+      var solicitudesAbiertas = SpreadsheetApp.getActive().getSheetByName('pedido_cambios')
+        ? cambiosPedido_().filter(function (x) {
+          return String(x.pedido_id) === String(p.id) && String(x.estado) === 'Pendiente';
+        }) : [];
       if (solicitudesAbiertas.length)
         throw fallo_('Este pedido tiene ' + solicitudesAbiertas.length +
           ' solicitud(es) de cambio pendiente(s). Resuélvelas antes de despachar o entregar.', 'CAMBIO_PENDIENTE');
