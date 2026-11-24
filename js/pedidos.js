@@ -450,7 +450,10 @@
    * Vigila en TODA la app (no solo en el panel) para dueño y cajero, también con
    * la pestaña en segundo plano. Consulta liviana: solo una marca de tiempo. */
   var vigia = null, vigilando = false, ultimaMarca = 0, identidadAvisos = '', vistosAvisos = Object.create(null);
-  var vigiaAdmin = DATOS.crearVigiaSync();
+  var vigiaAdmin = DATOS.crearVigiaSync(), despertarVigia = null;
+  function reanudarVigia() { if (despertarVigia) despertarVigia(); else vigilar(); }
+  document.addEventListener('visibilitychange', reanudarVigia);
+  global.addEventListener('online', reanudarVigia);
   function actualizarEstadoSolicitudes(r, error) {
     var contador = UI.$('#pd-solic-count'), estado = UI.$('#pd-conexion');
     if (contador && !error) contador.textContent = Array.isArray(r.solicitudes) ? String(r.solicitudes.length) : '—';
@@ -469,7 +472,7 @@
       if (identidad !== identidadAvisos) { identidadAvisos = identidad; vistosAvisos = Object.create(null); ultimaMarca = 0; }
       try {
         if (navigator.onLine === false) return;
-        await vigiaAdmin(identidad+'|'+APP.vistaActual+'|'+(est.diaEntregado||''), async function () {
+        await vigiaAdmin(identidad+'|'+APP.vistaActual+'|'+(est.diaEntregado||'')+'|'+document.visibilityState, async function () {
         if (APP.sesion!==s || (APP.local||s.local_id||'TODOS')!==local) return false;
         var r;
         try { r = await DATOS.pedir('pedidosNuevos', { local_id: local }); }
@@ -493,6 +496,12 @@
       } catch(e) { if (APP.sesion === s && (APP.local || s.local_id || 'TODOS') === local) actualizarEstadoSolicitudes(null, true); }
       finally { vigilando = false; vigia = setTimeout(revisar, document.visibilityState === 'visible' ? 3000 : 15000); }
     }
+    despertarVigia = function () {
+      if (document.visibilityState !== 'visible' || navigator.onLine === false || vigilando) return;
+      if (vigia) clearTimeout(vigia);
+      vigia = null;
+      revisar().catch(function(){});
+    };
     vigia = setTimeout(revisar, 1500);
   }
   function avisarNuevo(solicitud, cantidad, espera) {
