@@ -8,7 +8,7 @@
  * - Nunca guarda datos del negocio: los pedidos van siempre al servidor.
  * ============================================================
  */
-var VERSION = 'app-3.1.27-aviso-propuesta';
+var VERSION = 'app-3.1.28-pago-simple';
 var FOTOS = 'fotos-1';      // 3.1: fotos de platos y mapas (sobrevive a las actualizaciones)
 var MAX_FOTOS = 150;
 
