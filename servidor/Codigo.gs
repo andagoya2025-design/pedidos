@@ -1128,7 +1128,7 @@ function masPedidos30_() {
   if (g) return JSON.parse(g);
   var desde = Date.now() - 30 * 86400000, mapa = {}, cnt = {};
   leerTabla_('pedidos').forEach(function (p) { if (p.creado instanceof Date && p.creado.getTime() >= desde && String(p.estado) !== 'Anulado') mapa[String(p.id)] = true; });
-  leerTabla_('pedido_detalle').forEach(function (d) { if (mapa[String(d.pedido_id)]) cnt[String(d.plato_id)] = (cnt[String(d.plato_id)] || 0) + numero_(d.cantidad); });
+  leerTabla_('pedido_detalle').forEach(function (d) { if (mapa[String(d.pedido_id)] && numero_(d.cantidad)>0) cnt[String(d.plato_id)] = (cnt[String(d.plato_id)] || 0) + numero_(d.cantidad); });
   var lista = Object.keys(cnt).sort(function (a, b) { return cnt[b] - cnt[a]; }).slice(0, 10);
   cache.put(k, JSON.stringify(lista), 300);
   return lista;
@@ -1489,7 +1489,7 @@ function accionPedidoCambiosConsultar_(data) {
         quote = { id: String(x.cotizacion_id), lineas: guardada.lineas, total_actual: guardada.total_actual,
           adicional: guardada.adicional, subtotal_adicional: guardada.subtotal_adicional,
           iva_adicional: guardada.iva_adicional, total_estimado: guardada.total_estimado,
-          vence: guardada.vence, inventario_reservado: false, cobro_autorizado: false };
+          vence: guardada.vence, integral:guardada.integral===true, antes:guardada.antes, despues:guardada.despues, inventario_reservado: false, cobro_autorizado: false };
       } catch (e) { quote = null; }
     }
     return { id: String(x.id), tipo: String(x.tipo), detalle: String(x.detalle), estado: String(x.estado),
@@ -1516,15 +1516,15 @@ function cerrarCambiosIncompatibles_(p, nuevoEstado, usuario) {
 function accionPedidoCambiosListar_(data, ctx) {
   var local = localDeSesion_(ctx, data.local_id);
   var pedidos = leerTabla_('pedidos');
-  var estados = {}, pagos = {};
-  pedidos.forEach(function (p) { estados[String(p.id)] = String(p.estado); pagos[String(p.id)] = String(p.forma_pago); });
+  var estados = {}, pagos = {}, verificados = {};
+  pedidos.forEach(function (p) { estados[String(p.id)] = String(p.estado); pagos[String(p.id)] = String(p.forma_pago); verificados[String(p.id)] = p.pago_verificado===true; });
   return { ok: true, data: { solicitudes: cambiosPedido_().filter(function (x) {
-    return local === 'TODOS' || String(x.local_id) === local;
-  }).slice(-200).map(function (x) {
+    return (local === 'TODOS' || String(x.local_id) === local) && ['Pendiente','Aprobada para coordinar','Cotizada','Confirmada cliente','Aplicando'].indexOf(String(x.estado))>=0;
+  }).map(function (x) {
     return { id: String(x.id), numero: String(x.numero), local_id: String(x.local_id), tipo: String(x.tipo),
       detalle: String(x.detalle), items_solicitados: leerSeleccionSolicitud_(x), estado: String(x.estado), pedido_estado: estados[String(x.pedido_id)] || '',
       creado: iso_(x.creado), respuesta: String(x.respuesta || ''), cotizacion_id: String(x.cotizacion_id || ''),
-      forma_pago: pagos[String(x.pedido_id)] || '', aplicado: String(x.estado) === 'Aplicada',
+      forma_pago: pagos[String(x.pedido_id)] || '', pago_verificado: verificados[String(x.pedido_id)]===true, cotizacion:(function(){try{var q=JSON.parse(String(x.cotizacion_json||'null'));return q?{total_actual:q.total_actual,total_estimado:q.total_estimado,adicional:q.adicional,integral:q.integral===true,antes:q.antes,despues:q.despues}:null;}catch(e){return null;}})(), aplicado: String(x.estado) === 'Aplicada',
       adicional: numero_(x.adicional_final) || (function () {
         try { return numero_(JSON.parse(String(x.cotizacion_json || '{}')).adicional); } catch (e) { return 0; }
       })() };
@@ -1698,11 +1698,11 @@ function accionPedidoCambioProponer_(data, ctx) {
       total_estimado: r.total_estimado, lineas: r.lineas,
       vence: new Date(ahora.getTime() + 30 * 60000).toISOString()
     };
-    if(r.integral)quote=Object.assign({},r,{id:token,vence:quote.vence});
+    if(r.integral){if(String(x.estado)==='Cotizada')throw fallo_('La propuesta ya fue enviada. Espera la decisión del cliente o ciérrala expresamente.');if(data.total_esperado===undefined||redondear_(data.total_esperado)!==r.total_estimado)throw fallo_('El precio cambió. Revisa la propuesta nuevamente.');quote=Object.assign({},r,{id:token,vence:quote.vence});}
     actualizarCampos_('pedido_cambios', x._fila, x, {
       estado: 'Cotizada', cotizacion_id: token, cotizacion_json: JSON.stringify(quote),
       cotizacion_fecha: ahora, cliente_confirmo_fecha: '',
-      respuesta: 'Cotización disponible: confirma el importe en Mis pedidos. No se ha cobrado ni aplicado ningún adicional.'
+      respuesta: r.integral?'Tu modificación está disponible. Acepta o rechaza la propuesta definitiva.':'Cotización disponible: confirma el importe en Mis pedidos. No se ha cobrado ni aplicado ningún adicional.'
     });
     return { ok: true, data: { id: id, estado: 'Cotizada', cotizacion: quote, aplicado: false, inventario_reservado: false } };
   } finally { lock.releaseLock(); }
@@ -1738,7 +1738,7 @@ function accionPedidoCambioConfirmar_(data) {
       estado: aceptada ? 'Confirmada cliente' : 'Rechazada',
       cliente_confirmo_fecha: aceptada ? new Date() : '',
       respuesta: aceptada
-        ? 'Cliente aceptó el importe cotizado. El adicional aún NO está cobrado ni aplicado; el restaurante debe verificar disponibilidad y pago.'
+        ? 'Cliente aceptó la propuesta. Pendiente de aplicar y conciliar el pago cuando corresponda.'
         : 'El cliente rechazó la cotización; no se modificó ni cobró el pedido.',
       resuelto: aceptada ? '' : new Date(), resuelto_por: aceptada ? '' : 'cliente'
     });
@@ -1811,7 +1811,7 @@ function accionPedidoCambioAplicar_(data, ctx) {
         redondear_(recalculada.total_estimado) !== redondear_(quote.total_estimado) ||
         JSON.stringify(recalculada.lineas) !== JSON.stringify(quote.lineas))
       throw fallo_('Cambió el precio, los productos o los impuestos. Es necesaria una nueva cotización aceptada.', 'PRECIO_CAMBIO');
-    var refPago = limpiarTexto_(data.referencia_pago_extra, 100);
+    var refPago = limpiarTexto_(data.referencia_pago_extra, 100); if(esDigital_(p.forma_pago)&&p.pago_verificado!==true)refPago='';
     if (esDigital_(p.forma_pago)) {
       if (p.pago_verificado !== true && data.sin_pago_previo !== true) throw fallo_('Primero verifica el pago original.', 'PAGO_SIN_VERIFICAR');
       if (p.pago_verificado === true && (data.pago_adicional_verificado !== true || refPago.length < 4))
@@ -2310,9 +2310,9 @@ function accionPedidosListar_(data, ctx) {
     }
   }
   var det = detallePorPedido_(lista.map(function (p) { return String(p.id); }));
-  var cambiosAbiertos = {};
+  var cambiosAbiertos = {}, cambiosResumen = {};
   if (SpreadsheetApp.getActive().getSheetByName('pedido_cambios')) cambiosPedido_().forEach(function (x) {
-    if (['Pendiente', 'Aprobada para coordinar', 'Cotizada', 'Confirmada cliente', 'Aplicando'].indexOf(String(x.estado)) >= 0) cambiosAbiertos[String(x.pedido_id)] = String(x.estado);
+    if (['Pendiente', 'Aprobada para coordinar', 'Cotizada', 'Confirmada cliente', 'Aplicando'].indexOf(String(x.estado)) >= 0) { cambiosAbiertos[String(x.pedido_id)] = String(x.estado); try { var q=JSON.parse(String(x.cotizacion_json||'null')); if(q)cambiosResumen[String(x.pedido_id)]={total:q.total_estimado,delta:q.adicional}; } catch(e){} }
   });
   var motos = {};
   leerTabla_('motorizados').forEach(function (m) { motos[String(m.id)] = motoCorto_(m); });
@@ -2330,7 +2330,7 @@ function accionPedidosListar_(data, ctx) {
     pedidos: lista.map(function (p) {
       var o = pedidoSalida_(p, det[String(p.id)] || []);
       o.motorizado = motos[o.motorizado_id] || null;
-      o.cambio_estado = cambiosAbiertos[String(p.id)] || '';
+      o.cambio_estado = cambiosAbiertos[String(p.id)] || ''; o.cambio_resumen=cambiosResumen[String(p.id)]||null;
       o.cliente_clave = clis[String(p.cliente_id)] || ''; // 3.1.5
       return o;
     }).sort(function (a, b) { return a.creado < b.creado ? 1 : -1; })
@@ -2481,6 +2481,7 @@ function accionPedidoPagoVerificar_(data, ctx) {
   try {
     p = buscarPedido_(data.id, ctx);
     if (!esDigital_(p.forma_pago)) throw fallo_('Este pedido no es por transferencia ni Deuna.');
+    if(SpreadsheetApp.getActive().getSheetByName('pedido_cambios')&&cambiosPedido_().some(function(x){return String(x.pedido_id)===String(p.id)&&String(x.estado)==='Aplicando';}))throw fallo_('Conciliar la aplicación incompleta antes de verificar el pago.');
     actualizarCampos_('pedidos', p._fila, p, { pago_verificado: data.verificado !== false, pago_verificado_fecha: data.verificado !== false ? new Date() : '' }); // 3.1.5
     p = buscarPedido_(data.id, ctx);
   } finally { lock.releaseLock(); }
@@ -2722,7 +2723,7 @@ function accionReportesBase_(data, ctx) {
   });
   var platos = {};
   leerTabla_('pedido_detalle').forEach(function (d) {
-    if (!ids[String(d.pedido_id)]) return;
+    if (!ids[String(d.pedido_id)] || numero_(d.cantidad)<=0) return;
     var k = claveComparar_(d.nombre);
     platos[k] = platos[k] || { nombre: String(d.nombre), cantidad: 0, total: 0 };
     platos[k].cantidad += numero_(d.cantidad); platos[k].total += numero_(d.total_linea);
@@ -3195,11 +3196,11 @@ function accionPedidosNuevos_(data, ctx) {
   var local = localDeSesion_(ctx, data.local_id);
   function permitido(r) { return local === 'TODOS' || String(r.local_id) === local; }
   var pedidos = leerTabla_('pedidos').filter(function (p) { return permitido(p) && String(p.estado) === 'Recibido'; });
-  var cambios = cambiosPedido_().filter(function (p) { return permitido(p) && String(p.estado) === 'Pendiente'; });
+  var cambios = cambiosPedido_().filter(function (p) { return permitido(p) && ['Pendiente','Confirmada cliente'].indexOf(String(p.estado))>=0; });
   return { ok: true, data: {
     ultimo: Number(CacheService.getScriptCache().get('ULTIMO_PEDIDO') || 0),
     pedidos: pedidos.map(function (p) { return { id: String(p.id), numero: String(p.numero) }; }),
-    solicitudes: cambios.map(function (p) { return { id: String(p.id), numero: String(p.numero) }; })
+    solicitudes: cambios.map(function (p) { return { id: String(p.id), numero: String(p.numero), estado:String(p.estado) }; })
   } };
 }
 
