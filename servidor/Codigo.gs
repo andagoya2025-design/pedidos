@@ -1393,7 +1393,7 @@ function accionPedidoCambioSolicitar_(data) {
     if (!p) throw fallo_('Pedido no encontrado.', 'NO_EXISTE');
     var politica = politicaCambiosPedido_(String(p.estado), tipo);
     if (!politica.permitido) throw fallo_(politica.mensaje, 'CAMBIO');
-    var pendientes = cambiosPedido_().filter(function (x) { return String(x.pedido_id) === String(p.id) && String(x.estado) === 'Pendiente'; });
+    var pendientes = cambiosPedido_().filter(function (x) { return String(x.pedido_id) === String(p.id) && ['Pendiente', 'Aprobada para coordinar'].indexOf(String(x.estado)) >= 0; });
     if (pendientes.length) {
       var igual = pendientes.filter(function (x) { return String(x.tipo) === tipo && String(x.detalle) === detalle; })[0];
       if (igual) return { ok: true, data: { id: String(igual.id), estado: 'Pendiente', repetida: true, aplicado: false } };
@@ -1424,7 +1424,7 @@ function cerrarCambiosIncompatibles_(p, nuevoEstado, usuario) {
   if (!SpreadsheetApp.getActive().getSheetByName('pedido_cambios')) return 0;
   var n = 0;
   cambiosPedido_().forEach(function (x) {
-    if (String(x.pedido_id) !== String(p.id) || String(x.estado) !== 'Pendiente') return;
+    if (String(x.pedido_id) !== String(p.id) || ['Pendiente', 'Aprobada para coordinar'].indexOf(String(x.estado)) < 0) return;
     if (politicaCambiosPedido_(nuevoEstado, String(x.tipo)).permitido) return;
     actualizarCampos_('pedido_cambios', x._fila, x, {
       estado: 'Rechazada', resuelto: new Date(), resuelto_por: usuario,
@@ -1504,14 +1504,15 @@ function accionPedidoCambioCotizar_(data, ctx) {
 function accionPedidoCambioResolver_(data, ctx) {
   var id = limpiarTexto_(data.id, 80), decision = limpiarTexto_(data.decision, 20);
   var respuesta = limpiarTexto_(data.respuesta, 500);
-  if (decision !== 'Aprobada para coordinar' && decision !== 'Rechazada') throw fallo_('Decisión no válida.');
+  if (['Aprobada para coordinar', 'Rechazada', 'Cerrada sin aplicar'].indexOf(decision) < 0) throw fallo_('Decisión no válida.');
   if (respuesta.length < 5) throw fallo_('Indica al cliente el motivo o los siguientes pasos.');
   var lock = candado_();
   try {
     var x = cambiosPedido_().filter(function (v) { return String(v.id) === id; })[0];
     if (!x) throw fallo_('Solicitud no encontrada.', 'NO_EXISTE');
     if (!puedeVerLocal_(ctx, String(x.local_id))) throw fallo_('Sin permiso para este local.', 'PERMISO');
-    if (String(x.estado) !== 'Pendiente') throw fallo_('Solicitud ya resuelta.', 'CAMBIO');
+    if (String(x.estado) !== 'Pendiente' && !(String(x.estado) === 'Aprobada para coordinar' && ['Rechazada', 'Cerrada sin aplicar'].indexOf(decision) >= 0))
+      throw fallo_('Solicitud ya resuelta o transición no permitida.', 'CAMBIO');
     var p = leerTabla_('pedidos').filter(function (v) { return String(v.id) === String(x.pedido_id); })[0];
     if (!p) throw fallo_('Pedido no encontrado.', 'NO_EXISTE');
     if (decision !== 'Rechazada' && !politicaCambiosPedido_(p.estado, x.tipo).permitido)
@@ -1987,7 +1988,7 @@ function accionPedidoEstado_(data, ctx) {
     if (a === 'En camino' || a === 'Entregado') {
       var solicitudesAbiertas = SpreadsheetApp.getActive().getSheetByName('pedido_cambios')
         ? cambiosPedido_().filter(function (x) {
-          return String(x.pedido_id) === String(p.id) && String(x.estado) === 'Pendiente';
+          return String(x.pedido_id) === String(p.id) && ['Pendiente', 'Aprobada para coordinar'].indexOf(String(x.estado)) >= 0;
         }) : [];
       if (solicitudesAbiertas.length)
         throw fallo_('Este pedido tiene ' + solicitudesAbiertas.length +
@@ -2059,6 +2060,7 @@ function accionPedidoAnular_(data, ctx) {
     actualizarCampos_('pedidos', p._fila, p, { estado: 'Anulado', anulado: new Date(), motivo_anulacion: motivo, anulado_por: ctx.sesion.usuario });
     var c = leerTabla_('clientes').filter(function (x) { return String(x.id) === String(p.cliente_id); })[0];
     if (c) actualizarCampos_('clientes', c._fila, c, { pedidos: Math.max(0, numero_(c.pedidos) - 1) });
+    cerrarCambiosIncompatibles_(p, 'Anulado', ctx.sesion.usuario);
     if (eraEntregado) sumarEntregaCliente_(p, -1);
     if (numero_(p.premio) > 0 && c) { var cc = leerTabla_('clientes').filter(function (x) { return String(x.id) === String(p.cliente_id); })[0]; actualizarCampos_('clientes', cc._fila, cc, { sellos: numero_(cc.sellos) + numero_(leerConfig_().fidelidad_sellos) }); }
     if (p.cupon) {
