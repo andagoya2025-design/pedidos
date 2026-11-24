@@ -44,7 +44,8 @@
     var datos;
     try { datos = await DATOS.pedir('pedidoCambiosListar', { local_id: APP.local }); }
     catch (err) { return UI.aviso('No se pudieron cargar las solicitudes: ' + err.message, 'error'); }
-    var lista = (datos.solicitudes || []).filter(function (x) { return x.estado === 'Pendiente'; });
+    var lista = (datos.solicitudes || []).filter(function (x) { return x.estado === 'Pendiente'; })
+      .sort(function (a, b) { return String(a.creado).localeCompare(String(b.creado)); });
     if (!lista.length) return UI.aviso('No hay solicitudes pendientes.', 'ok');
     var opciones = [{ texto: 'Cerrar', valor: null, clase: 'secundario' }];
     lista.slice(0, 12).forEach(function (x, i) {
@@ -69,7 +70,14 @@
     var respuesta = await UI.pedirDato({
       titulo: 'Respuesta al cliente', etiqueta: 'Motivo o instrucciones', modo: 'text',
       boton: 'Guardar respuesta', ph: 'Ejemplo: confirmaremos disponibilidad y precio',
-      validar: function (v) { return v.trim().length >= 5 ? '' : 'Escribe una respuesta de al menos 5 caracteres.'; }
+      texto: decision === 'Rechazada' ? 'Explica por qué no se acepta el cambio.' :
+        'La aceptación solo inicia la coordinación. Confirma disponibilidad y precio antes de modificar el pedido.',
+      validar: function (v) {
+        if (v.trim().length < 5) return 'Escribe una respuesta de al menos 5 caracteres.';
+        if (decision !== 'Rechazada' && !/precio|importe|valor|total|cotiz|confirm|disponib/i.test(v))
+          return 'Indica que se confirmarán precio y disponibilidad.';
+        return '';
+      }
     });
     if (!respuesta) return;
     try {
