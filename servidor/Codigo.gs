@@ -893,7 +893,11 @@ function nuevoId_(prefijo) {
   return prefijo + '-' + Utilities.formatDate(new Date(), zona_(cfg), 'yyyyMMddHHmmss') + '-' + Utilities.getUuid().slice(0, 6).toUpperCase();
 }
 
-function redondear_(n) { return Math.round((Number(n) || 0) * 100) / 100; }
+function redondear_(n) {
+  var v=Number(n); if(!isFinite(v))return 0;
+  var p=String(Math.abs(v)).split('e'), escalado=Number(p[0]+'e'+(Number(p[1]||0)+2));
+  return (v<0?-1:1)*Math.round(escalado)/100;
+}
 
 function fechaDesdeTexto_(v) {
   // "2026-11-21" se lee como ese día en la zona del negocio (no en hora de Londres).
@@ -1170,6 +1174,40 @@ function masPedidos30_() {
  * - op_id único: si llega dos veces (doble toque o mala señal) devuelve el MISMO pedido.
  * - Número PED-0001 correlativo con candado.
  */
+function cotizarLineasCreacion_(items, platos, localId, sinInsumos) {
+  if(!Array.isArray(items)||!items.length||items.length>60)throw fallo_('Pedido vacío o más de 60 líneas.','CANTIDAD');
+  var subtotalCent=0,masCaro=0,detalleFilas=[],variantes=Object.create(null);
+  items.forEach(function(it){
+    if(!it||!(typeof it.cantidad==='number'||typeof it.cantidad==='string'&&/^\d+$/.test(it.cantidad)))throw fallo_('Cantidad no válida.','CANTIDAD');
+    var p=platos[String(it.plato_id)],cant=Number(it.cantidad);
+    if(!p||p.activo!==true||(String(p.local_id)!=='TODOS'&&String(p.local_id)!==String(localId)))throw fallo_('Un plato de su pedido ya no está disponible. Revise su pedido.','PLATO');
+    if(p.agotado===true||sinInsumos[String(p.id)])throw fallo_('«'+p.nombre+'» se agotó. Quítelo de su pedido.','AGOTADO');
+    if(!Number.isInteger(cant)||cant<1||cant>50)throw fallo_('Cantidad no válida en «'+p.nombre+'».','CANTIDAD');
+    var disp=leerExtras_(p.extras_json),seleccion=it.extras==null?[]:it.extras,vistos=Object.create(null),nombres=[],cent=Math.round(redondear_(p.precio)*100);
+    if(!Array.isArray(seleccion)||seleccion.length>20)throw fallo_('Extras inválidos.','EXTRAS');
+    if(!isFinite(Number(p.precio))||Number(p.precio)<0)throw fallo_('Precio inválido.','PRECIO');
+    seleccion.forEach(function(nombre){
+      if(typeof nombre!=='string')throw fallo_('Extra inválido.','EXTRAS');
+      var k=claveComparar_(nombre),coinc=disp.filter(function(e){return claveComparar_(e.nombre)===k;});
+      if(!k||vistos[k]||coinc.length!==1||!isFinite(Number(coinc[0].precio))||Number(coinc[0].precio)<0)throw fallo_('Extra inválido, repetido o no disponible. Revise el plato.','EXTRAS');
+      vistos[k]=true;nombres.push(String(coinc[0].nombre));cent+=Math.round(redondear_(coinc[0].precio)*100);
+    });
+    var key=JSON.stringify([String(p.id),nombres.map(claveComparar_).sort()]);
+    variantes[key]=(variantes[key]||0)+cant;
+    if(variantes[key]>50)throw fallo_('Máximo 50 unidades por variante.','CANTIDAD');
+    subtotalCent+=cent*cant;masCaro=Math.max(masCaro,cent/100);
+    detalleFilas.push({plato_id:String(p.id),nombre:String(p.nombre),precio:cent/100,cantidad:cant,extras:nombres.join(', '),total_linea:cent*cant/100});
+  });
+  return {subtotal:subtotalCent/100,masCaro:masCaro,detalleFilas:detalleFilas};
+}
+function importesCreacion_(subtotal,envio,descuento,premio,propina,cfg){
+  function cent(v){return Math.round(redondear_(v)*100);}
+  var grav=cent(subtotal)+cent(envio)-cent(descuento)-cent(premio),tip=cent(propina),pct=numero_(cfg.iva_porcentaje),incl=siNo_(cfg.precios_incluyen_iva);
+  if(grav<0||tip<0||pct<0)throw fallo_('Importes no válidos.','PRECIO');
+  var base=incl?Math.round(grav/(1+pct/100)):grav,iva=incl?grav-base:Math.round(grav*pct/100);
+  return {total:(grav+tip+(incl?0:iva))/100,baseIva:base/100,iva:iva/100};
+}
+
 function accionPedidoCrear_(data, ctx) {
   if (!estaInstalado_()) throw fallo_('El sistema aún no está instalado.', 'NO_INSTALADO');
   var cfg = leerConfig_();
@@ -1210,8 +1248,8 @@ function accionPedidoCrear_(data, ctx) {
   if (forma === 'deuna' && !cfg.deuna_qr_url) throw fallo_('Este negocio aún no recibe pagos con Deuna. Elija otra forma de pago.');
   var propina = siNo_(cfg.propinas) && tipo === 'domicilio' ? redondear_(numero_(data.propina)) : 0;
   if (!(propina >= 0 && propina <= 50)) throw fallo_('Propina no válida.');
-  var items = Array.isArray(data.items) ? data.items.slice(0, 60) : [];
-  if (!items.length) throw fallo_('Su pedido está vacío.');
+  var items = Array.isArray(data.items) ? data.items : [];
+  if (!items.length || items.length > 60) throw fallo_('Su pedido está vacío o supera 60 líneas.','CANTIDAD');
   var origen = limpiarTexto_(data.origen, 30).toLowerCase().replace(/[^a-z0-9_-]/g, '');
   // 3.1: la pantalla nueva manda la aceptación del aviso de privacidad (la vieja no: se acepta igual).
   if (!ses && Object.prototype.hasOwnProperty.call(data, 'acepta_privacidad') && data.acepta_privacidad !== true) throw fallo_('Para enviar tu pedido, acepta el aviso de privacidad.', 'PRIVACIDAD');
@@ -1252,22 +1290,10 @@ function accionPedidoCrear_(data, ctx) {
     var platos = {};
     leerTabla_('platos').forEach(function (p) { platos[String(p.id)] = p; });
     var sinInsumos = (!ses || data.canal === 'cliente') ? (agotadosPorLocal_()[localId] || {}) : {}; // 3.1.3: agotado automático por inventario
-    var subtotal = 0, masCaro = 0;
-    items.forEach(function (it) {
-      var p = platos[String(it.plato_id)];
-      var cant = Math.floor(numero_(it.cantidad));
-      if (!p || p.activo !== true || (String(p.local_id) !== 'TODOS' && String(p.local_id) !== localId)) throw fallo_('Un plato de su pedido ya no está disponible. Revise su pedido.', 'PLATO');
-      if (p.agotado === true || sinInsumos[String(p.id)]) throw fallo_('«' + p.nombre + '» se agotó. Quítelo de su pedido.', 'AGOTADO');
-      if (!(cant >= 1 && cant <= 50)) throw fallo_('Cantidad no válida en «' + p.nombre + '».');
-      var extrasDisp = leerExtras_(p.extras_json);
-      var elegidos = (Array.isArray(it.extras) ? it.extras : []).map(function (n) { return claveComparar_(n); });
-      var extras = extrasDisp.filter(function (x) { return elegidos.indexOf(claveComparar_(x.nombre)) >= 0; });
-      var unitario = redondear_(numero_(p.precio) + extras.reduce(function (s, x) { return s + x.precio; }, 0));
-      var totalLinea = redondear_(unitario * cant);
-      subtotal = redondear_(subtotal + totalLinea);
-      masCaro = Math.max(masCaro, unitario);
-      detalleFilas.push({ plato_id: String(p.id), nombre: String(p.nombre), precio: unitario, cantidad: cant, extras: extras.map(function (x) { return x.nombre; }).join(', '), total_linea: totalLinea });
-    });
+    var calculoLineas = cotizarLineasCreacion_(items,platos,localId,sinInsumos);
+    var subtotal=calculoLineas.subtotal,masCaro=calculoLineas.masCaro;
+    detalleFilas=calculoLineas.detalleFilas;
+    validarStockAdicional_(localId,detalleFilas);
 
     var envio = 0, minutos = 0, zona = null;
     if (zonaId) {
@@ -1296,12 +1322,8 @@ function accionPedidoCrear_(data, ctx) {
     if (nSellos > 0 && cFila && numero_(cFila.sellos) >= nSellos && data.usar_premio !== false) {
       premio = redondear_(Math.min(masCaro * numero_(cfg.fidelidad_descuento) / 100, subtotal - descuento));
     }
-    var total = redondear_(subtotal + envio - descuento - premio + propina);
-    var pctIva = numero_(cfg.iva_porcentaje);
-    var gravado = redondear_(total - propina);
-    var baseIva = siNo_(cfg.precios_incluyen_iva) ? redondear_(gravado / (1 + pctIva / 100)) : gravado;
-    var iva = siNo_(cfg.precios_incluyen_iva) ? redondear_(gravado - baseIva) : redondear_(gravado * pctIva / 100);
-    if (!siNo_(cfg.precios_incluyen_iva)) total = redondear_(total + iva);
+    var importes=importesCreacion_(subtotal,envio,descuento,premio,propina,cfg);
+    var total=importes.total,baseIva=importes.baseIva,iva=importes.iva;
     /* 3.1.3: efectivo solo si el dueño lo permite y hasta su monto máximo (el personal sí puede registrar efectivo) */
     var efectivoCliente = !!(cFila && cFila.efectivo_ok === true); // 3.1.5: el dueño autorizó a este cliente a pagar en efectivo
     if (forma === 'efectivo' && (!ses || data.canal === 'cliente') && !efectivoCliente) {
@@ -2233,14 +2255,7 @@ function accionCuponValidar_(data) {
   if (!codigo) throw fallo_('Escriba un cupón.', 'CUPON');
   var tel = data.telefono ? normalizarTelefono_(data.telefono, leerConfig_().pais_codigo) : '';
   var productos = {}; leerTabla_('platos').forEach(function (p) { productos[String(p.id)] = p; });
-  var subtotal = 0;
-  (Array.isArray(data.items) ? data.items : []).slice(0, 60).forEach(function (it) {
-    var p = productos[String(it.plato_id)], n = Math.floor(numero_(it.cantidad));
-    if (!p || p.activo !== true || !(n >= 1 && n <= 50) || (String(p.local_id) !== 'TODOS' && String(p.local_id) !== localId)) throw fallo_('Revise los platos del carrito.', 'PLATO');
-    var extras = (Array.isArray(it.extras) ? it.extras : []).map(claveComparar_);
-    var extra = leerExtras_(p.extras_json).filter(function (x) { return extras.indexOf(claveComparar_(x.nombre)) >= 0; }).reduce(function (s, x) { return s + x.precio; }, 0);
-    subtotal = redondear_(subtotal + redondear_((numero_(p.precio) + extra) * n));
-  });
+  var subtotal=cotizarLineasCreacion_(data.items,productos,localId,{}).subtotal;
   if (!subtotal) throw fallo_('Agregue platos antes de aplicar un cupón.', 'CUPON');
   var r = validarCupon316_(codigo, localId, tel, subtotal, leerTabla_('pedidos'));
   return { ok: true, data: { codigo: codigo, descuento: r.descuento, subtotal: subtotal } };
