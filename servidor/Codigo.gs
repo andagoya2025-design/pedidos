@@ -2113,7 +2113,7 @@ function accionPedidoEstado_(data, ctx) {
     if (a === 'En camino' || a === 'Entregado') {
       var solicitudesAbiertas = SpreadsheetApp.getActive().getSheetByName('pedido_cambios')
         ? cambiosPedido_().filter(function (x) {
-          return String(x.pedido_id) === String(p.id) && ['Pendiente', 'Aprobada para coordinar', 'Cotizada', 'Confirmada cliente'].indexOf(String(x.estado)) >= 0;
+          return String(x.pedido_id) === String(p.id) && ['Pendiente', 'Aprobada para coordinar', 'Cotizada', 'Confirmada cliente', 'Aplicando'].indexOf(String(x.estado)) >= 0;
         }) : [];
       if (solicitudesAbiertas.length)
         throw fallo_('Este pedido tiene ' + solicitudesAbiertas.length +
@@ -2372,6 +2372,12 @@ function accionEntregaSali_(data, ctx) {
   try {
     p = pedidoDeMotorizado_(data, ctx);
     if (String(p.estado) !== 'Preparando' && String(p.estado) !== 'Recibido') throw fallo_('Este pedido está «' + p.estado + '». Toque Actualizar.', 'CAMBIO');
+    // El motorizado también puede iniciar la salida: aplicar el MISMO bloqueo
+    // que al despacho desde el restaurante para impedir rutas inconsistentes.
+    if (SpreadsheetApp.getActive().getSheetByName('pedido_cambios') && cambiosPedido_().some(function (x) {
+      return String(x.pedido_id) === String(p.id) &&
+        ['Pendiente', 'Aprobada para coordinar', 'Cotizada', 'Confirmada cliente', 'Aplicando'].indexOf(String(x.estado)) >= 0;
+    })) throw fallo_('El restaurante debe resolver los cambios pendientes antes de que salgas.', 'CAMBIO_PENDIENTE');
     exigirPagoVerificado_(p);
     if (!String(p.codigo_entrega || '')) actualizarCampos_('pedidos', p._fila, p, { codigo_entrega: nuevoCodigoEntrega_() });
     p = buscarPedido_(data.id, null);
