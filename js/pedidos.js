@@ -167,6 +167,20 @@
     });
     return ok?respuesta:null;
   }
+  function accionesPagoCambio(x) {
+    var q=x.cotizacion;
+    if(!q||[q.total_actual,q.total_estimado,q.adicional].some(function(v){return v==null||v===''||!Number.isFinite(Number(v));}))return [];
+    if(!UI.esDigital(x.forma_pago))return [{texto:'Aplicar modificación',valor:'pago-efectivo'}];
+    if(x.pago_verificado){
+      var d=Number(q.adicional);
+      if(d===0)return [{texto:'Aplicar · sin ajuste de pago',valor:'pago-sin_ajuste'}];
+      return [{texto:d>0?'Confirmar cobro de '+UI.dinero(d)+' y aplicar':'Confirmar devolución de '+UI.dinero(-d)+' y aplicar',valor:'pago-ajuste_verificado'}];
+    }
+    var a=[{texto:Number(q.total_estimado)===0?'Sin depósito · cancelar pedido':'Sin depósito · actualizar a '+UI.dinero(q.total_estimado),valor:'pago-sin_deposito'}];
+    if(Number(q.total_estimado)>0)a.push({texto:'Ya recibí '+UI.dinero(q.total_estimado)+' · aplicar',valor:'pago-total_recibido',clase:'secundario'});
+    if(Number(q.total_actual)>0&&Number(q.total_actual)!==Number(q.total_estimado))a.push({texto:'Solo recibí '+UI.dinero(q.total_actual),valor:'verificar-original',clase:'secundario'});
+    return a;
+  }
   async function verSolicitudes(pedidoId) {
     var datos;
     try { datos = await DATOS.pedir('pedidoCambiosListar', { local_id: APP.local }); }
@@ -192,10 +206,10 @@
     var decisiones = [{ texto: 'Volver', valor: null, clase: 'secundario' }];
     if (puedeCotizar) decisiones.push({ texto: 'Revisar y enviar propuesta', valor: 'cotizar' });
     // No ofrecer coordinación sin propuesta económica.
-    if (x.estado === 'Confirmada cliente') { decisiones.push({ texto: 'Aplicar modificación aceptada', valor: 'aplicar' }); if(UI.esDigital(x.forma_pago)&&!x.pago_verificado)decisiones.push({texto:'Verificar pago original recibido',valor:'verificar-original',clase:'secundario'}); }
+    if (x.estado === 'Confirmada cliente') { if(x.conciliacion_simple)decisiones=decisiones.concat(accionesPagoCambio(x));else {decisiones.push({texto:'Aplicar modificación aceptada',valor:'aplicar'});if(UI.esDigital(x.forma_pago)&&!x.pago_verificado)decisiones.push({texto:'Verificar pago original recibido',valor:'verificar-original',clase:'secundario'});} }
     if (['Aprobada para coordinar', 'Cotizada', 'Confirmada cliente'].indexOf(x.estado) >= 0)
-      decisiones.push({ texto: 'Cerrar sin aplicar', valor: 'Cerrada sin aplicar' });
-    if (x.estado !== 'Aplicando') decisiones.push({ texto: 'Rechazar', valor: 'Rechazada' });
+      decisiones.push({ texto: 'Cerrar sin aplicar', valor: 'Cerrada sin aplicar',clase:'secundario' });
+    if (x.estado !== 'Aplicando' && x.estado!=='Confirmada cliente') decisiones.push({ texto: 'Rechazar', valor: 'Rechazada',clase:'secundario' });
     var pedidoVisual = est.datos && est.datos.pedidos.filter(function(p){return String(p.numero)===String(x.numero);})[0];
     if(puedeCotizar)return cotizarSolicitud(x,pedidoVisual);
     var menuVisual = [];
@@ -205,15 +219,18 @@
     var decision = await UI.ventana({
       html: x.cotizacion?vistaCotizacionDefinitiva(x)+(x.estado==='Cotizada'?botonAvisoPropuesta(pedidoVisual,x.cotizacion):''):vistaSolicitudAdmin(x,pedidoVisual,menuVisual),
       titulo: x.estado==='Cotizada'?'Propuesta enviada · '+x.numero:x.estado==='Confirmada cliente'?'Propuesta aceptada · '+x.numero:x.numero+' · '+x.tipo,
-      texto: x.detalle + '. Estado: ' + x.estado +
-        (x.estado === 'Aplicando' ? '. Atención: posible operación interrumpida. No despachar; requiere conciliación técnica.' :
-          '. La aceptación del cliente todavía NO aplica el cambio. Solo el paso Aplicar modifica el pedido.'),
+      texto: x.estado==='Confirmada cliente'&&x.conciliacion_simple?(UI.esDigital(x.forma_pago)?'Cliente aceptó. Revisa tu cuenta bancaria y elige el importe realmente recibido o devuelto. No se exige referencia.':'Cliente aceptó. Aplica la modificación al pedido.'):x.estado==='Aplicando'?'Operación interrumpida. No despachar hasta conciliar.':x.estado==='Cotizada'?'Esperando la decisión del cliente.':x.detalle,
       botones: decisiones.slice(1).concat(decisiones[0]),
       alAbrir:function(v){v.querySelector('.ventana').classList.add('ux-gestion-modal');}
     });
     if (!decision) return;
     if (decision === 'cotizar') return cotizarSolicitud(x,pedidoVisual);
     if(decision==='verificar-original'&&pedidoVisual)return verificar(null,pedidoVisual);
+    if(String(decision).indexOf('pago-')===0&&x.conciliacion_simple){
+      var modo=String(decision).slice(5),q=x.cotizacion;
+      if(!accionesPagoCambio(x).some(function(b){return b.valor===decision;}))return UI.aviso('Actualiza la solicitud.','error');
+      try{var a=await DATOS.pedir('pedidoCambioAplicar',{id:x.id,cotizacion_id:x.cotizacion_id,conciliacion_pago:modo,pago_previo_verificado:x.pago_verificado===true,total_confirmado:Number(q.total_estimado),confirmacion_bancaria:modo!=='efectivo'&&modo!=='sin_ajuste'},{guardar:true});UI.aviso(a.repetida?'Ya estaba aplicada.':'Modificación aplicada. '+(a.pago_verificado?'Pago conciliado.':'Total actualizado: '+UI.dinero(a.total_nuevo)),'ok');await cargar();}catch(e){UI.aviso('No se aplicó: '+e.message,'error');}return;
+    }
     if(decision==='aplicar'){
       var digital=UI.esDigital(x.forma_pago),ref='',sinPago=false,delta=Number(x.adicional)||0;
       if(digital&&!x.pago_verificado){sinPago=await UI.confirmar('Actualizar total pendiente','Confirma en el banco que no existe ningún depósito anterior de '+x.numero+'. Si ya existe un pago, verifica primero el importe recibido.','Confirmo: aún no ha pagado');if(!sinPago)return;}
@@ -319,7 +336,7 @@
     if (p.cambio_estado && ['Recibido', 'Preparando', 'En camino'].indexOf(p.estado) >= 0) {
       var avisoCambio = p.cambio_estado === 'Aplicando' ? 'Aplicación incompleta: conciliar antes de avanzar.' : p.cambio_estado==='Confirmada cliente'?'Cliente aceptó la modificación.':p.cambio_estado==='Cotizada'?'Propuesta enviada · esperando al cliente.':'Modificación pendiente de revisar.';
       principal = ''; // La modificación tiene prioridad sobre preparación y cobro.
-      principal += '<div class="banda"><span>' + UI.esc(avisoCambio) + '</span></div><button class="btn bloque" type="button" data-accion="solicitudes" data-id="' + UI.esc(p.id) + '">' + (p.cambio_estado==='Confirmada cliente'?'Aplicar cambio aceptado':'Revisar modificación') + '</button>';
+      principal += '<div class="banda"><span>' + UI.esc(avisoCambio) + '</span></div><button class="btn bloque" type="button" data-accion="solicitudes" data-id="' + UI.esc(p.id) + '">' + (p.cambio_estado==='Confirmada cliente'?'Resolver cambio':'Revisar modificación') + '</button>';
     }
     return '<article class="pedido' + (tarde ? ' atrasado' : '') + '">' +
       '<div class="pedido-top"><span class="pedido-num">' + UI.esc(p.numero) + '</span>' + (p.estado === 'Anulado' ? UI.chipEstado('Anulado') : '') +
@@ -415,14 +432,14 @@
   async function verificar(boton, p) {
     var ok = await UI.ventana({
       icono: p.forma_pago === 'deuna' ? '📲' : '🏦', titulo: 'Verificar pago de ' + p.numero,
-      texto: 'Abra la app de su banco' + (p.forma_pago === 'deuna' ? ' o Deuna Negocios' : '') + ' y confirme que llegaron ' + UI.dinero(p.total) + ' de ' + p.cliente_nombre + '. Una captura de pantalla NO es prueba: puede ser falsa.',
+      texto: 'Abra la app de su banco' + (p.forma_pago === 'deuna' ? ' o Deuna Negocios' : '') + ' y confirme que llegaron ' + UI.dinero(p.total) + ' de ' + p.cliente_nombre + '. Verifica el ingreso real en tu cuenta.',
       botones: [{ texto: 'Todavía no', valor: false, clase: 'secundario' }, { texto: '✅ Sí, el dinero llegó', valor: true }]
     });
     if (!ok) return;
-    var listo = await guardar(boton, 'pedidoPagoVerificar', { id: p.id, verificado: true }, p.cambio_estado?'Pago original verificado. Resuelve la modificación antes de preparar.':'Pago verificado. Ya puede prepararlo.');
+    var listo = await guardar(boton, 'pedidoPagoVerificar', { id: p.id, verificado: true,total_esperado:Number(p.total) }, p.cambio_estado?'Pago original verificado. Resuelve la modificación antes de preparar.':'Pago verificado. Ya puede prepararlo.');
     if (listo && !p.cambio_estado && UI.digitos(p.telefono)) { // 3.1.5: avisar al cliente que su pago se confirmó en la cuenta
       var av = await UI.confirmar('¿Avisar a ' + p.cliente_nombre + '?', 'Le mandamos por WhatsApp que su pago de ' + UI.dinero(p.total) + ' ya se confirmó en la cuenta, con su enlace de seguimiento.', '💬 Avisar al cliente');
-      if (av) UI.abrirWhatsApp(p.telefono, '✅ Hola ' + p.cliente_nombre + ', confirmamos tu pago de ' + UI.dinero(p.total) + ' en nuestra cuenta. Ya estamos preparando tu pedido ' + p.numero + ' 👨‍🍳\n👉 Míralo aquí: ' + enlaceSeguimiento(p));
+      if (av) UI.abrirWhatsApp(p.telefono, '✅ Hola ' + p.cliente_nombre + ', confirmamos tu pago de ' + UI.dinero(p.total) + ' en nuestra cuenta. Tu pedido ' + p.numero + ' está listo para pasar a preparación.\n👉 Míralo aquí: ' + enlaceSeguimiento(p));
     }
     return listo;
   }
