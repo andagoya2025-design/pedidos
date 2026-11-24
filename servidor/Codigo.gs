@@ -482,11 +482,12 @@ function leerConfig_() {
 }
 
 function estadoLicencia_(cfg) {
-  var estado = String(cfg.licencia_estado || 'activa');
+  var estado = String(cfg.licencia_estado || '');
   var vence = String(cfg.licencia_vence || '');
   var hoy = Utilities.formatDate(new Date(), zona_(cfg), 'yyyy-MM-dd');
-  var vencida = !!vence && vence < hoy;
-  return { estado: (estado === 'suspendida' || vencida) ? 'suspendida' : 'activa', vence: vence, vencida: vencida };
+  var valida = /^\d{4}-\d{2}-\d{2}$/.test(vence) && !isNaN(Date.parse(vence + 'T00:00:00Z')) && new Date(vence + 'T00:00:00Z').toISOString().slice(0, 10) === vence;
+  var vencida = valida && vence < hoy;
+  return { estado: (estado !== 'activa' || !valida || vencida) ? 'suspendida' : 'activa', vence: vence, vencida: vencida };
 }
 
 function accionConfigObtener_() {
