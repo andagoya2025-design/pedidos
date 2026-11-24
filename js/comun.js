@@ -295,5 +295,26 @@
     global.open(d ? UI.enlaceWhatsApp(d, texto) : 'https://wa.me/?text=' + encodeURIComponent(texto), '_blank', 'noopener');
   };
 
+  /* Misma presentación monetaria para restaurante y cliente. Sin alterar precios. */
+  UI.compararTotalesCambio = function(q) {
+    if(!q||[q.total_actual,q.total_estimado,q.adicional].some(function(v){return v==null||v===''||!Number.isFinite(Number(v));}))return '';
+    var delta=Number(q.adicional),dif=delta>0?'+'+UI.dinero(delta):delta<0?'−'+UI.dinero(-delta):UI.dinero(0);
+    return '<div class="ux-comparacion-totales"><div class="ux-total-anterior"><small>Total anterior</small><strong>'+UI.esc(UI.dinero(q.total_actual))+'</strong></div><div class="ux-total-nuevo"><small>Nuevo total</small><strong>'+UI.esc(UI.dinero(q.total_estimado))+'</strong></div><div class="ux-total-diferencia"><span>'+ (delta>0?'Aumento del pedido':delta<0?'Reducción del pedido':'Sin diferencia de precio')+'</span><b>'+UI.esc(dif)+'</b></div></div>';
+  };
+  UI.compararDetalleCambio = function(q) {
+    function fila(t,v){return '<div class="ux-resumen-item"><span>'+UI.esc(t)+'</span><b>'+UI.esc(UI.dinero(v))+'</b></div>';}
+    function importe(x,k){return x&&x[k]!=null&&x[k]!==''&&Number.isFinite(Number(x[k]))?Number(x[k]):null;}
+    function grupo(t,ls,total,desglose){
+      ls=Array.isArray(ls)?ls:[];var suma=ls.reduce(function(n,d){return n+Number(d.total_linea||0);},0);
+      var html='<div class="ux-comparacion-grupo"><h4>'+UI.esc(t)+'</h4>'+ls.map(function(d){return '<div class="ux-resumen-item"><span>'+UI.esc(d.cantidad+' × '+d.nombre)+(d.extras&&d.extras.length?'<small>'+UI.esc(Array.isArray(d.extras)?d.extras.join(', '):d.extras)+'</small>':'')+'</span><b>'+UI.esc(UI.dinero(d.total_linea))+'</b></div>';}).join('');
+      if(!ls.length)html+='<p class="ayuda">Sin productos</p>';
+      html+=fila('Subtotal productos',importe(desglose,'subtotal')===null?suma:desglose.subtotal);
+      if(desglose){var e=importe(desglose,'envio'),d=importe(desglose,'descuento'),p=importe(desglose,'premio'),pr=importe(desglose,'propina'),iva=importe(desglose,'iva');if(e!==null)html+=fila('Envío',e);if(d)html+=fila('Descuento',-d);if(p)html+=fila('Premio',-p);if(pr)html+=fila('Propina',pr);if(iva!==null&&iva!==0){var base=Number(desglose.subtotal||0)+Number(e||0)-Number(d||0)-Number(p||0)+Number(pr||0);html+=fila(Math.abs(Number(total)-base-iva)<.011?'IVA adicional':'IVA incluido (informativo)',iva);}}
+      else {var resto=Math.round((Number(total)-suma)*100)/100;if(resto)html+=fila('Envío y otros conceptos',resto);}
+      return html+'<div class="ux-comparacion-cierre">'+fila('Total',total)+'</div></div>';
+    }
+    if(!q.integral)return '<div class="ux-comparacion-grupo"><h4>Productos adicionales</h4>'+(q.lineas||[]).map(function(d){return fila(d.cantidad+' × '+d.nombre,d.total_linea);}).join('')+'</div>';
+    var d=q.desglose||{};return '<div class="ux-comparacion-detalles">'+grupo('Pedido anterior',q.antes,q.total_actual,d.anterior)+grupo('Pedido propuesto',q.despues,q.total_estimado,d.propuesto)+'</div>';
+  };
   UI.numero = function (v) { var n = Number(String(v).replace(',', '.')); return isFinite(n) ? n : NaN; };
 })(window);
