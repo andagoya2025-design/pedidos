@@ -57,8 +57,14 @@
         (String(p.local_id) === String(x.local_id) || String(p.local_id) === 'TODOS');
     });
     if (!platos.length) return UI.aviso('No hay productos disponibles para cotizar.', 'error');
-    var items = [];
+    var items = Array.isArray(x.items_solicitados) ? x.items_solicitados.map(function(it){return {plato_id:it.plato_id,cantidad:it.cantidad,extras:it.extras.slice()};}) : [];
     var otro = true;
+    if(items.length){
+      var precarga=items.map(function(it){var p=platos.filter(function(v){return String(v.id)===String(it.plato_id);})[0];return it.cantidad+' × '+(p?p.nombre:'Producto no disponible')+(it.extras.length?' ('+it.extras.join(', ')+')':'');}).join('; ');
+      var modo=await UI.ventana({titulo:'Productos solicitados',texto:precarga,botones:[{texto:'Cerrar',valor:null,clase:'secundario'},{texto:'Editar selección',valor:'editar'},{texto:'Cotizar selección',valor:'cotizar'}]});
+      if(!modo)return;
+      if(modo==='cotizar')otro=false;else items=[];
+    }
     while (otro && items.length < 12) {
       var busqueda = await UI.pedirDato({
         titulo: 'Buscar producto para ' + x.numero, etiqueta: 'Nombre del producto',
