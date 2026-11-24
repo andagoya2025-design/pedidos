@@ -908,7 +908,26 @@
   async function recuperarEnvio(boton) {
     if (!envioPendiente) return UI.aviso('No hay ningún envío pendiente de recuperación.', 'error');
     if (envioPendiente.local_id !== localId) return UI.aviso('El envío pendiente pertenece a otro local. No se puede reintentar desde este menú.', 'error');
-    await procesarEnvio(envioPendiente, boton);
+    var original = envioPendiente;
+    try {
+      var consulta = await DATOS.pedir('pedidoRecuperar', { op_id: original.op_id, telefono: original.cliente.telefono });
+      if (consulta.encontrado && consulta.pedido) {
+        var p = consulta.pedido;
+        guardarMiPedido({ n: p.numero, tel: original.cliente.telefono, s: p.clave_seguimiento ? p.numero + '-' + p.clave_seguimiento : '', f: Date.now(), t: p.total, e: p.estado || 'Recibido', l: original.local_id,
+          i: original.items.map(function (x) { var pl = plato(x.plato_id); return { p: x.plato_id, c: x.cantidad, x: x.extras, n: pl ? pl.nombre : '' }; }) });
+        envioPendiente = null; codigoEnvio = '';
+        try { global.sessionStorage.removeItem('mipedido_envio_pendiente'); } catch (e) { /* sin almacenamiento */ }
+        UI.aviso('El restaurante ya recibió tu pedido ' + p.numero + '. No se ha creado otro.', 'exito');
+        pintarSeguimiento(true);
+        pintarMenu();
+        return;
+      }
+    } catch (err) {
+      // La consulta también puede fallar por mala conexión: NO crear otro pedido con otro código.
+      return UI.aviso('No se pudo comprobar el pedido. Revisa tu conexión y vuelve a intentarlo; no hagas otro pedido.', 'error');
+    }
+    // El servidor no encontró el código: reintentar la carga ORIGINAL, protegida por op_id.
+    await procesarEnvio(original, boton);
   }
 
   function textoWhatsApp(p) {
