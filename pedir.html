@@ -7,6 +7,9 @@
   <meta name="format-detection" content="telephone=no">
   <meta name="description" content="Haz tu pedido en línea">
   <title>Haz tu pedido</title>
+  <link rel="manifest" href="manifest-cliente.json">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="MiPedido">
   <link rel="icon" href="iconos/icono-192.png" type="image/png">
   <link rel="apple-touch-icon" href="iconos/icono-180.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -21,7 +24,7 @@
       <div class="marca-logo" data-marca-logo aria-hidden="true"></div>
       <h1 data-marca-nombre>Haz tu pedido</h1>
       <p id="pedir-bienvenida">Cargando el menú…</p>
-    </header>
+    <button type="button" class="btn secundario chico" id="instalar-pwa" hidden>Instalar MiPedido</button></header>
     <section class="seguimiento" id="seguimiento" hidden aria-live="polite"></section>
     <main class="pedir-cuerpo" id="pedir-cuerpo">
       <div class="lista" aria-busy="true"><div class="esqueleto" style="min-height:220px"></div><div class="esqueleto" style="min-height:220px"></div></div>
@@ -39,5 +42,6 @@
   <script src="js/mapa.js"></script>
   <script src="js/qr.js"></script>
   <script src="js/pedir.js"></script>
+<script src="js/pwa-cliente.js"></script>
 </body>
 </html>
