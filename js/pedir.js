@@ -1039,6 +1039,25 @@
   function guardarMiPedido(x) { var l = misPedidos().filter(function (y) { return y.n !== x.n; }); l.unshift(x); guardarMisPedidos(l); }
   function activo(x) { return FINALES.indexOf(x.e) < 0 || (x.e === 'Entregado' && !x.cal && Date.now() - (x.fe || x.f || 0) < 6 * 3600000); }
 
+  function identidadSeguimiento(x) { return x.s ? 's:'+String(x.s) : 'local:'+JSON.stringify([x.n,x.tel||'',x.f||0]); }
+  function eliminarReferenciasInexistentes(lista,res) {
+    var borrar=Object.create(null);
+    lista.forEach(function(x){if(res[x.n]&&res[x.n].no_existe===true)borrar[identidadSeguimiento(x)]=true;});
+    if(!Object.keys(borrar).length)return lista;
+    var u=MEM.leer('ultimo_pedido');
+    // El legado podría volver a crear la tarjeta eliminada.
+    if(u&&lista.some(function(x){return borrar[identidadSeguimiento(x)]&&x.n===u.numero&&(!u.s||String(u.s)===String(x.s));}))MEM.guardar('ultimo_pedido',null);
+    guardarMisPedidos(misPedidos().filter(function(x){return !borrar[identidadSeguimiento(x)];}));
+    return lista.filter(function(x){return !borrar[identidadSeguimiento(x)];});
+  }
+  async function consultarReferenciaSeguimiento(x) {
+    try {
+      var r=await DATOS.pedir('pedidoConsultar',x.s?{s:x.s}:{numero:x.n,telefono:x.tel||(checkoutMem['cliente']||{}).telefono||''});
+      if(!r||String(r.numero)!==String(x.n)||x.s&&String(r.seguimiento)!==String(x.s))return {consulta_error:true};
+      return r;
+    }catch(e){return e&&e.codigo==='NO_EXISTE'&&(x.s||x.tel)?{no_existe:true}:{consulta_error:true};}
+  }
+  var historialRevisado=Object.create(null);
   var segEnCurso = null, segPendiente = false, segAbrir = false, segTimer = null;
   function pintarSeguimiento(abrir) {
     if (segEnCurso) { segPendiente = true; segAbrir = segAbrir || !!abrir; return segEnCurso; }
@@ -1067,10 +1086,11 @@
     cont.hidden = false;
     var act = lista.filter(activo), hist = lista.filter(function (x) { return !activo(x); });
     var res = {};
-    if (act.length) {
+    var revisar=lista.filter(function(x){return activo(x)||!historialRevisado[identidadSeguimiento(x)];});
+    if (revisar.length) {
       if (!cont.innerHTML) cont.innerHTML = '<div class="seg-caja"><b>Mis pedidos</b><span class="item-sub">Consultando…</span></div>';
       try {
-        var conClave = act.filter(function (x) { return x.s; });
+        var conClave = revisar.filter(function (x) { return x.s; });
         // El servidor admite máximo diez claves por consulta: procesar por lotes.
         for (var lote = 0; lote < conClave.length; lote += 10) {
           var grupo = conClave.slice(lote, lote + 10);
@@ -1082,18 +1102,23 @@
             (Array.isArray(r.pedidos) ? r.pedidos : []).forEach(function (p) {
               if (p && p.seguimiento) porClave[String(p.seguimiento)] = p;
             });
-            grupo.forEach(function (x) {
-              var encontrado = porClave[String(x.s)];
-              res[x.n] = encontrado && String(encontrado.numero) === String(x.n) ? encontrado : { consulta_error: true };
-            });
+            // El servidor 3.1.14 agrupa NO_EXISTE con otros errores.
+            // Confirmar individualmente solo las referencias devueltas con error.
+            await Promise.all(grupo.map(async function(x){
+              var encontrado=porClave[String(x.s)];
+              res[x.n]=encontrado&&String(encontrado.numero)===String(x.n)&&!encontrado.consulta_error&&!encontrado.no_existe?encontrado:encontrado&&encontrado.consulta_error===true?await consultarReferenciaSeguimiento(x):{consulta_error:true};
+            }));
           } catch (e) {
             grupo.forEach(function (x) { res[x.n] = { consulta_error: true }; });
           }
         }
-        for (var j = 0; j < act.length; j++) { // pedidos viejos sin clave: número + celular
-          var x = act[j]; if (x.s || res[x.n]) continue;
-          try { res[x.n] = await DATOS.pedir('pedidoConsultar', { numero: x.n, telefono: x.tel || (checkoutMem['cliente'] || {}).telefono || '' }); } catch (e) { res[x.n] = { consulta_error: true }; }
+        for (var j = 0; j < revisar.length; j++) { // pedidos viejos sin clave: número + celular
+          var x = revisar[j]; if (x.s || res[x.n]) continue;
+          res[x.n]=await consultarReferenciaSeguimiento(x);
         }
+        revisar.forEach(function(x){var p=res[x.n];if(p&&!p.consulta_error&&!p.no_existe)historialRevisado[identidadSeguimiento(x)]=true;});
+        lista=eliminarReferenciasInexistentes(lista,res);
+        if(!lista.length){cont.hidden=true;cont.innerHTML='';var accesoVacio=$('#btn-mi-pedido');if(accesoVacio)accesoVacio.hidden=true;return;}
         var cambio2 = false;
         lista.forEach(function (x) {
           var p = res[x.n]; if (!p) return;
@@ -1107,7 +1132,7 @@
         if (cambio2) {
           var actual = misPedidos(), porNumero = Object.create(null);
           lista.forEach(function(x){ porNumero[x.n]=x; });
-          guardarMisPedidos(actual.map(function(x){ return porNumero[x.n] ? Object.assign({},x,porNumero[x.n]) : x; }));
+          guardarMisPedidos(actual.map(function(x){var actualizado=porNumero[x.n];return actualizado&&(!x.s||x.s===actualizado.s)&&Number(x.f||0)===Number(actualizado.f||0)?Object.assign({},x,actualizado):x;}));
         }
         act = lista.filter(activo); hist = lista.filter(function (x) { return !activo(x); });
       } catch (err) {
