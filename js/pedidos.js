@@ -123,13 +123,14 @@
     }
   }
 
-  async function verSolicitudes() {
+  async function verSolicitudes(pedidoId) {
     var datos;
     try { datos = await DATOS.pedir('pedidoCambiosListar', { local_id: APP.local }); }
     catch (err) { return UI.aviso('No se pudieron cargar las solicitudes: ' + err.message, 'error'); }
     var abiertas = ['Pendiente', 'Aprobada para coordinar', 'Cotizada', 'Confirmada cliente', 'Aplicando'];
     var lista = (datos.solicitudes || []).filter(function (x) { return abiertas.indexOf(x.estado) >= 0; })
       .sort(function (a, b) { return String(a.creado).localeCompare(String(b.creado)); });
+    if (typeof pedidoId === 'string' && est.datos) { var seleccionado = est.datos.pedidos.filter(function (p) { return String(p.id) === pedidoId; })[0]; if (seleccionado) lista = lista.filter(function (x) { return x.numero === seleccionado.numero; }); }
     if (!lista.length) return UI.aviso('No hay solicitudes de cambios abiertas.', 'ok');
     var opciones = [{ texto: 'Cerrar', valor: null, clase: 'secundario' }];
     lista.slice(0, 12).forEach(function (x, i) {
@@ -302,6 +303,11 @@
     if (p.estado === 'En camino') principal = '<button class="btn chico" type="button" data-accion="entregar" data-id="' + UI.esc(p.id) + '">📦 Marcar entregado</button>';
     // 3.1.1: ya entregado → sin botones de trabajo, solo la constancia (y «Más» para consultar).
     if (p.estado === 'Entregado') principal = '<span class="hecho-final">✔ Entregado' + (p.entregado ? ' a las ' + UI.esc(UI.hora(p.entregado)) : '') + '</span>';
+    if (p.cambio_estado && ['Recibido', 'Preparando', 'En camino'].indexOf(p.estado) >= 0) {
+      var avisoCambio = p.cambio_estado === 'Aplicando' ? 'Aplicación incompleta: conciliar antes de avanzar.' : 'Cambio pendiente: ' + p.cambio_estado + '. Resolver antes de despachar.';
+      if (p.cambio_estado === 'Aplicando' || p.estado !== 'Recibido') principal = '';
+      principal += '<div class="banda"><span>' + UI.esc(avisoCambio) + '</span></div><button class="btn secundario chico" type="button" data-accion="solicitudes" data-id="' + UI.esc(p.id) + '">📝 Resolver solicitud</button>';
+    }
     return '<article class="pedido' + (tarde ? ' atrasado' : '') + '">' +
       '<div class="pedido-top"><span class="pedido-num">' + UI.esc(p.numero) + '</span>' + (p.estado === 'Anulado' ? UI.chipEstado('Anulado') : '') +
       '<span class="reloj' + (tarde ? ' tarde' : '') + '">' + UI.esc(UI.hora(p.creado)) + (['Entregado', 'Anulado'].indexOf(p.estado) < 0 ? ' · ' + min + ' min' : '') + '</span>' +
@@ -374,6 +380,7 @@
   }
 
   async function accion(boton, que, id) {
+    if (arguments[1] === 'solicitudes') return verSolicitudes(arguments[2]);
     var p = buscar(id);
     if (!p) return;
     if (que === 'preparar') return guardar(boton, 'pedidoEstado', { id: id, desde: p.estado, a: 'Preparando' }, p.numero + ' en preparación.');
