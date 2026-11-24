@@ -104,7 +104,7 @@
         }).join('') + '</div>' : '<p class="subtitulo" style="margin:0">Sin movimientos todavía.</p>') + '</div>';
     UI.$$('[data-c]', c).forEach(function (b) { b.addEventListener('click', function () { accion(b, b.getAttribute('data-c')); }); });
     UI.$$('[data-liquidar]', c).forEach(function (b) { b.addEventListener('click', function () { liquidar(b, b.getAttribute('data-liquidar')); }); });
-    UI.$('[data-recuperar]',c).forEach(function(b){b.addEventListener('click',async function(){var l=(est.liquidaciones_incompletas||[]).filter(function(x){return x.id===b.getAttribute('data-recuperar');})[0];if(!l)return;if(await UI.confirmar('Recuperar liquidación','Confirma que el dinero de '+UI.dinero(l.entregado)+' ya fue recibido. No cobres otra vez.','Recuperar'))await guardar(b,'cajaLiquidar',{motorizado_id:l.motorizado_id,entregado:l.entregado},'Liquidación recuperada.');});});
+    UI.$('[data-recuperar]',c).forEach(function(b){b.addEventListener('click',async function(){var l=(est.liquidaciones_incompletas||[]).filter(function(x){return x.id===b.getAttribute('data-recuperar');})[0];if(!l)return;if(await UI.confirmar('Recuperar liquidación','Confirma que el dinero de '+UI.dinero(l.entregado)+' ya fue recibido. No cobres otra vez.','Recuperar'))await guardar(b,'cajaLiquidar',{motorizado_id:l.motorizado_id,entregado:l.entregado,recuperar_id:l.id},'Liquidación recuperada.');});});
     UI.$('[data-propina-pago]',c).forEach(function(b){b.addEventListener('click',async function(){var p=(est.propinas_pendientes||[]).filter(function(x){return x.id===b.getAttribute('data-propina-pago');})[0];if(!p)return;var ref=await UI.pedirDato({titulo:'Conciliar propina '+p.numero,texto:'Registra sólo si ya comprobaste el pago bancario de '+UI.dinero(p.monto)+' al motorizado. No se envía dinero desde aquí.',etiqueta:'Referencia del pago real',boton:'Confirmar pago realizado',validar:function(v){return v.trim().length<3?'Ingresa la referencia.':'';}});if(ref!==null)await guardar(b,'cajaPropinaDigital',{id:p.id,monto:p.monto,motorizado_id:p.motorizado_id,referencia:ref,confirmacion_bancaria:true},'Propina conciliada.');});});
     UI.$('[data-verificar]', c).forEach(function (b) {
       b.addEventListener('click', function () {
@@ -187,7 +187,7 @@
       validar: function (v) { return !(UI.numero(v) >= 0) ? 'Escriba el monto.' : ''; }
     });
     if (monto === null) return;
-    var r = await guardar(boton, 'cajaLiquidar', { motorizado_id: motoId, entregado: UI.numero(monto),total_esperado:Number(p.total),pedidos_esperados:p.pedidos.slice() }, '');
+    var r = await guardar(boton, 'cajaLiquidar', { motorizado_id: motoId, entregado: UI.numero(monto),total_esperado:Number(p.total),pedidos_esperados:p.pedidos.slice(),op_id:UI.codigoEnvio() }, '');
     if (r && r.liquidacion) {
       var dif = r.liquidacion.diferencia;
       UI.ventana({ icono: dif === 0 ? '✅' : '⚠️', titulo: dif === 0 ? 'Cuadró exacto' : (dif < 0 ? 'Faltan ' + UI.dinero(-dif) : 'Sobran ' + UI.dinero(dif)), texto: p.nombre + ' entregó ' + UI.dinero(r.liquidacion.entregado) + '. Queda registrado.' });
