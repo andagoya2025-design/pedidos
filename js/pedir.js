@@ -1060,9 +1060,9 @@
   var historialRevisado=Object.create(null);
   var segEnCurso = null, segPendiente = false, segAbrir = false, segTimer = null;
   var vigiaSeg = DATOS.crearVigiaSync();
-  function pintarSeguimiento(abrir) {
+  function pintarSeguimiento(abrir, automatico) {
     if (segEnCurso) { segPendiente = true; segAbrir = segAbrir || !!abrir; return segEnCurso; }
-    segEnCurso = consultarSeguimiento(abrir).finally(function () {
+    segEnCurso = consultarSeguimiento(abrir, automatico).finally(function () {
       segEnCurso = null;
       if (segPendiente) { var a = segAbrir; segPendiente = false; segAbrir = false; pintarSeguimiento(a).catch(function(){}); }
     });
@@ -1074,7 +1074,7 @@
     var clave = misPedidos().filter(activo).map(identidadSeguimiento).sort().join('|');
     vigiaSeg(clave, function () {
       if (document.hidden || navigator.onLine === false || document.querySelector('.velo') || document.querySelector('#seguimiento [aria-busy="true"]')) return false;
-      return pintarSeguimiento(false);
+      return pintarSeguimiento(false, true);
     }, 15000).catch(function(){});
   }
   function iniciarSeguimientoAutomatico() {
@@ -1084,7 +1084,7 @@
     global.addEventListener('pageshow', refrescarSeguimiento);
     global.addEventListener('online', refrescarSeguimiento);
   }
-  async function consultarSeguimiento(abrir) {
+  async function consultarSeguimiento(abrir, automatico) {
     var cont = $('#seguimiento');
     if (!cont) return;
     var lista = misPedidos();
@@ -1157,6 +1157,7 @@
         if (respuesta.numero === x.n) solicitudesPorPedido[x.n] = respuesta.solicitudes || [];
       } catch (e) { /* Seguimiento sigue funcionando si falla la consulta de solicitudes. */ }
     }));
+    if (automatico && (document.hidden || document.querySelector('.velo') || document.querySelector('#seguimiento [aria-busy="true"]'))) return false;
     var acceso = $('#btn-mi-pedido'); if (acceso) { acceso.hidden = !act.length; acceso.textContent = 'Mi pedido activo (' + act.length + ')'; }
     var abiertosPrevios=UI.$$('[data-pedido-desplegable][open]',cont).map(function(d){return d.getAttribute('data-pedido-desplegable');});
     var habiaDesplegables=UI.$$('[data-pedido-desplegable]',cont).length>0;
