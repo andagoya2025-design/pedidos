@@ -9,7 +9,7 @@ function fixture(){
   const a={plato:p,extras:['Chifle','Chifle','Salsa'],cantidad:2},b={plato:p,extras:[],cantidad:1};
   const dom={},c={p,carrito:{},paso:1,envioPendiente:null,plato:()=>p,UI:{esc:s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;'),dinero:n=>'$'+n.toFixed(2),vibrar(){},ventana:async()=>({quitar:true,i:0})},cambio(){c.changed=(c.changed||0)+1},pintarPlatos(){},pintarBarra(){},agregar:async(...args)=>{c.edited=args}};
   vm.createContext(c);
-  vm.runInContext(cut('function claveItem(','function subtotal(')+cut('function editarSeleccionPlato(','/* Foto grande')+cut('function maxExtraUI(','function inputExtraUI('),c);
+  vm.runInContext(cut('function claveItem(','function subtotal(')+cut('async function editarSeleccionPlato(','/* Foto grande')+cut('function maxExtraUI(','function inputExtraUI('),c);
   c.carrito[c.claveItem(p,a.extras)]=a;c.carrito[c.claveItem(p,b.extras)]=b;
   function input(i,value,type='number',checked=false){dom['[data-extra-q="'+i+'"]']={value,type,checked};dom['[data-extra-importe="'+i+'"]']={};dom['[data-extra-acumulado="'+i+'"]']={};}
   const v={querySelector:s=>dom[s]};
