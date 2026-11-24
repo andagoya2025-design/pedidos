@@ -294,7 +294,7 @@
       (!abierto() ? '<div class="banda aviso-cerrado" style="margin:0 0 10px">🌙 <span>' + UI.esc(M.abierto.mensaje || 'Estamos cerrados.') + (cfg().recibir_cerrado !== 'NO' ? ' Puedes dejarnos tu pedido y lo atenderemos cuando abramos.' : '') + '</span></div>' : '') +
       (rep && !cantidadTotal() ? '<button class="tarjeta repetir" type="button" id="btn-repetir"><span class="repetir-ico">🔁</span><span><b>Repetir mi último pedido</b><small>' + UI.esc(rep.map(function (i) { var p = plato(i.plato_id); return i.cantidad + '× ' + (p ? p.nombre : 'Producto no disponible'); }).join(', ')) + '</small></span><span aria-hidden="true">›</span></button>' : '') +
       '<div class="buscador"><span aria-hidden="true">🔎</span><input class="entrada" id="buscar" type="search" placeholder="Buscar un plato…" autocomplete="off" value="' + UI.esc(busqueda) + '" aria-label="Buscar un plato"></div>' +
-      '<div class="categorias-barra"><div class="pestanas" role="tablist" style="padding-bottom:0;margin-bottom:0">' +
+      '<div class="categorias-barra"><div class="preenvio-carrito-acceso"><button class="btn" type="button" id="btn-carrito-preenvio" aria-label="Ver carrito"></button><button class="btn secundario preenvio-vaciar" type="button" id="btn-vaciar-preenvio" disabled>Vaciar todo</button></div><div class="pestanas" role="tablist" style="padding-bottom:0;margin-bottom:0">' +
       (hayVendidos ? '<button class="pestana" role="tab" type="button" data-cat="_top" aria-selected="' + (categoria === '_top') + '">🔥 Lo más pedido</button>' : '') +
       cats.map(function (c) {
         return '<button class="pestana" role="tab" type="button" data-cat="' + UI.esc(c.id) + '" aria-selected="' + (c.id === categoria) + '">' + UI.esc(c.nombre) + '</button>';
@@ -303,6 +303,8 @@
     var re = $('#btn-recuperar-envio'); if (re) re.addEventListener('click', function () { recuperarEnvio(re); });
     var cl = $('#btn-cambiar-local'); if (cl) cl.addEventListener('click', pintarLocales);
     var br = $('#btn-repetir'); if (br) br.addEventListener('click', function () { repetir(rep); });
+    $('#btn-carrito-preenvio').addEventListener('click', abrirCarritoPreenvio);
+    conectarVaciarPreenvio();
     $('#buscar').addEventListener('input', function (e) { busqueda = e.target.value; pintarPlatos(); });
     UI.$$('[data-cat]', cuerpo()).forEach(function (b) {
       b.addEventListener('click', function () {
@@ -354,6 +356,17 @@
   }
   function sinTildes(t) { return String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); }
 
+  /* Subtotal visual por producto: suma todas sus combinaciones, con los mismos centavos del carrito. */
+  function subtotalTarjetaPreenvio(pid) {
+    return items().filter(function(it){return it.plato.id===pid;}).reduce(function(total,it){
+      return total+Math.round(unitario(it)*100)*it.cantidad;
+    },0)/100;
+  }
+  function importeTarjetaPreenvio(p,cant) {
+    if(!cant)return '';
+    return '<div class="preenvio-subtotal-tarjeta" aria-live="polite"><span>'+cant+' '+(cant===1?'unidad':'unidades')+' · Subtotal seleccionado</span><b>'+UI.esc(UI.dinero(subtotalTarjetaPreenvio(p.id)))+'</b></div>';
+  }
+
   function pintarPlatos() {
     var todos = platosDe(localId);
     var q = sinTildes(busqueda.trim());
@@ -373,7 +386,7 @@
         (p.agotado ? '<span class="etiqueta">Agotado</span>' :
           (cant && !p.extras.length ? '<div class="contador"><button type="button" data-menos="' + UI.esc(p.id) + '" aria-label="Quitar uno">−</button><input type="number" inputmode="numeric" min="0" max="1000" data-cant-plato="' + UI.esc(p.id) + '" aria-label="Cantidad de ' + UI.esc(p.nombre) + '" value="' + cant + '"><button type="button" data-mas="' + UI.esc(p.id) + '" aria-label="Agregar uno">＋</button></div>'
             : '<button class="btn chico btn-agregar" type="button" data-agregar="' + UI.esc(p.id) + '">' + (cant ? '＋ Otro' : '＋ Agregar') + '</button>')) +
-        '</div>' + (cant && p.extras.length && !envioPendiente ? '<button class="btn secundario chico plato-editar-seleccion" type="button" data-editar-plato="' + UI.esc(p.id) + '">Editar o quitar · ' + cant + ' en pedido</button>' : '') + '</div></article>';
+        '</div>' + importeTarjetaPreenvio(p,cant) + (cant && p.extras.length && !envioPendiente ? '<button class="btn secundario chico plato-editar-seleccion" type="button" data-editar-plato="' + UI.esc(p.id) + '">Editar o quitar · ' + cant + ' en pedido</button>' : '') + '</div></article>';
     }).join('') : UI.vacio('🔎', q ? 'No encontramos «' + busqueda + '». Prueba con otra palabra.' : 'No hay platos en esta categoría.');
     UI.$$('[data-agregar]', cont).forEach(function (b) { b.addEventListener('click', function () { agregar(b.getAttribute('data-agregar'), b); }); });
     UI.$$('[data-mas]', cont).forEach(function (b) { b.addEventListener('click', function () { sumar(b.getAttribute('data-mas'), 1); }); });
@@ -511,10 +524,48 @@
     } catch (e) {}
   }
 
+  /* Sólo borrador local: jamás anula ni reintenta un pedido enviado. */
+  function puedeVaciarPreenvio(){return !envioPendiente&&!recuperacionEnCurso&&!cotizacionEnCurso&&cantidadTotal()>0;}
+  function vaciarPreenvio(){
+    if(!puedeVaciarPreenvio())return false;
+    if(!global.confirm('¿Vaciar todo el carrito? Se eliminará tu selección actual. No se ha enviado ningún pedido.'))return false;
+    if(!puedeVaciarPreenvio())return false;
+    carrito={};cambio();limpiarCheckout();ubic=null;
+    irA(1);UI.aviso('Carrito vacío. Puedes empezar de nuevo.','ok');return true;
+  }
+  function conectarVaciarPreenvio(){
+    var b=$('#btn-vaciar-preenvio');if(b){b.disabled=!puedeVaciarPreenvio();b.addEventListener('click',vaciarPreenvio);}
+  }
+  function botonVaciarCheckoutPreenvio(){
+    return '<button class="btn secundario preenvio-vaciar" type="button" id="btn-vaciar-preenvio">Vaciar todo el carrito</button>';
+  }
+  async function abrirCarritoPreenvio(){
+    if(paso!==1)return;
+    if(envioPendiente||recuperacionEnCurso||cotizacionEnCurso)return UI.aviso('Primero comprueba el envío pendiente.','error');
+    var lista=items();
+    if(!lista.length)return UI.aviso('Tu carrito está vacío. Agrega un producto.','ok');
+    var accion=await UI.ventana({
+      titulo:'Tu carrito',texto:'Revisa todos los productos antes de enviar.',
+      html:lista.map(function(it,i){return '<div class="preenvio-linea"><div class="preenvio-cabecera"><span class="preenvio-mini">'+fotoHtml(it.plato)+'</span><div><b>'+it.cantidad+' × '+UI.esc(it.plato.nombre)+'</b><div class="item-sub">'+UI.esc(resumenExtrasCantidad(it.extras)||'Sin extras')+'</div></div></div>'+desgloseExtrasPreenvio(it)+'<div class="preenvio-importe"><span>Subtotal</span><b>'+UI.dinero(unitario(it)*it.cantidad)+'</b></div><div class="preenvio-acciones">'+(!it.plato.agotado?'<button type="button" class="btn secundario chico" data-carrito-editar="'+i+'">Editar</button>':'')+'<button type="button" class="btn secundario chico" data-carrito-quitar="'+i+'">Quitar</button></div></div>';}).join('')+
+      '<div class="preenvio-importe preenvio-total"><b>Subtotal de productos</b><b>'+UI.dinero(subtotal())+'</b></div><button type="button" class="btn secundario bloque preenvio-vaciar" data-carrito-vaciar>Vaciar todo el carrito</button>',
+      botones:[{texto:'Seguir eligiendo',valor:null,clase:'secundario'},{texto:'Continuar',valor:{tipo:'continuar'}}],
+      alAbrir:function(v,cerrar){v.addEventListener('click',function(e){var b=e.target.closest('[data-carrito-editar],[data-carrito-quitar],[data-carrito-vaciar]');if(!b)return;var tipo=b.hasAttribute('data-carrito-vaciar')?'vaciar':b.hasAttribute('data-carrito-editar')?'editar':'quitar';cerrar({tipo:tipo,i:Number(b.getAttribute('data-carrito-'+tipo))});});}
+    });
+    if(!accion||paso!==1||!puedeVaciarPreenvio())return;
+    if(accion.tipo==='vaciar')return vaciarPreenvio();
+    if(accion.tipo==='continuar')return $('#btn-ver-pedido').click();
+    var it=lista[accion.i];if(!it||carrito[claveItem(it.plato,it.extras)]!==it||it.cantidad<=0)return;
+    if(accion.tipo==='editar'&&!it.plato.agotado){await agregar(it.plato.id,null,it);if(paso===1&&puedeVaciarPreenvio())return abrirCarritoPreenvio();return;}
+    if(accion.tipo==='quitar'){delete carrito[claveItem(it.plato,it.extras)];cambio();pintarPlatos();pintarBarra(false);if(cantidadTotal())return abrirCarritoPreenvio();}
+  }
+
   function pintarBarra(saltar) {
     var n = cantidadTotal();
     var barra = $('#barra-pedido');
     barra.hidden = !n || paso !== 1;
+    var acceso=$('#btn-carrito-preenvio'),vaciar=$('#btn-vaciar-preenvio');
+    if(acceso){acceso.innerHTML='<span>🛒 Carrito ('+n+')</span><b>'+UI.esc(UI.dinero(subtotal()))+'</b>';acceso.disabled=!!envioPendiente;}
+    if(vaciar)vaciar.disabled=!puedeVaciarPreenvio();
     var b = $('#btn-ver-pedido');
     b.innerHTML = '<span class="cant">' + n + '</span> Continuar <span class="barra-total">' + UI.esc(UI.dinero(subtotal())) + ' →</span>';
     if (saltar) { b.classList.remove('saltito'); void b.offsetWidth; b.classList.add('saltito'); }
@@ -576,13 +627,14 @@
       '<div class="tarjeta"><h3 style="margin-top:0">Tus datos</h3>' +
       '<div class="campo"><label for="pe-nombre">Nombre</label><input class="entrada" id="pe-nombre" name="nombre" autocomplete="name" maxlength="80" value="' + UI.esc(cli.nombre || '') + '"></div>' +
       selectorTelefono(cli) + '</div>' +
-      '<div class="acciones-paso"><button class="btn secundario" type="button" id="btn-atras">← Platos</button><button class="btn" type="submit">Continuar →</button></div>' +
+      '<div class="acciones-paso"><button class="btn secundario" type="button" id="btn-atras">← Platos</button><button class="btn" type="submit">Continuar →</button></div>' + botonVaciarCheckoutPreenvio() +
       '</form>';
 
     UI.$$('[data-tipo]').forEach(function (b) { b.addEventListener('click', function () { guardarCampos(); entrega.tipo = b.getAttribute('data-tipo'); cambio(); pintarEntrega(); }); });
     UI.$$('[data-cuando]').forEach(function (b) { b.addEventListener('click', function () { guardarCampos(); entrega.cuando = b.getAttribute('data-cuando'); pintarEntrega(); }); });
     UI.$$('[data-zona]').forEach(function (b) { b.addEventListener('change', function () { entrega.zona = b.value; cambio(); var m = $('#aviso-minimo'); if (m) m.textContent = mensajeMinimo(); }); });
     $('#btn-atras').addEventListener('click', function () { guardarCampos(); irA(1); });
+    conectarVaciarPreenvio();
     var paisTel = $('#pe-pais');
     if (paisTel) paisTel.addEventListener('change', function () {
       var otro = $('#pe-otro-campo'); if (otro) otro.hidden = paisTel.value !== 'otro';
@@ -657,13 +709,18 @@
   }
 
   /* ----- Ubicación: GPS con mapa, pegar enlace, quitar ----- */
+  var ubicSolicitud=0;
+  function ubicacionPreenvioVigente(estado,solicitud){
+    return !!estado&&paso===2&&entrega.tipo==='domicilio'&&estado===$('#ubic-zona')&&solicitud===ubicSolicitud&&!envioPendiente;
+  }
   function conectarUbicacion() {
     $('#btn-gps').addEventListener('click', function (e) {
       var b = e.currentTarget;
       UI.trabajando(b, async function () {
-        var estado = $('#ubic-zona');
+        var estado = $('#ubic-zona'), solicitud=++ubicSolicitud;
         estado.innerHTML = '<p class="ayuda">Buscando tu ubicación… acepta el permiso si te lo pide.</p>';
         var pos = await UI.ubicacion();
+        if(!ubicacionPreenvioVigente(estado,solicitud))return;
         if (!pos) { estado.innerHTML = '<div class="banda error" style="margin:10px 0 0;text-align:left">⚠️ <span>No pudimos tomar tu ubicación.<br>' + UI.ayudaUbicacion() + '<br><br>Si no se puede, usa <b>«Pegar ubicación»</b> o <b>«Por WhatsApp»</b>, o escribe tu dirección.</span></div>'; return; }
         ubic = { lat: pos.lat, lng: pos.lng, precision: pos.precision, fuente: 'gps' };
         cambio(); mostrarMapa(); zonaPorPunto();
@@ -671,7 +728,7 @@
     });
     $('#btn-pegar').addEventListener('click', pegarUbicacion);
     $('#btn-ubic-wa').addEventListener('click', function () {
-      ubic = { lat: '', lng: '', fuente: 'whatsapp', enlace: '' }; cambio();
+      ubicSolicitud++;ubic = { lat: '', lng: '', fuente: 'whatsapp', enlace: '' }; cambio();
       if (mapa) { mapa.destruir(); mapa = null; }
       $('#ubic-zona').innerHTML = '<div class="ubic-lista">💬 <span>Al enviar el pedido te sale el botón <b>«Enviar mi ubicación por WhatsApp»</b>. En el chat toca <b>📎 (o +) → Ubicación → Enviar mi ubicación actual</b>.</span><button class="btn secundario chico" type="button" id="btn-quitar">✕</button></div>';
       $('#btn-quitar').addEventListener('click', quitarUbicacion);
@@ -693,8 +750,10 @@
   async function pegarUbicacion() {
     /* Camino rápido: si ya copió el enlace, se usa con un solo toque.
        3.1.5: en iPhone el navegador no deja leer lo copiado → se va directo al cuadro para pegar con el dedo. */
+    var estado=$('#ubic-zona'),solicitud=++ubicSolicitud;
     var ios = /iPhone|iPad|iPod/.test(global.navigator.userAgent);
     var enlace = await leerCopiado(); // en iPhone aparece la burbuja «Pegar»: al tocarla se usa directo
+    if(!ubicacionPreenvioVigente(estado,solicitud))return;
     if (!enlace) {
       var dato = '';
       var ok = await UI.ventana({
@@ -717,15 +776,17 @@
           return true;
         } }]
       });
-      if (!ok || !dato) return;
+      if (!ok || !dato || !ubicacionPreenvioVigente(estado,solicitud)) return;
       enlace = dato;
     }
-    var estado = $('#ubic-zona');
+    if(!ubicacionPreenvioVigente(estado,solicitud))return;
     estado.innerHTML = '<p class="ayuda">Leyendo la ubicación…</p>';
     try {
       var r = await DATOS.pedir('ubicacionResolver', { enlace: enlace, disp_id: UI.dispId() });
+      if(!ubicacionPreenvioVigente(estado,solicitud))return;
       if (r.punto) { ubic = { lat: r.punto.lat, lng: r.punto.lng, fuente: 'enlace', enlace: enlace }; cambio(); mostrarMapa(); zonaPorPunto(); return; }
     } catch (err) { /* se guarda el enlace tal cual */ }
+    if(!ubicacionPreenvioVigente(estado,solicitud))return;
     ubic = { lat: '', lng: '', fuente: 'enlace', enlace: enlace }; cambio();
     estado.innerHTML = '<div class="ubic-lista">✅ <span>Ubicación guardada. El motorizado abrirá tu enlace.</span><button class="btn secundario chico" type="button" id="btn-quitar">✕ Quitar</button></div>';
     $('#btn-quitar').addEventListener('click', quitarUbicacion);
@@ -740,7 +801,7 @@
     mapa = UI.mapa($('#mapa'), { lat: ubic.lat, lng: ubic.lng, zoom: 17, alMover: function (pt) { ubic.lat = pt.lat; ubic.lng = pt.lng; cambio(); zonaPorPunto(); } });
     $('#btn-quitar').addEventListener('click', quitarUbicacion);
   }
-  function quitarUbicacion() { ubic = null; entrega.zona = ''; cambio(); if (mapa) { mapa.destruir(); mapa = null; } $('#ubic-zona').innerHTML = ''; UI.$$('input[name=zona]').forEach(function (x) { x.checked = false; }); if ($('#ubic-cobertura')) $('#ubic-cobertura').textContent = ''; }
+  function quitarUbicacion() { ubicSolicitud++;ubic = null; entrega.zona = ''; cambio(); if (mapa) { mapa.destruir(); mapa = null; } $('#ubic-zona').innerHTML = ''; UI.$$('input[name=zona]').forEach(function (x) { x.checked = false; }); if ($('#ubic-cobertura')) $('#ubic-cobertura').textContent = ''; }
 
   /* ---------------- 3.1.5: cuentas bancarias, políticas y efectivo por cliente ---------------- */
   function cuentasBanco() {
@@ -784,13 +845,18 @@
   function verPoliticas() {
     UI.ventana({ icono: '📋', titulo: 'Cómo funciona tu pedido', html: '<div class="politicas-lista">' + textoPoliticas().split('\n').filter(String).map(function (l) { return '<p>' + UI.esc(l) + '</p>'; }).join('') + '</div>' });
   }
-  var efectivoCliente = null, efectivoTel = '';
+  var efectivoCliente = null, efectivoTel = '', efectivoConsulta = 0;
+  function telefonoEfectivoPreenvio(){return String((checkoutMem['cliente']||{}).telefono||'');}
+  function invalidarEfectivoPreenvio(){efectivoConsulta++;efectivoCliente=null;efectivoTel='';}
   async function revisarEfectivoCliente() {
-    var tel = (checkoutMem['cliente'] || {}).telefono || '';
+    var tel = telefonoEfectivoPreenvio();
     if (!UI.digitos(tel) || tel === efectivoTel) return;
-    efectivoTel = tel;
-    try { efectivoCliente = (await DATOS.pedir('pagoOpciones', { telefono: tel })).efectivo === true; } catch (e) { efectivoCliente = false; }
-    if (efectivoCliente && paso === 3 && !UI.$('[data-forma=efectivo]')) { guardarNotas(); pintarConfirmar(); restaurarNotas(); }
+    var consulta=++efectivoConsulta, permitido=false;
+    efectivoTel=tel;efectivoCliente=null;
+    try { permitido=(await DATOS.pedir('pagoOpciones', { telefono: tel })).efectivo === true; } catch (e) { permitido=false; }
+    if(consulta!==efectivoConsulta||tel!==telefonoEfectivoPreenvio())return;
+    efectivoCliente=permitido;
+    if(paso===3&&!envioPendiente&&!cotizacionEnCurso&&efectivoPermitido()!==!!UI.$('[data-forma=efectivo]')){guardarNotas();pintarConfirmar();restaurarNotas();}
   }
 
   /* ---------------- Paso 3: confirmar y pagar ---------------- */
@@ -843,9 +909,10 @@
       '<label class="casilla"><input type="checkbox" name="acepta_promos"' + (checkoutMem['acepta_promos'] ? ' checked' : '') + '> <span>Quiero recibir promociones por WhatsApp (opcional).</span></label>' +
       '<button class="btn bloque btn-enviar" type="submit">Enviar pedido · <span id="total-boton"></span></button>' +
       '<p class="ayuda" style="text-align:center;margin-top:8px">Recibirás tu número de pedido al instante.</p></div>' +
-      '<button class="btn secundario" type="button" id="btn-atras">← Volver</button>' +
+      '<button class="btn secundario" type="button" id="btn-atras">← Volver</button>' + botonVaciarCheckoutPreenvio() +
       '</form>';
     $('#btn-atras').addEventListener('click', function () { guardarNotas();irA(2); });
+    conectarVaciarPreenvio();
     $('#btn-editar-entrega').addEventListener('click', function () { guardarNotas();irA(2); });
     UI.$$('[data-forma]').forEach(function (b) { b.addEventListener('click', function () { pago.forma = b.getAttribute('data-forma'); guardarNotas(); pintarConfirmar(); restaurarNotas(); }); });
     UI.$$('[data-propina]').forEach(function (b) {
@@ -890,14 +957,14 @@
   function totalActual() { return importesCheckout().total; }
   function efectivoPermitido() {
     var c = cfg();
-    if (efectivoCliente) return true; // 3.1.5: el local autorizó a este cliente
+    if (efectivoCliente && efectivoTel===telefonoEfectivoPreenvio()) return true; // sólo el cliente autorizado
     if (c.efectivo_permitido === 'NO') return false;
     var max = Number(c.efectivo_maximo);
     return !(max > 0 && totalActual() > max);
   }
   var checkoutMem = {};
   function guardarCheckout(k,v) { checkoutMem[k] = v; }
-  function limpiarCheckout() { checkoutMem = {}; notasTmp = {}; cuponAplicado = null; entrega = {tipo:'',zona:'',mesa:params.get('mesa')||'',cuando:'ya',hora:''}; pago = {forma:'efectivo',propina:0}; }
+  function limpiarCheckout() { invalidarEfectivoPreenvio(); checkoutMem = {}; notasTmp = {}; cuponAplicado = null; entrega = {tipo:'',zona:'',mesa:params.get('mesa')||'',cuando:'ya',hora:''}; pago = {forma:'efectivo',propina:0}; }
   var notasTmp = {};
   function guardarNotas() { ['privacidad','politicas'].forEach(function(k){var el=$('#pe-'+k); if(el) guardarCheckout('acepta_'+k,el.checked);}); var promo=UI.$('[name=acepta_promos]'); if(promo) guardarCheckout('acepta_promos',promo.checked); notasTmp = { cupon: ($('#pe-cupon') || {}).value || '', notas: ($('#pe-notas') || {}).value || '' }; }
   function restaurarNotas() { if ($('#pe-cupon')) $('#pe-cupon').value = notasTmp.cupon || ''; if ($('#pe-notas')) $('#pe-notas').value = notasTmp.notas || ''; if(cuponAplicado&&$('#pe-cupon-estado')&&$('#pe-cupon').value.trim().toUpperCase()===cuponAplicado.codigo)$('#pe-cupon-estado').textContent='✅ Cupón aplicado: −'+UI.dinero(cuponAplicado.descuento)+' en platos.'; }

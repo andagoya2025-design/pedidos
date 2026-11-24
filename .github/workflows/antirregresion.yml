@@ -31,3 +31,17 @@ jobs:
         run: node -e "new (require('vm').Script)(require('fs').readFileSync('servidor/Codigo.gs', 'utf8'))"
       - name: Pruebas unitarias antirregresivas
         run: node --test tests/*.test.js
+  navegador:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Instalar navegador de prueba
+        run: |
+          npm install --no-save --no-package-lock playwright@1.56.1
+          npx playwright install --with-deps chromium webkit
+      - name: Interacción móvil con datos ficticios
+        run: node tests/navegador-preenvio.cjs
