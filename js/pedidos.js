@@ -152,6 +152,28 @@
     }
   }
 
+  function vistaSolicitudAdmin(x,pedido,platos) {
+    var actuales=Array.isArray(pedido&&pedido.detalle)?pedido.detalle:[], menu=Array.isArray(platos)?platos:[], partes=String(x.detalle||'').split(';'), filas=[], valido=!!pedido, delta=0;
+    var norma=function(v){return String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');};
+    var tipos={agregar:['Agregar'],aumentar:['Aumentar'],cambiar:['Sustituir','Agregar'],quitar:['Retirar'],reducir:['Retirar']};
+    var usados=Object.create(null), retiros=0,entradas=0;
+    if(x.tipo==='cancelar') return '<section class="ux-detalle-pedido"><h3>Cancelación solicitada</h3><p>'+UI.esc(x.detalle)+'</p>'+(pedido?'<div class="ux-resumen-item"><span>Total vigente</span><b>'+UI.esc(UI.dinero(pedido.total))+'</b></div>':'')+'<small>No implica anulación ni devolución automática.</small></section>';
+    partes.forEach(function(t){
+      var m=/^(Agregar|Aumentar|Sustituir|Retirar)\s+([1-9]\d?)\s*[×x]\s*(.+?)(?:\s+\(([^()]*)\))?\s*$/i.exec(t.trim());
+      if(!m||Number(m[2])>50||!(tipos[x.tipo]||[]).some(function(a){return norma(a)===norma(m[1]);})){valido=false;return;}
+      var nuevo=norma(m[1])==='agregar', negativo=norma(m[1])==='sustituir'||norma(m[1])==='retirar', n=Number(m[2]), ex=m[4]?m[4].split(',').map(norma).sort():[], posibles=(nuevo?menu:actuales).filter(function(a){return norma(a.nombre)===norma(m[3])&&(nuevo||String(a.extras||'').split(',').map(norma).filter(Boolean).sort().join('|')===ex.join('|'));});
+      if(posibles.length!==1){valido=false;return;}
+      var a=posibles[0], precio=Number(a.precio), k=JSON.stringify([nuevo,String(a.id||a.plato_id),ex]);
+      if(!Number.isFinite(precio)||usados[k]||(!nuevo&&negativo&&n>Number(a.cantidad))||(!nuevo&&x.tipo==='quitar'&&n!==Number(a.cantidad))||(!nuevo&&x.tipo==='reducir'&&n>=Number(a.cantidad))){valido=false;return;}usados[k]=true;
+      if(nuevo){var vistos=Object.create(null);ex.forEach(function(e){var match=(Array.isArray(a.extras)?a.extras:[]).filter(function(z){return norma(z.nombre)===e;});if(match.length!==1||vistos[e]||!Number.isFinite(Number(match[0].precio))){valido=false;return;}vistos[e]=true;precio+=Number(match[0].precio);});if(a.activo!==true||a.agotado===true)valido=false;entradas+=n;}
+      if(negativo)retiros+=n;
+      var total=Math.round(precio*n*100)/100;delta+=negativo?-total:total;
+      filas.push('<div class="ux-seleccion-grupo '+(negativo?'actual':'nuevo')+'"><small>'+UI.esc(negativo?'Producto actual · retiro solicitado':nuevo?'Producto nuevo solicitado':'Unidades adicionales')+'</small><div class="ux-resumen-item"><span><b>'+UI.esc(n+' × '+a.nombre)+'</b>'+(m[4]?'<small>'+UI.esc(m[4])+'</small>':'')+'</span><b>'+UI.esc(UI.dinero(total))+'</b></div></div>');
+    });
+    if(x.tipo==='cambiar'&&(!retiros||!entradas))valido=false;
+    function importe(t,v){return '<div class="ux-resumen-item"><span>'+UI.esc(t)+'</span><b>'+UI.esc(UI.dinero(v))+'</b></div>';}
+    return '<section class="ux-detalle-pedido"><h3>Detalle de la solicitud</h3>'+filas.join('')+(pedido?importe('Total vigente',pedido.total):'')+(valido&&filas.length?importe('Diferencia orientativa',delta)+importe('Total estimado',Number(pedido.total)+delta)+'<small>Estimación no vinculante; impuestos, descuentos, disponibilidad y pago deben verificarse antes de aplicar.</small>':'<p class="ayuda">No se pudo reconstruir toda la selección con certeza. Revisa la descripción original. No se calcula un total incompleto.</p>')+'</section>';
+  }
   async function verSolicitudes(pedidoId) {
     var datos;
     try { datos = await DATOS.pedir('pedidoCambiosListar', { local_id: APP.local }); }
@@ -163,7 +185,7 @@
     if (!lista.length) return UI.aviso('No hay solicitudes de cambios abiertas.', 'ok');
     var opciones = [{ texto: 'Cerrar', valor: null, clase: 'secundario' }];
     lista.forEach(function (x, i) {
-      opciones.push({ texto: x.numero + ' · ' + x.tipo + ' · ' + x.estado, valor: String(i) });
+      opciones.push({ texto: 'Ver ' + x.numero + ' · ' + x.tipo + ' · ' + x.estado, valor: String(i) });
     });
     var elegido = await UI.ventana({
       icono: '📝', titulo: 'Solicitudes abiertas (' + lista.length + ')',
@@ -182,7 +204,13 @@
     if (['Aprobada para coordinar', 'Cotizada', 'Confirmada cliente'].indexOf(x.estado) >= 0)
       decisiones.push({ texto: 'Cerrar sin aplicar', valor: 'Cerrada sin aplicar' });
     if (x.estado !== 'Aplicando') decisiones.push({ texto: 'Rechazar', valor: 'Rechazada' });
+    var pedidoVisual = est.datos && est.datos.pedidos.filter(function(p){return String(p.numero)===String(x.numero);})[0];
+    var menuVisual = [];
+    if (x.tipo === 'agregar' || x.tipo === 'cambiar') {
+      try { var mv = await DATOS.pedir('menuListar',{local_id:x.local_id}); menuVisual=(mv.platos||[]).filter(function(p){return String(p.local_id)==='TODOS'||String(p.local_id)===String(x.local_id);}); } catch(e) { /* No inventar precios si falla el menú. */ }
+    }
     var decision = await UI.ventana({
+      html: vistaSolicitudAdmin(x,pedidoVisual,menuVisual),
       titulo: x.numero + ' · ' + x.tipo,
       texto: x.detalle + '. Estado: ' + x.estado +
         (x.estado === 'Aplicando' ? '. Atención: posible operación interrumpida. No despachar; requiere conciliación técnica.' :

@@ -1126,7 +1126,7 @@
       } catch (e) { /* Seguimiento sigue funcionando si falla la consulta de solicitudes. */ }
     }));
     var acceso = $('#btn-mi-pedido'); if (acceso) { acceso.hidden = !act.length; acceso.textContent = 'Mi pedido activo (' + act.length + ')'; }
-    cont.innerHTML = (act.length ? '<p class="ayuda">Seguimiento automático cada 15 segundos mientras la app está abierta.</p>' : '') + act.map(function (x) { return res[x.n] && !res[x.n].no_existe && !res[x.n].consulta_error ? tarjetaSeguimiento(res[x.n], x) + (solicitudesPorPedido[x.n] || []).slice(-3).map(function (sol) {
+    cont.innerHTML = (act.length ? '<p class="ayuda">Seguimiento automático cada 15 segundos mientras la app está abierta.</p>' : '') + act.map(function (x) { return res[x.n] && !res[x.n].no_existe && !res[x.n].consulta_error ? tarjetaSeguimiento(res[x.n], x, solicitudesPorPedido[x.n]) + (solicitudesPorPedido[x.n] || []).slice(-3).map(function (sol) {
       return '<div class="seg-caja ux-solicitud-pedido"><b>Modificación solicitada · ' + UI.esc(sol.tipo) + '</b>' +
         '<div class="item-sub">Estado: ' + UI.esc(sol.estado) + '</div>' +
         '<p>' + UI.esc(sol.detalle) + '</p>' +
@@ -1204,6 +1204,8 @@
       var pedido = res[numero];
       var x = lista.filter(function (y) { return y.n === numero; })[0];
       if (!x || !pedido || pedido.consulta_error || pedido.no_existe) return UI.aviso('Actualiza el estado antes de solicitar cambios.', 'error');
+      if (!Array.isArray(solicitudesPorPedido[numero])) return UI.aviso('Actualiza las solicitudes antes de continuar.', 'error');
+      if (solicitudAbierta(solicitudesPorPedido[numero])) return UI.aviso('Ya existe una modificación en revisión. Espera la respuesta del restaurante.', 'error');
       var estado = pedido.estado;
       // Preguntar qué desea hacer, en vez de suponer que toda solicitud
       // es una sustitución. Cada opción tiene restricciones distintas.
@@ -1390,7 +1392,16 @@
   }
 
   /* Tarjeta de seguimiento de un pedido en curso. */
-  function tarjetaSeguimiento(r, x) {
+  function solicitudAbierta(solicitudes) {
+    return (Array.isArray(solicitudes)?solicitudes:[]).find(function(s){return ['Pendiente','Aprobada para coordinar','Cotizada','Confirmada cliente','Aplicando'].indexOf(s.estado)>=0;})||null;
+  }
+  function estadoSolicitudHtml(solicitudes,r) {
+    if (!Array.isArray(solicitudes)) return '<p class="ayuda">No pudimos verificar las solicitudes. Actualiza antes de realizar cambios.</p><button class="btn secundario chico bloque" type="button" data-seg-act>Actualizar solicitudes</button>';
+    var s=solicitudAbierta(solicitudes);
+    if(s)return '<div class="ux-solicitud-pendiente"><b>Modificación en revisión</b><small>'+UI.esc(s.estado)+' · '+UI.esc(s.detalle)+'</small><small>Tu pedido vigente se mantiene hasta aplicar la modificación. No necesitas enviar otra solicitud.</small><button class="btn secundario chico bloque" type="button" data-seg-act>Actualizar estado</button></div>';
+    return '<p class="ayuda">'+UI.esc(mensajeCambioPedido(r.estado))+'</p><button class="btn secundario chico bloque" type="button" data-escribir="'+UI.esc(r.numero)+'">Solicitar cambio</button>';
+  }
+  function tarjetaSeguimiento(r, x, solicitudes) {
     var tipo = r.tipo_entrega;
     var pasos = tipo === 'domicilio' ? PASOS_SEG : ['Recibido', 'Preparando', 'Entregado'];
     var i = r.estado === 'Anulado' ? -1 : pasos.indexOf(r.estado);
@@ -1414,7 +1425,7 @@
       (r.codigo_entrega ? '<div class="codigo-entrega"><span>🔢 Tu código de entrega</span><b>' + UI.esc(r.codigo_entrega) + '</b><small>Dáselo al motorizado solo cuando tengas tu pedido en la mano.</small></div>' : '') +
       (r.estado === 'Entregado' && !r.calificacion ? '<button class="btn chico bloque" type="button" data-calificar="' + UI.esc(r.numero) + '" style="margin-top:10px">⭐ ¿Cómo estuvo? Califícanos</button>' : '') +
       (r.sellos_meta ? '<div class="sellos" title="Tarjeta de sellos">' + sellosHtml(r.sellos, r.sellos_meta) + '</div>' : '') +
-      (FINALES.indexOf(r.estado) < 0 ? '<p class="ayuda" style="margin:8px 0 0">' + UI.esc(mensajeCambioPedido(r.estado)) + ' <button class="btn secundario chico bloque" type="button" data-escribir="' + UI.esc(r.numero) + '">Solicitar cambio</button></p>' : '') +
+      (FINALES.indexOf(r.estado) < 0 ? estadoSolicitudHtml(solicitudes,r) : '') +
       '</div>';
   }
 
