@@ -28,7 +28,7 @@
   global.APP_CONFIG = Object.freeze({
     url: valida(URL_SCRIPT) ? String(URL_SCRIPT).trim() : '',
     configurada: valida(URL_SCRIPT),
-    versionPantalla: '3.1.16',
+    versionPantalla: '3.1.17',
     versionScriptMinima: 30114, // compatible; mensajes personalizados requieren 3.1.16
     tiempoEsperaMs: 25000
   });

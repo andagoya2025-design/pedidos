@@ -97,10 +97,21 @@
       var preview=UI.compararTotalesCambio(q)+UI.compararDetalleCambio(q)+(compatible?'<div class="campo ux-propuesta-mensaje"><label for="ux-prop-plantilla">Respuesta rápida</label><select id="ux-prop-plantilla" class="entrada">'+plantillas.map(function(m,i){return '<option value="'+i+'">'+['Propuesta revisada','Cambio disponible','Alternativa disponible'][i]+'</option>';}).join('')+'</select><label for="ux-prop-mensaje">Mensaje para el cliente</label><textarea class="entrada" id="ux-prop-mensaje" rows="3" maxlength="500">'+UI.esc(mensaje)+'</textarea></div>':'<p class="ayuda">La comparación está disponible. Para enviar un mensaje personalizado, actualiza el servidor a 3.1.16.</p>');
       var enviar=await UI.ventana({titulo:'Propuesta definitiva · '+x.numero,html:preview,botones:[{texto:'Confirmar y enviar al cliente',valor:true,antes:function(v){if(!compatible)return true;mensaje=v.querySelector('#ux-prop-mensaje').value.trim();if(mensaje.length<5||mensaje.length>500){UI.aviso('Escribe un mensaje de 5 a 500 caracteres.','error');return false;}return true;}},{texto:'Volver',valor:null,clase:'secundario'}],alAbrir:function(v){v.querySelector('.ventana').classList.add('ux-gestion-modal');if(compatible)v.querySelector('#ux-prop-plantilla').addEventListener('change',function(e){v.querySelector('#ux-prop-mensaje').value=plantillas[Number(e.target.value)];});}});
       if(!enviar)return;
-      await DATOS.pedir('pedidoCambioProponer',{id:x.id,integral:true,seleccion:sel,total_esperado:q.total_estimado,mensaje:compatible?mensaje:undefined},{guardar:true});UI.aviso('Propuesta enviada. El cliente puede aceptar o rechazar.','ok');await cargar();
+      var emitida=await DATOS.pedir('pedidoCambioProponer',{id:x.id,integral:true,seleccion:sel,total_esperado:q.total_estimado,mensaje:compatible?mensaje:undefined},{guardar:true});UI.aviso('Propuesta enviada. El cliente puede aceptar o rechazar.','ok');await cargar();
+      if(emitida&&emitida.estado==='Cotizada'&&emitida.cotizacion){var aviso=botonAvisoPropuesta(pedido,emitida.cotizacion);if(aviso)await UI.ventana({titulo:'Propuesta enviada · '+x.numero,html:UI.compararTotalesCambio(emitida.cotizacion)+'<p>Ya está disponible en la página del cliente.</p>'+aviso,botones:[{texto:'Listo',valor:true,clase:'secundario'}]});}
     }catch(e){UI.aviso('No se pudo emitir: '+e.message,'error');}
   }
 
+  function enlaceAvisoPropuesta(p,q) {
+    if(!p||!q||!p.clave_seguimiento||!UI.digitos(p.telefono)||[q.total_actual,q.total_estimado,q.adicional].some(function(v){return v==null||v===''||!Number.isFinite(Number(v));}))return '';
+    var delta=Number(q.adicional),diferencia=delta>0?'+'+UI.dinero(delta):delta<0?'−'+UI.dinero(-delta):UI.dinero(0);
+    var texto='Hola, tenemos una propuesta de modificación para tu pedido '+p.numero+'.\n\nTotal anterior: '+UI.dinero(q.total_actual)+'\nNuevo total: '+UI.dinero(q.total_estimado)+'\nDiferencia: '+diferencia+'\n\n'+(q.mensaje||'Revisa los productos y confirma tu decisión.')+'\n\nAcepta o mantén tu pedido original aquí: '+enlaceSeguimiento(p)+'\nLa propuesta no constituye una confirmación de pago.';
+    return UI.enlaceWhatsApp(p.telefono,texto);
+  }
+  function botonAvisoPropuesta(p,q) {
+    var url=enlaceAvisoPropuesta(p,q);
+    return url?'<a class="btn secundario bloque" href="'+UI.esc(url)+'" target="_blank" rel="noopener noreferrer">Avisar al cliente por WhatsApp</a><small class="ayuda">Abre el mensaje preparado; pulsa Enviar en WhatsApp. La decisión se registra en MiPedido.</small>':'';
+  }
   function vistaCotizacionDefinitiva(x){var q=x.cotizacion;return '<section class="ux-detalle-pedido">'+UI.compararTotalesCambio(q)+(q.mensaje?'<div class="ux-mensaje-propuesta"><b>Mensaje enviado al cliente</b>'+UI.esc(q.mensaje)+'</div>':'')+UI.compararDetalleCambio(q)+'</section>';}
   function vistaSolicitudAdmin(x,pedido,platos) {
     var actuales=Array.isArray(pedido&&pedido.detalle)?pedido.detalle:[], menu=Array.isArray(platos)?platos:[], partes=String(x.detalle||'').split(';'), filas=[], valido=!!pedido, delta=0;
@@ -192,8 +203,8 @@
       try { var mv = await DATOS.pedir('menuListar',{local_id:x.local_id}); menuVisual=(mv.platos||[]).filter(function(p){return String(p.local_id)==='TODOS'||String(p.local_id)===String(x.local_id);}); } catch(e) { /* No inventar precios si falla el menú. */ }
     }
     var decision = await UI.ventana({
-      html: x.cotizacion?vistaCotizacionDefinitiva(x):vistaSolicitudAdmin(x,pedidoVisual,menuVisual),
-      titulo: x.numero + ' · ' + x.tipo,
+      html: x.cotizacion?vistaCotizacionDefinitiva(x)+(x.estado==='Cotizada'?botonAvisoPropuesta(pedidoVisual,x.cotizacion):''):vistaSolicitudAdmin(x,pedidoVisual,menuVisual),
+      titulo: x.estado==='Cotizada'?'Propuesta enviada · '+x.numero:x.estado==='Confirmada cliente'?'Propuesta aceptada · '+x.numero:x.numero+' · '+x.tipo,
       texto: x.detalle + '. Estado: ' + x.estado +
         (x.estado === 'Aplicando' ? '. Atención: posible operación interrumpida. No despachar; requiere conciliación técnica.' :
           '. La aceptación del cliente todavía NO aplica el cambio. Solo el paso Aplicar modifica el pedido.'),

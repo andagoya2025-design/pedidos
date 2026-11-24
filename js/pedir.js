@@ -1411,8 +1411,8 @@
   }
   function tarjetaPropuesta(sol,x,r) {
     var q=sol.cotizacion;
-    var h='<div class="seg-caja ux-solicitud-pedido ux-propuesta-prioritaria"><b>'+UI.esc(sol.estado==='Cotizada'?'Propuesta de modificación · '+x.n:sol.estado==='Confirmada cliente'?'Modificación aceptada · '+x.n:sol.aplicado?'Modificación aplicada · '+x.n:'Modificación · '+sol.tipo)+'</b>';
-    if(!q)return h+'<p>'+UI.esc(sol.respuesta||'Estamos revisando tu solicitud.')+'</p></div>';
+    var h='<div class="seg-caja ux-solicitud-pedido ux-propuesta-prioritaria"><b>'+UI.esc(sol.estado==='Cotizada'?'Propuesta enviada por el restaurante · '+x.n:sol.estado==='Confirmada cliente'?'Modificación aceptada · '+x.n:sol.aplicado?'Modificación aplicada · '+x.n:'Modificación · '+sol.tipo)+'</b>';
+    if(!q)return h+'<p>'+UI.esc(sol.respuesta||'Estamos revisando tu solicitud.')+'</p>'+(sol.detalle?'<div class="ux-mensaje-propuesta"><b>Cambio solicitado</b>'+UI.esc(sol.detalle)+'</div>':'')+(solicitudAbierta([sol])?'<div class="ux-resumen-item"><span>Total vigente</span><b>'+UI.esc(UI.dinero(r.total))+'</b></div><p class="ayuda">El nuevo total se confirmará cuando el restaurante envíe la propuesta.</p>':'')+'</div>';
     h+=UI.compararTotalesCambio(q)+(q.mensaje?'<div class="ux-mensaje-propuesta"><b>Mensaje del restaurante</b>'+UI.esc(q.mensaje)+'</div>':'')+'<details '+(sol.estado==='Cotizada'?'open':'')+'><summary>Comparar productos e importes</summary>'+UI.compararDetalleCambio(q)+'</details>';
     if(sol.estado==='Cotizada')h+='<button class="btn bloque" type="button" data-aceptar-cambio="'+UI.esc(sol.id)+'" data-numero-cambio="'+UI.esc(x.n)+'">Aceptar modificación</button><button class="btn secundario bloque" type="button" data-rechazar-cambio="'+UI.esc(sol.id)+'" data-numero-cambio="'+UI.esc(x.n)+'">Mantener pedido original</button>';
     else if(sol.estado==='Confirmada cliente'){
