@@ -1085,15 +1085,26 @@
     UI.$$('[data-seg-act]', cont).forEach(function (b) { b.addEventListener('click', function (e) { UI.trabajando(e.currentTarget, function () { return pintarSeguimiento(true); }); }); });
     UI.$$('[data-calificar]', cont).forEach(function (b) { b.addEventListener('click', function () { var x = lista.filter(function (y) { return y.n === b.getAttribute('data-calificar'); })[0]; if (x) calificar({ numero: x.n, telefono: x.tel || (MEM.leer('cliente') || {}).telefono || '', s: x.s }); }); });
     UI.$$('[data-comprobante]', cont).forEach(function (b) { b.addEventListener('click', function () { var p = res[b.getAttribute('data-comprobante')]; if (p) UI.abrirWhatsApp(cfg().whatsapp, 'Hola, envío el comprobante del pedido *' + p.numero + '* por ' + UI.dinero(p.total) + (p.cuenta_pago ? ' (a ' + p.cuenta_pago + ')' : '') + '. 👇'); }); });
-    UI.$$('[data-escribir]', cont).forEach(function (b) { b.addEventListener('click', function () {
+    UI.$$('[data-escribir]', cont).forEach(function (b) { b.addEventListener('click', async function () {
       var numero = b.getAttribute('data-escribir');
       var pedido = res[numero];
-      var estado = pedido && pedido.estado || (lista.filter(function (x) { return x.n === numero; })[0] || {}).e;
-      var texto = estado === 'Recibido' ? 'Quisiera consultar si todavía puedo modificar mi pedido antes de que empiecen a prepararlo.' :
-        estado === 'Preparando' ? 'Quisiera consultar disponibilidad, precio y tiempo para agregar productos sin quitar los que ya están preparando.' :
-        estado === 'En camino' ? 'Quisiera consultar cómo hacer un pedido adicional con otro envío o retiro, sin hacer regresar al motorizado.' :
-        'Quisiera consultar una duda sobre mi pedido.';
-      UI.abrirWhatsApp(cfg().whatsapp, 'Hola, sobre mi pedido *' + numero + '* (' + (estado || 'estado pendiente') + '): ' + texto + ' Entiendo que cualquier cambio requiere confirmación del restaurante.');
+      var x = lista.filter(function (y) { return y.n === numero; })[0];
+      if (!x || !pedido || pedido.consulta_error || pedido.no_existe) return UI.aviso('Actualiza el estado antes de solicitar cambios.', 'error');
+      var estado = pedido.estado;
+      var tipo = estado === 'Preparando' ? 'agregar' : estado === 'Recibido' ? 'cambiar' : 'agregar';
+      var politica;
+      try {
+        b.disabled = true;
+        politica = await DATOS.pedir('pedidoPoliticaCambios', x.s ? { s: x.s, tipo: tipo } : { numero: numero, telefono: x.tel || (MEM.leer('cliente') || {}).telefono || '', tipo: tipo });
+      } catch (err) {
+        UI.aviso('No se pudo verificar si el restaurante acepta cambios. Intenta nuevamente.', 'error');
+        return;
+      } finally { b.disabled = false; }
+      if (politica.numero !== numero) return UI.aviso('No se pudo validar el pedido. Actualiza el seguimiento.', 'error');
+      var texto = politica.mensaje + (politica.permitido ? ' Solicito que me confirmen disponibilidad, importe y horario antes de aplicar cualquier modificación.' : ' Quisiera conocer las opciones disponibles.');
+      var telefonoLocal = cfg().whatsapp;
+      if (!UI.digitos(telefonoLocal)) return UI.aviso('Este restaurante no tiene WhatsApp configurado para solicitudes.', 'error');
+      UI.abrirWhatsApp(telefonoLocal, 'Hola, sobre mi pedido *' + numero + '* (' + politica.estado + '): ' + texto + ' Entiendo que este mensaje no modifica el pedido ni autoriza cobros.');
     }); });
     UI.$$('[data-repetir]', cont).forEach(function (b) { b.addEventListener('click', function () { var x = lista.filter(function (y) { return y.n === b.getAttribute('data-repetir'); })[0]; repetirDe(x); }); });
     var bb = $('#mp-borrar'); if (bb) bb.addEventListener('click', async function () {
