@@ -1,0 +1,71 @@
+/* Prueba de interacción en DOM real, sin acceso al servidor ni a pedidos reales. */
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),http=require('node:http');
+const {chromium,webkit,devices}=require('playwright');
+const root=path.resolve(__dirname,'..');
+const cats=['Almuerzos','Pollos','Bebidas','Postres','Desayunos','Otros'];
+const platos=cats.map((nombre,i)=>({id:'p'+i,categoria_id:'c'+i,local_id:'L',nombre:i===2?'Jugo natural':nombre+' de prueba',descripcion:'Producto ficticio',precio:i===2?1.5:5,extras:[],foto_url:'',etiquetas:'',agotado:false,sugerido:false}));
+platos.push({id:'personal',categoria_id:'c0',local_id:'L',nombre:'Plato con extras',descripcion:'Ficticio',precio:5,extras:[{nombre:'Chifle',precio:.5,max_cantidad:10}],foto_url:'',etiquetas:'',agotado:false,sugerido:false});
+const menu={config:{nombre:'MiPedido prueba',pais_codigo:'593',efectivo_permitido:'SI',efectivo_maximo:20,iva_porcentaje:0,precios_incluyen_iva:'SI',datos_transferencia:'Prueba sin pago',mesas:0},locales:[{id:'L',nombre:'Local ficticio',direccion:'Dirección ficticia',minimo_domicilio:0}],categorias:cats.map((nombre,i)=>({id:'c'+i,nombre,local_id:'L'})),platos,zonas:[],populares:['p0','p2'],abierto:{abierto:true}};
+const types={'.html':'text/html','.js':'application/javascript','.css':'text/css','.svg':'image/svg+xml','.png':'image/png','.json':'application/json'};
+const server=http.createServer((req,res)=>{const u=new URL(req.url,'http://localhost');const p=path.resolve(root,'.'+u.pathname);if(!p.startsWith(root+path.sep)){res.writeHead(403).end();return;}try{const b=fs.readFileSync(p);res.writeHead(200,{'content-type':types[path.extname(p)]||'application/octet-stream'}).end(b);}catch{res.writeHead(404).end();}});
+async function run(engine,device,label,url){
+ const browser=await engine.launch({headless:true});try{
+ const context=await browser.newContext({...device,serviceWorkers:'block'});const page=await context.newPage(),errors=[],writes=[];
+ page.on('pageerror',e=>errors.push(e.message));
+ page.on('dialog',d=>d.accept());
+ await page.route('**/*',async route=>{const u=route.request().url();if(!u.startsWith(url+'/'))return route.abort();if(u.endsWith('/js/datos.js'))return route.fulfill({contentType:'application/javascript',body:fs.readFileSync(path.join(root,'js/datos.js'),'utf8')+'\nwindow.DATOS.pedir=async function(a,d,o){if(a==="menuPublico")return '+JSON.stringify(menu)+';if(a==="pagoOpciones")return {efectivo:false};if(a==="syncRevision")return {revision:""};if(a==="pedidoCrear"||o&&o.guardar){window.__pruebaEscrituras=(window.__pruebaEscrituras||0)+1;}throw Error("Acción no permitida en prueba: "+a);};'});return route.continue();});
+ await page.goto(url+'/pedir.html');
+ const cart=page.locator('#btn-carrito-preenvio');
+ await cart.waitFor({state:'visible'});
+ assert.match(await cart.innerText(),/Carrito \(0\)/);
+ for(let i=0;i<cats.length;i++){
+  await page.locator('[data-cat="c'+i+'"]').click();
+  await page.locator('[data-agregar="p'+i+'"]').click();
+  await page.locator('[data-mas="p'+i+'"]').click();
+  const card=page.locator('article.plato').filter({has:page.locator('[data-ver="p'+i+'"]')});
+  assert.match(await card.locator('.preenvio-subtotal-tarjeta').innerText(),i===2?/3[,.]00/:/10[,.]00/);
+  await page.locator('[data-menos="p'+i+'"]').click();
+  assert.match(await card.locator('.preenvio-subtotal-tarjeta').innerText(),i===2?/1[,.]50/:/5[,.]00/);
+ }
+ assert.match(await cart.innerText(),/Carrito \(6\)/);
+ await page.locator('[data-cat="c0"]').click();
+ await page.locator('[data-agregar="personal"]').click();
+ await page.locator('.ventana [data-extra-q="0"]').fill('2');
+ await page.locator('.ventana #q-num').fill('2');
+ assert.match(await page.locator('#q-precio').innerText(),/12[,.]00/);
+ await page.getByRole('button',{name:'Agregar al pedido',exact:true}).click();
+ assert.match(await cart.innerText(),/Carrito \(8\)/);
+ await cart.click();
+ assert.equal(await page.locator('.ventana .preenvio-linea').count(),7);
+ await page.locator('.ventana .preenvio-linea').filter({hasText:'Jugo natural'}).getByRole('button',{name:'Editar',exact:true}).click();
+ await page.locator('#q-num').fill('3');
+ await page.getByRole('button',{name:'Guardar cambios',exact:true}).click();
+ await page.getByRole('heading',{name:'Tu carrito',exact:true}).waitFor();
+ assert.match(await page.locator('.ventana .preenvio-linea').filter({hasText:'Jugo natural'}).innerText(),/3 × Jugo natural/);
+ await page.locator('.ventana .preenvio-linea').filter({hasText:'Jugo natural'}).getByRole('button',{name:'Quitar',exact:true}).click();
+ await page.getByRole('heading',{name:'Tu carrito',exact:true}).waitFor();
+ assert.equal(await page.locator('.ventana .preenvio-linea').count(),6);
+ await page.getByRole('button',{name:'Continuar',exact:true}).click();
+ await page.locator('#form-entrega').waitFor();
+ await page.locator('#pe-nombre').fill('Cliente ficticio');
+ await page.locator('#pe-tel').fill('0991234567');
+ await page.locator('#form-entrega button[type=submit]').click();
+ await page.locator('#form-pedido').waitFor();
+ await page.locator('#pe-notas').fill('Nota de prueba');
+ await page.locator('#btn-mas-platos').click();
+ await cart.waitFor();
+ assert.match(await cart.innerText(),/Carrito \(7\)/);
+ await page.locator('#btn-ver-pedido').click();
+ await page.locator('#form-entrega button[type=submit]').click();
+ await page.locator('#form-pedido').waitFor();
+ assert.equal(await page.locator('#pe-notas').inputValue(),'Nota de prueba');
+ await page.locator('#btn-vaciar-preenvio').click();
+ await cart.waitFor();
+ assert.match(await cart.innerText(),/Carrito \(0\)/);
+ assert.equal(await page.locator('#btn-vaciar-preenvio').isDisabled(),true);
+ assert.equal(await page.evaluate(()=>window.__pruebaEscrituras||0),0);
+ assert.deepEqual(errors,[]);
+ console.log('PASS '+label+': seis categorías, cantidades, extras, carrito, edición, eliminación, navegación y vaciado; cero escrituras.');
+ }finally{await browser.close();}
+}
+(async()=>{try{await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const url='http://127.0.0.1:'+server.address().port;await run(chromium,devices['Pixel 7'],'Chromium Android emulado',url);await run(webkit,devices['iPhone 13'],'WebKit iPhone emulado',url);}catch(e){console.error(e);process.exitCode=1;}finally{server.close();}})();
