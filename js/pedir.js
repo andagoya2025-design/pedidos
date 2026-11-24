@@ -67,7 +67,7 @@
 
   function claveItem(p, extras) { return JSON.stringify([p.id,extras.slice().sort()]); }
   function unitario(it) {
-    return it.plato.precio + it.plato.extras.filter(function (x) { return it.extras.indexOf(x.nombre) >= 0; }).reduce(function (s, x) { return s + x.precio; }, 0);
+    return (Math.round(Number(it.plato.precio)*100)+it.extras.reduce(function(s,n){var x=it.plato.extras.filter(function(e){return e.nombre===n;})[0];return s+(x?Math.round(Number(x.precio)*100):0);},0))/100;
   }
   function items() { return Object.keys(carrito).map(function (k) { return carrito[k]; }).filter(function (i) { return i.cantidad > 0; }); }
   function subtotal() { return Math.round(items().reduce(function (s, i) { return s + unitario(i) * i.cantidad; }, 0) * 100) / 100; }
@@ -402,27 +402,32 @@
     pintarPlatos(); pintarBarra(true);
   }
 
+  function maxExtraUI(e){var n=Number(e.max_cantidad);return Number(e.precio)>0&&Number.isInteger(n)&&n>=1&&n<=10?n:1;}
+  function inputExtraUI(e,atributo,valor){
+    var max=maxExtraUI(e),n=Math.max(0,Math.min(max,Number(valor)||0));
+    return max>1?'<input type="number" inputmode="numeric" min="0" max="'+max+'" value="'+n+'" '+atributo+' aria-label="Porciones de '+UI.esc(e.nombre)+'">':'<input type="checkbox" '+atributo+(n?' checked':'')+'>';
+  }
+  function leerExtrasUI(extras,elemento,atributo){
+    var out=[];(extras||[]).forEach(function(e,i){var a=elemento.querySelector('['+atributo(i)+']');if(!a)return;var n=a.type==='checkbox'?(a.checked?1:0):Number(a.value);if(!Number.isInteger(n)||n<0||n>maxExtraUI(e))throw Error('Cantidad de extra inválida: '+e.nombre);for(var j=0;j<n;j++)out.push(e.nombre);});return out;
+  }
   async function agregar(pid, boton) {
     var p = plato(pid);
     if (!p.extras.length) { if (boton) volarAlCarrito(boton); return sumar(pid, 1); }
     var elegidos = [], cantidad = 1;
     var ok = await UI.ventana({
       icono: '🍽️', titulo: p.nombre, texto: 'Personaliza tu plato (opcional).',
-      html: '<div class="opciones">' + p.extras.map(function (x, i) {
-        return '<label class="opcion"><input type="checkbox" value="' + i + '"><span>' + UI.esc(x.nombre) + '</span><span class="derecha">' + (x.precio ? '+ ' + UI.dinero(x.precio) : '') + '</span></label>';
-      }).join('') + '</div>' +
-        '<div class="cantidad-fila"><span>Cantidad</span><div class="contador"><button type="button" data-q="-1" aria-label="Menos">−</button><span id="q-num">1</span><button type="button" data-q="1" aria-label="Más">＋</button></div></div>',
-      alAbrir: function (v) {
-        v.addEventListener('click', function (e) {
-          var b = e.target.closest('[data-q]'); if (!b) return;
-          cantidad = Math.max(1, Math.min(20, cantidad + Number(b.getAttribute('data-q'))));
-          UI.$('#q-num', v).textContent = cantidad;
-        });
+      html: '<div class="opciones"><b>Adicionales por plato</b>' + p.extras.map(function (x, i) {
+        return '<label class="opcion">'+inputExtraUI(x,'data-extra-q="'+i+'"',0)+'<span>'+UI.esc(x.nombre)+'</span><span class="derecha">'+(x.precio?'+ '+UI.dinero(x.precio)+' c/u':'')+'</span></label>';
+      }).join('')+'</div>'+
+        '<div class="cantidad-fila"><span>Cantidad de platos</span><div class="contador"><button type="button" data-q="-1" aria-label="Menos platos">−</button><span id="q-num">1</span><button type="button" data-q="1" aria-label="Más platos">＋</button></div></div><p><b>Subtotal: <span id="q-precio">'+UI.dinero(p.precio)+'</span></b></p>',
+      alAbrir:function(v){
+        function actualizar(){try{var ex=leerExtrasUI(p.extras,v,function(i){return 'data-extra-q="'+i+'"';});UI.$('#q-precio',v).textContent=UI.dinero(unitario({plato:p,extras:ex})*cantidad);}catch(e){UI.$('#q-precio',v).textContent='Revisa las cantidades';}}
+        v.addEventListener('click',function(e){var b=e.target.closest('[data-q]');if(!b)return;cantidad=Math.max(1,Math.min(20,cantidad+Number(b.getAttribute('data-q'))));UI.$('#q-num',v).textContent=cantidad;actualizar();});
+        v.addEventListener('input',actualizar);v.addEventListener('change',actualizar);
       },
-      botones: [{ texto: 'Cancelar', valor: false, clase: 'secundario' }, { texto: 'Agregar al pedido', valor: true, antes: function (v) {
-        elegidos = UI.$$('input:checked', v).map(function (c) { return p.extras[Number(c.value)].nombre; });
-        return true;
-      } }]
+      botones:[{texto:'Cancelar',valor:false,clase:'secundario'},{texto:'Agregar al pedido',valor:true,antes:function(v){
+        try{elegidos=leerExtrasUI(p.extras,v,function(i){return 'data-extra-q="'+i+'"';});return true;}catch(e){UI.aviso(e.message,'error');return false;}
+      }}]
     });
     if (!ok) return;
     var k = claveItem(p, elegidos);
@@ -1376,7 +1381,7 @@
         var max = limite ? Math.max(0, Math.floor(Number(p.cantidad) || 0) - (tipo === 'reducir' ? 1 : 0)) : 50;
         if (tipo === 'aumentar' && prefijo === 'o') max = Math.max(0, 50 - Number(p.cantidad || 0));
         return '<div class="ux-cambio-fila" data-busqueda="' + UI.esc(String(p.nombre || '').toLowerCase()) + '"><div class="ux-cambio-nombre"><b>' + UI.esc(p.nombre) + '</b><small>' + UI.esc(UI.dinero(p.precio)) + (prefijo === 'o' ? ' · En pedido: ' + UI.esc(p.cantidad) + (p.extras ? ' · ' + UI.esc(p.extras) : '') : '') + '</small></div><div class="ux-cambio-controles"><button type="button" class="btn secundario chico" data-ux-step="-1" aria-label="Disminuir">−</button><input aria-label="Cantidad de ' + UI.esc(p.nombre) + '" type="number" min="0" max="' + max + '" value="0" inputmode="numeric" data-ux-cant="' + prefijo + i + '"><button type="button" class="btn secundario chico" data-ux-step="1" aria-label="Aumentar">+</button></div>' +
-          (prefijo === 'n' && Array.isArray(p.extras) && p.extras.length ? '<div class="ux-cambio-extras" hidden>' + p.extras.map(function (e,j) { return '<label><input type="checkbox" data-ux-extra="' + i + '-' + j + '"> ' + UI.esc(e.nombre) + ' (+' + UI.esc(UI.dinero(e.precio)) + ')</label>'; }).join('') + '</div>' : '') + '</div>';
+          (prefijo === 'n' && Array.isArray(p.extras) && p.extras.length ? '<div class="ux-cambio-extras" hidden>' + p.extras.map(function (e,j) { return '<label>'+inputExtraUI(e,'data-ux-extra="'+i+'-'+j+'"',0)+' '+UI.esc(e.nombre)+' (+'+UI.esc(UI.dinero(e.precio))+' c/u)</label>'; }).join('') + '</div>' : '') + '</div>';
       }).join('');
     }
     var html = (filas.length ? '<h3>' + (tipo === 'cambiar' ? '1. Selecciona el producto actual' : 'Productos del pedido') + '</h3><div class="ux-cambio-lista">' + controles(filas, 'o', tipo !== 'aumentar') + '</div>' : '') +
@@ -1396,9 +1401,9 @@
           var extras = prefijo === 'o' ? String(p.extras || '') : '';
           var precio = Number(p.precio) || 0;
           if (prefijo === 'n') {
-            var elegidos = (p.extras || []).filter(function(e,j) { var check = velo.querySelector('[data-ux-extra="' + i + '-' + j + '"]'); return check && check.checked; });
-            extras = elegidos.map(function(e){ return e.nombre; }).join(', ');
-            precio += elegidos.reduce(function(s,e){ return s + Number(e.precio || 0); },0);
+            var elegidos=leerExtrasUI(p.extras,velo,function(j){return 'data-ux-extra="'+i+'-'+j+'"';});
+            extras=elegidos.join(', ');
+            precio=unitario({plato:p,extras:elegidos});
             agregados += n;
           } else { originales += n; }
           if (tipo === 'agregar' || tipo === 'aumentar') itemsSeleccionados.push({plato_id:String(p.id || p.plato_id),cantidad:n,extras:extras.split(',').map(function(e){return e.trim();}).filter(Boolean)});
@@ -1425,7 +1430,7 @@
             var n=f.querySelector('[data-ux-cant]'), ex=f.querySelector('.ux-cambio-extras'), activo=Number(n.value)>0;
             f.classList.toggle('ux-elegido',activo);
             f.classList.toggle('ux-elegido-actual',activo && n.getAttribute('data-ux-cant').charAt(0)==='o');
-            if(ex){ex.hidden=!activo;if(!activo)UI.$$('input',ex).forEach(function(b){b.checked=false;});}
+            if(ex){ex.hidden=!activo;if(!activo)UI.$('input',ex).forEach(function(b){if(b.type==='checkbox')b.checked=false;else b.value='0';});}
           });
           var caja=velo.querySelector('[data-ux-resumen]');
           try { caja.innerHTML=resumenSeleccionCambio(tipo,leer(velo)); } catch(e) { caja.textContent='Revisa las cantidades seleccionadas.'; }
