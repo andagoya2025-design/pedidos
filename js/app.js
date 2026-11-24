@@ -204,6 +204,7 @@
   }
 
   async function abrirApp(sesion, publico) {
+    if (/\/driver\.html$/.test(global.location.pathname) && sesion.rol !== 'motorizado') { MEM.limpiarSesion(); return mostrarIngreso('Este acceso es exclusivo para motorizados.'); }
     MEM.guardar('sesion', sesion); // para abrir sin internet (solo datos de la persona, nunca listas ajenas)
     APP.sesion = sesion;
     APP.publico = publico || {};
@@ -218,7 +219,7 @@
     } catch (err) {
       UI.aviso('No se pudieron cargar los locales: ' + err.message, 'error');
     }
-    APP.ir((global.location.hash || '#inicio').slice(1));
+    APP.ir((global.location.hash || (/\/driver\.html$/.test(global.location.pathname) ? '#entregas' : '#inicio')).slice(1));
   }
 
   APP.salir = async function () {

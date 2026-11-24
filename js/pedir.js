@@ -73,7 +73,7 @@
   function subtotal() { return Math.round(items().reduce(function (s, i) { return s + unitario(i) * i.cantidad; }, 0) * 100) / 100; }
   function cantidadTotal() { return items().reduce(function (s, i) { return s + i.cantidad; }, 0); }
   function cantidadPlato(pid) { return items().filter(function (i) { return i.plato.id === pid; }).reduce(function (s, i) { return s + i.cantidad; }, 0); }
-  function zonaElegida() { return entrega.tipo === 'domicilio' ? M.zonas.filter(function (z) { return z.id === entrega.zona; })[0] || null : null; }
+  function zonaElegida() { return entrega.tipo === 'domicilio' ? zonasDe(localId).filter(function (z) { return z.id === entrega.zona; })[0] || null : null; }
   function envio() { var z = zonaElegida(); return z ? z.costo : 0; }
   function propina() { return entrega.tipo === 'domicilio' && cfg().propinas !== 'NO' ? pago.propina : 0; }
   function cambio() { if (!envioPendiente) codigoEnvio = ''; cuponAplicado = null; }
@@ -478,7 +478,7 @@
   /* ---------------- Paso 2: entrega y datos ---------------- */
   function pintarEntrega() {
     $('#barra-pedido').hidden = true;
-    var cli = MEM.leer('cliente') || {};
+    var cli = checkoutMem['cliente'] || {};
     var zonas = zonasDe(localId);
     if (!entrega.tipo) entrega.tipo = zonas.length ? 'domicilio' : 'retiro';
     if (entrega.tipo === 'domicilio' && !zonas.length) entrega.tipo = 'retiro';
@@ -531,7 +531,7 @@
     $('#form-entrega').addEventListener('submit', function (e) {
       e.preventDefault();
       guardarCampos();
-      var c = MEM.leer('cliente') || {};
+      var c = checkoutMem['cliente'] || {};
       var numeroInternacional = '', errorTelefono = '';
       try { numeroInternacional = UI.telefonoInternacional(c.telefono, c.pais_telefono || cfg().pais_codigo); }
       catch (err) { errorTelefono = err.message; }
@@ -559,17 +559,17 @@
       if (entrega.tipo === 'domicilio' && mensajeCobertura() && cfg().cobertura_modo === 'bloquear') return UI.aviso('Fuera de cobertura: cambia la dirección o selecciona Retiro.', 'error');
       if (local().pausado) return UI.aviso(local().mensaje_pausa || 'Este local pausó los pedidos.', 'error');
       c.telefono = numeroInternacional;
-      MEM.guardar('cliente', c);
+      guardarCheckout('cliente', c);
       irA(3);
     });
   }
 
   function guardarCampos() {
-    var c = MEM.leer('cliente') || {};
+    var c = checkoutMem['cliente'] || {};
     ['nombre', 'telefono', 'direccion', 'referencia'].forEach(function (k) { var el = UI.$('[name=' + k + ']'); if (el) c[k] = el.value.trim(); });
     var sel = $('#pe-pais');
     if (sel) c.pais_telefono = codigoTelefonoElegido();
-    MEM.guardar('cliente', c);
+    guardarCheckout('cliente', c);
     var h = $('#pe-hora'); if (h) entrega.hora = h.value;
     var z = UI.$('input[name=zona]:checked'); if (z) entrega.zona = z.value;
   }
@@ -718,7 +718,7 @@
   }
   var efectivoCliente = null, efectivoTel = '';
   async function revisarEfectivoCliente() {
-    var tel = (MEM.leer('cliente') || {}).telefono || '';
+    var tel = (checkoutMem['cliente'] || {}).telefono || '';
     if (!UI.digitos(tel) || tel === efectivoTel) return;
     efectivoTel = tel;
     try { efectivoCliente = (await DATOS.pedir('pagoOpciones', { telefono: tel })).efectivo === true; } catch (e) { efectivoCliente = false; }
@@ -735,7 +735,7 @@
       $('#btn-volver-menu').addEventListener('click', function () { irA(1); });
       return;
     }
-    var c = cfg(), cli = MEM.leer('cliente') || {};
+    var c = cfg(), cli = checkoutMem['cliente'] || {};
     var z = zonaElegida();
     /* 3.1.3: efectivo solo si el dueño lo permite y hasta su monto máximo */
     var efOk = efectivoPermitido();
@@ -770,9 +770,9 @@
       '<div class="campo" style="margin-top:12px"><label for="pe-cupon">Cupón de descuento</label><input class="entrada" id="pe-cupon" name="cupon" maxlength="30" autocapitalize="characters" spellcheck="false"><button class="btn secundario chico" type="button" id="pe-aplicar" style="margin-top:7px">Aplicar</button><span class="ayuda" id="pe-cupon-estado">Comprueba el descuento antes de enviar tu pedido.</span></div>' +
       '<div class="campo" style="margin-bottom:0"><label for="pe-notas">Nota para la cocina</label><textarea class="entrada" id="pe-notas" name="notas" maxlength="300" placeholder="Ej. sin ají"></textarea></div></details></div>' +
       '<div class="tarjeta"><div id="totales"></div>' +
-      '<label class="casilla"><input type="checkbox" name="acepta_privacidad" id="pe-privacidad"' + (MEM.leer('acepta_privacidad') ? ' checked' : '') + '> <span>Acepto que usen mi nombre, celular y dirección solo para este pedido. <a href="privacidad.html" target="_blank" rel="noopener">Aviso de privacidad</a></span></label>' +
-      '<label class="casilla"><input type="checkbox" id="pe-politicas"' + (MEM.leer('acepta_politicas') ? ' checked' : '') + '> <span>Leí <a href="#" id="ver-politicas">cómo funciona el pedido</a> (pago, entrega y cambios).</span></label>' +
-      '<label class="casilla"><input type="checkbox" name="acepta_promos"' + (MEM.leer('acepta_promos') ? ' checked' : '') + '> <span>Quiero recibir promociones por WhatsApp (opcional).</span></label>' +
+      '<label class="casilla"><input type="checkbox" name="acepta_privacidad" id="pe-privacidad"' + (checkoutMem['acepta_privacidad'] ? ' checked' : '') + '> <span>Acepto que usen mi nombre, celular y dirección solo para este pedido. <a href="privacidad.html" target="_blank" rel="noopener">Aviso de privacidad</a></span></label>' +
+      '<label class="casilla"><input type="checkbox" id="pe-politicas"' + (checkoutMem['acepta_politicas'] ? ' checked' : '') + '> <span>Leí <a href="#" id="ver-politicas">cómo funciona el pedido</a> (pago, entrega y cambios).</span></label>' +
+      '<label class="casilla"><input type="checkbox" name="acepta_promos"' + (checkoutMem['acepta_promos'] ? ' checked' : '') + '> <span>Quiero recibir promociones por WhatsApp (opcional).</span></label>' +
       '<button class="btn bloque btn-enviar" type="submit">Enviar pedido · <span id="total-boton"></span></button>' +
       '<p class="ayuda" style="text-align:center;margin-top:8px">Recibirás tu número de pedido al instante.</p></div>' +
       '<button class="btn secundario" type="button" id="btn-atras">← Volver</button>' +
@@ -794,7 +794,7 @@
       cuponAplicado = null;
       if (!codigo) { totales(); return UI.aviso('Escribe un cupón.', 'error'); }
       try {
-        var r = await DATOS.pedir('cuponValidar', { cupon: codigo, local_id: localId, telefono: (MEM.leer('cliente') || {}).telefono, items: items().map(function (it) { return { plato_id: it.plato.id, cantidad: it.cantidad, extras: it.extras }; }) });
+        var r = await DATOS.pedir('cuponValidar', { cupon: codigo, local_id: localId, telefono: (checkoutMem['cliente'] || {}).telefono, items: items().map(function (it) { return { plato_id: it.plato.id, cantidad: it.cantidad, extras: it.extras }; }) });
         cuponAplicado = { codigo: r.codigo, descuento: r.descuento };
         $('#pe-cupon-estado').textContent = '✅ Cupón aplicado: −' + UI.dinero(r.descuento) + ' en platos.';
         totales();
@@ -816,8 +816,11 @@
     var max = Number(c.efectivo_maximo);
     return !(max > 0 && totalActual() > max);
   }
+  var checkoutMem = {};
+  function guardarCheckout(k,v) { checkoutMem[k] = v; }
+  function limpiarCheckout() { checkoutMem = {}; notasTmp = {}; cuponAplicado = null; entrega = {tipo:'',zona:'',mesa:params.get('mesa')||'',cuando:'ya',hora:''}; pago = {forma:'efectivo',propina:0}; }
   var notasTmp = {};
-  function guardarNotas() { notasTmp = { cupon: ($('#pe-cupon') || {}).value || '', notas: ($('#pe-notas') || {}).value || '' }; }
+  function guardarNotas() { ['privacidad','politicas'].forEach(function(k){var el=$('#pe-'+k); if(el) guardarCheckout('acepta_'+k,el.checked);}); var promo=UI.$('[name=acepta_promos]'); if(promo) guardarCheckout('acepta_promos',promo.checked); notasTmp = { cupon: ($('#pe-cupon') || {}).value || '', notas: ($('#pe-notas') || {}).value || '' }; }
   function restaurarNotas() { if ($('#pe-cupon')) $('#pe-cupon').value = notasTmp.cupon || ''; if ($('#pe-notas')) $('#pe-notas').value = notasTmp.notas || ''; }
 
   function totales() {
@@ -861,7 +864,7 @@
     var f = ev.target, boton = f.querySelector('button[type=submit]');
     if (envioPendiente) return recuperarEnvio(boton);
     var d = UI.leerFormulario(f);
-    var cli = MEM.leer('cliente') || {};
+    var cli = checkoutMem['cliente'] || {};
     var priv = $('#pe-privacidad'), promos = f.querySelector('[name=acepta_promos]');
     if (!priv.checked) { UI.aviso('Marca la casilla del aviso de privacidad para enviar.', 'error'); priv.focus(); priv.closest('.casilla').classList.add('falta'); return; }
     var pol = $('#pe-politicas');
@@ -870,8 +873,8 @@
     if (local().pausado) return UI.aviso(local().mensaje_pausa || 'Este local pausó los pedidos.', 'error');
     if (mensajeCobertura() && cfg().cobertura_modo === 'bloquear' && entrega.tipo === 'domicilio') return UI.aviso('La ubicación está fuera de cobertura. Cambia a Retiro o corrige la dirección.', 'error');
     if (pago.forma === 'transferencia' && cuentasBanco().length > 1 && !pago.cuenta) { UI.aviso('Elige a qué cuenta vas a pagar.', 'error'); var cb = UI.$('.cuentas'); if (cb) cb.scrollIntoView({ block: 'center' }); return; }
-    MEM.guardar('acepta_politicas', true);
-    MEM.guardar('acepta_privacidad', true); MEM.guardar('acepta_promos', !!(promos && promos.checked));
+    guardarCheckout('acepta_politicas', true);
+    guardarCheckout('acepta_privacidad', true); guardarCheckout('acepta_promos', !!(promos && promos.checked));
     if (!codigoEnvio) codigoEnvio = envioPendiente ? envioPendiente.op_id : UI.codigoEnvio();
     var dom = entrega.tipo === 'domicilio';
     var datos = {
@@ -902,7 +905,7 @@
           i: datos.items.map(function (x) { var pl = plato(x.plato_id); return { p: x.plato_id, c: x.cantidad, x: x.extras, n: pl ? pl.nombre : '' }; }) });
         var detalle = datos.items.map(function (x) { var pl = plato(x.plato_id); return { plato: pl, cantidad: x.cantidad, extras: x.extras }; });
         r.pedido.ubic_por_wa = !!(ubic && ubic.fuente === 'whatsapp'); // 3.1.1: solo entonces se pide la ubicación por WhatsApp
-        carrito = {}; codigoEnvio = ''; envioPendiente = null; ubic = null; pago.propina = 0;
+        carrito = {}; codigoEnvio = ''; envioPendiente = null; ubic = null; limpiarCheckout();
         try { global.sessionStorage.removeItem('mipedido_envio_pendiente'); } catch (e) { /* sin almacenamiento */ }
         UI.vibrar([30, 40, 30]);
         pintarExito(r.pedido, detalle);
@@ -937,7 +940,7 @@
         var carritoActual = Object.keys(carrito).map(function (k) { var x = carrito[k]; return { plato_id: (x.plato && x.plato.id) || x.plato_id || x.p || k, cantidad: x.cantidad || x.c, extras: x.extras || x.x || '' }; });
         var esMismoCarrito = firmaItems(carritoActual) === firmaItems(original.items);
         MEM.guardar('ultimo_carrito', { local: original.local_id, items: original.items });
-        if (esMismoCarrito) { carrito = {}; ubic = null; pago.propina = 0; }
+        if (esMismoCarrito) { carrito = {}; ubic = null; limpiarCheckout(); }
         codigoEnvio = ''; envioPendiente = null;
         try { global.sessionStorage.removeItem('mipedido_envio_pendiente'); } catch (e) { /* sin almacenamiento */ }
         UI.aviso('Pedido ' + p.numero + ' localizado. No se ha creado otro.', 'exito');
@@ -1067,7 +1070,7 @@
         }
         for (var j = 0; j < act.length; j++) { // pedidos viejos sin clave: número + celular
           var x = act[j]; if (x.s || res[x.n]) continue;
-          try { res[x.n] = await DATOS.pedir('pedidoConsultar', { numero: x.n, telefono: x.tel || (MEM.leer('cliente') || {}).telefono || '' }); } catch (e) { res[x.n] = { consulta_error: true }; }
+          try { res[x.n] = await DATOS.pedir('pedidoConsultar', { numero: x.n, telefono: x.tel || (checkoutMem['cliente'] || {}).telefono || '' }); } catch (e) { res[x.n] = { consulta_error: true }; }
         }
         var cambio2 = false;
         lista.forEach(function (x) {
@@ -1092,7 +1095,7 @@
     await Promise.all(act.filter(function (x) { return res[x.n] && !res[x.n].consulta_error && !res[x.n].no_existe; }).map(async function (x) {
       try {
         var respuesta = await DATOS.pedir('pedidoCambiosConsultar', x.s ? { s: x.s } :
-          { numero: x.n, telefono: x.tel || (MEM.leer('cliente') || {}).telefono || '' });
+          { numero: x.n, telefono: x.tel || (checkoutMem['cliente'] || {}).telefono || '' });
         if (respuesta.numero === x.n) solicitudesPorPedido[x.n] = respuesta.solicitudes || [];
       } catch (e) { /* Seguimiento sigue funcionando si falla la consulta de solicitudes. */ }
     }));
@@ -1117,7 +1120,7 @@
           : '') +
         (sol.aplicado ? '<small>El adicional ya forma parte de tu pedido.</small>' : '<small>Esta solicitud aún no modifica el pedido ni autoriza un cobro automático.</small>') + '</div>';
     }).join('') : '<div class="seg-caja"><b>' + UI.esc(x.n) + '</b><div class="item-sub">No se pudo actualizar el estado. Conservamos el último estado conocido: ' + UI.esc(x.e) + '.</div><button class="enlace" type="button" data-seg-act>Reintentar</button></div>'; }).join('') +
-      (hist.length ? '<details class="seg-caja mis-pedidos"' + (act.length ? '' : ' open') + '><summary><b>🧾 Mis pedidos anteriores</b> <small>(' + hist.length + ')</small></summary>' +
+      (hist.length ? '<details class="seg-caja mis-pedidos"' + '' + '><summary><b>🧾 Mis pedidos anteriores</b> <small>(' + hist.length + ')</small></summary>' +
         '<div class="lista">' + hist.map(function (x) {
           var fecha = new Date(x.f || Date.now());
           return '<div class="mp-fila"><div class="item-cuerpo"><div class="item-titulo">' + UI.esc(x.n) + ' · ' + (x.t ? UI.esc(UI.dinero(x.t)) : '') + '</div>' +
@@ -1149,7 +1152,7 @@
             if (!confirmado) return;
             try {
               var payload = x.s ? { s: x.s } : {
-                numero: x.n, telefono: x.tel || (MEM.leer('cliente') || {}).telefono || ''
+                numero: x.n, telefono: x.tel || (checkoutMem['cliente'] || {}).telefono || ''
               };
               payload.id = sol.id;
               payload.cotizacion_id = sol.cotizacion.id;
@@ -1167,7 +1170,7 @@
       });
     });
     UI.$$('[data-seg-act]', cont).forEach(function (b) { b.addEventListener('click', function (e) { UI.trabajando(e.currentTarget, function () { return pintarSeguimiento(true); }); }); });
-    UI.$$('[data-calificar]', cont).forEach(function (b) { b.addEventListener('click', function () { var x = lista.filter(function (y) { return y.n === b.getAttribute('data-calificar'); })[0]; if (x) calificar({ numero: x.n, telefono: x.tel || (MEM.leer('cliente') || {}).telefono || '', s: x.s }); }); });
+    UI.$$('[data-calificar]', cont).forEach(function (b) { b.addEventListener('click', function () { var x = lista.filter(function (y) { return y.n === b.getAttribute('data-calificar'); })[0]; if (x) calificar({ numero: x.n, telefono: x.tel || (checkoutMem['cliente'] || {}).telefono || '', s: x.s }); }); });
     UI.$$('[data-comprobante]', cont).forEach(function (b) { b.addEventListener('click', function () { var p = res[b.getAttribute('data-comprobante')]; if (p) UI.abrirWhatsApp(cfg().whatsapp, 'Hola, envío el comprobante del pedido *' + p.numero + '* por ' + UI.dinero(p.total) + (p.cuenta_pago ? ' (a ' + p.cuenta_pago + ')' : '') + '. 👇'); }); });
     UI.$$('[data-escribir]', cont).forEach(function (b) { b.addEventListener('click', async function () {
       var numero = b.getAttribute('data-escribir');
@@ -1205,7 +1208,7 @@
       var politica;
       try {
         b.disabled = true;
-        politica = await DATOS.pedir('pedidoPoliticaCambios', x.s ? { s: x.s, tipo: tipo } : { numero: numero, telefono: x.tel || (MEM.leer('cliente') || {}).telefono || '', tipo: tipo });
+        politica = await DATOS.pedir('pedidoPoliticaCambios', x.s ? { s: x.s, tipo: tipo } : { numero: numero, telefono: x.tel || (checkoutMem['cliente'] || {}).telefono || '', tipo: tipo });
       } catch (err) {
         UI.aviso('No se pudo verificar si el restaurante acepta cambios. Intenta nuevamente.', 'error');
         return;
@@ -1228,7 +1231,7 @@
           b.disabled = true;
           var solicitud = await DATOS.pedir('pedidoCambioSolicitar', x.s ?
             { s: x.s, tipo: tipo, detalle: detalle } :
-            { numero: numero, telefono: x.tel || (MEM.leer('cliente') || {}).telefono || '', tipo: tipo, detalle: detalle });
+            { numero: numero, telefono: x.tel || (checkoutMem['cliente'] || {}).telefono || '', tipo: tipo, detalle: detalle });
           if (solicitud.estado === 'Pendiente') {
             UI.aviso(solicitud.repetida ? 'Tu solicitud ya está pendiente de respuesta.' : 'Solicitud enviada al restaurante. Espera su confirmación; tu pedido no cambió todavía.', 'exito');
             return;

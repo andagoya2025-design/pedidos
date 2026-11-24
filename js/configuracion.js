@@ -358,32 +358,8 @@
 
   /* ---------------- Licencia ---------------- */
   async function pintarLicencia(forzar) {
-    var r = await traerConfig(forzar);
-    var lic = r.licencia || {};
-    cuerpo().innerHTML =
-      '<form class="tarjeta" id="form-licencia" style="max-width:560px">' +
-      '<h3 style="margin-top:0">Licencia del sistema <span class="etiqueta ' + (lic.estado === 'activa' ? 'ok' : 'mal') + '">' + (lic.estado === 'activa' ? 'Activa' : 'Suspendida') + '</span></h3>' +
-      '<p class="subtitulo">Si se suspende o vence, el negocio no recibe pedidos nuevos. Ningún dato se borra.</p>' +
-      '<div class="campo"><label for="li-estado">Estado</label><select class="entrada" id="li-estado" name="licencia_estado">' +
-      '<option value="activa"' + (r.config.licencia_estado === 'activa' ? ' selected' : '') + '>Activa</option><option value="suspendida"' + (r.config.licencia_estado === 'suspendida' ? ' selected' : '') + '>Suspendida</option></select></div>' +
-      '<div class="campo"><label for="li-vence">Vence el</label><input class="entrada" id="li-vence" name="licencia_vence" type="date" value="' + UI.esc(r.config.licencia_vence) + '"></div>' +
-      '<button class="btn bloque" type="submit">Guardar licencia</button></form>';
-    UI.$('#form-licencia').addEventListener('submit', function (e) {
-      e.preventDefault();
-      var boton = e.target.querySelector('button[type=submit]');
-      var datos = UI.leerFormulario(e.target);
-      UI.trabajando(boton, async function () {
-        try {
-          await DATOS.pedir('configGuardar', { config: datos }, { guardar: true });
-          await traerConfig(true);
-          APP.publico.licencia = cache.config.licencia;
-          UI.aviso('Licencia guardada.', 'ok');
-          pintarLicencia(false);
-        } catch (err) {
-          UI.error('No se guardó la licencia', err.message);
-        }
-      });
-    });
+    var r = await traerConfig(forzar), lic = r.licencia || {};
+    cuerpo().innerHTML = '<div class="tarjeta"><h3>Licencia del sistema</h3><p>Estado: '+UI.esc(lic.estado||'No disponible')+'</p><p>Vencimiento: '+UI.esc(lic.vence||'No disponible')+'</p><p>Contacte al proveedor para renovar. Sus datos se conservan.</p></div>';
   }
 
   /* ---------------- Bitácora ---------------- */

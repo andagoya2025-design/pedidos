@@ -16,7 +16,9 @@
   'use strict';
 
   /* ---------- Memoria local: una sola clave ---------- */
-  var CLAVE_MEMORIA = 'app_memoria_v1';
+  var perfil = /\/pedir\.html$/.test(global.location.pathname) ? 'cliente' : /\/driver\.html$/.test(global.location.pathname) ? 'driver' : 'admin';
+  var CLAVE_MEMORIA = perfil === 'admin' ? 'app_memoria_v1' : 'mipedido_'+perfil+'_v2';
+  if(perfil==='cliente') { try { if(!global.localStorage.getItem(CLAVE_MEMORIA)){var anterior=JSON.parse(global.localStorage.getItem('app_memoria_v1')||'{}');var copia={};Object.keys(anterior).filter(function(k){return /^(mis_pedidos|ultimo_carrito|tema)$/.test(k);}).forEach(function(k){copia[k]=anterior[k];});global.localStorage.setItem(CLAVE_MEMORIA,JSON.stringify(copia));} }catch(e){} }
   var MEMORIA = {
     _todo: function () {
       try { return JSON.parse(global.localStorage.getItem(CLAVE_MEMORIA) || '{}') || {}; } catch (e) { return {}; }
@@ -91,7 +93,7 @@
     if (guardar && scriptViejo) {
       throw ErrorApp('El sistema se está actualizando. No se guardó nada; intente en unos minutos.', 'ACTUALIZANDO');
     }
-    var cuerpo = { accion: accion, data: data || {}, token: MEMORIA.leer('token') || '', dispositivo: dispositivo() };
+    var cuerpo = { accion: accion, data: data || {}, token: perfil === 'cliente' ? '' : (MEMORIA.leer('token') || ''), dispositivo: dispositivo() };
     var intentos = guardar ? 1 : 3;
     var ultimo;
     for (var i = 0; i < intentos; i++) {

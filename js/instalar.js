@@ -46,9 +46,9 @@
     var faltan = (estado.hojas || []).filter(function (h) { return !h.existe; }).length;
     if (estado.instalado) {
       pasos.push(fila('Sistema instalado', 'ok', (estado.config && estado.config.negocio_nombre) || ''));
-      pasos.push(fila('Hojas del sistema (18)', faltan ? 'aviso' : 'ok', faltan ? 'Faltan ' + faltan + ' hoja(s). No borre hojas del sistema.' : ''));
+      pasos.push(fila('Hojas del sistema', faltan ? 'aviso' : 'ok', faltan ? 'Faltan ' + faltan + ' hoja(s). No borre hojas del sistema.' : ''));
       pintar();
-      d.insertAdjacentHTML('beforeend', '<div class="acciones"><a class="btn bloque" href="./">Ir a la aplicación</a></div>');
+      d.insertAdjacentHTML('beforeend', '<div class="acciones"><a class="btn bloque" href="./">MiPedido Pro</a><a class="btn bloque" href="./pedir.html">MiPedido Cliente</a><a class="btn bloque" href="./driver.html">MiPedido Driver</a><p>Instalación existente: conserve la base y la URL /exec. Haga respaldo antes de actualizar.</p></div>');
       return;
     }
     pasos.push(fila('Sistema instalado', 'aviso', 'Todavía no. Complete los datos de abajo.'));

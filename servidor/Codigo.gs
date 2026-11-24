@@ -482,11 +482,12 @@ function leerConfig_() {
 }
 
 function estadoLicencia_(cfg) {
-  var estado = String(cfg.licencia_estado || 'activa');
+  var estado = String(cfg.licencia_estado || '');
   var vence = String(cfg.licencia_vence || '');
   var hoy = Utilities.formatDate(new Date(), zona_(cfg), 'yyyy-MM-dd');
-  var vencida = !!vence && vence < hoy;
-  return { estado: (estado === 'suspendida' || vencida) ? 'suspendida' : 'activa', vence: vence, vencida: vencida };
+  var valida = /^\d{4}-\d{2}-\d{2}$/.test(vence) && !isNaN(Date.parse(vence + 'T00:00:00Z')) && new Date(vence + 'T00:00:00Z').toISOString().slice(0, 10) === vence;
+  var vencida = valida && vence < hoy;
+  return { estado: (estado !== 'activa' || !valida || vencida) ? 'suspendida' : 'activa', vence: vence, vencida: vencida };
 }
 
 function accionConfigObtener_() {
@@ -495,6 +496,7 @@ function accionConfigObtener_() {
 
 function accionConfigGuardar_(data, ctx) {
   var cambios = data.config || {};
+  if (Object.prototype.hasOwnProperty.call(cambios,'licencia_estado') || Object.prototype.hasOwnProperty.call(cambios,'licencia_vence')) throw fallo_('La licencia se administra por el proveedor.', 'LICENCIA');
   var permitidas = Object.keys(CONFIG_DEFECTO);
   var limpio = {};
   Object.keys(cambios).forEach(function (k) {
@@ -700,6 +702,9 @@ function accionLocalGuardar_(data, ctx) {
   if (!lock.tryLock(15000)) throw fallo_('El sistema está ocupado. Intente en un momento.', 'OCUPADO');
   try {
     var filas = leerTabla_('locales');
+    var limite = PropertiesService.getScriptProperties().getProperty('LICENCIA_MAX_LOCALES');
+    if (limite !== null && (!/^\d+$/.test(limite) || Number(limite)<1)) throw fallo_('Límite comercial inválido. Contacte al proveedor.','LICENCIA');
+    if (!id && limite !== null && filas.length >= Number(limite)) throw fallo_('Ha alcanzado el límite de establecimientos contratados.','LICENCIA');
     var clave = claveComparar_(nombre);
     var repetido = filas.filter(function (r) { return claveComparar_(r.nombre) === clave && String(r.id) !== id; })[0];
     if (repetido) throw fallo_('Ya existe un local llamado "' + repetido.nombre + '".', 'DUPLICADO');
