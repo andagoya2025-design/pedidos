@@ -73,8 +73,9 @@
       '<p class="subtitulo">Día de trabajo ' + UI.esc(est.caja.dia_trabajo.split('-').reverse().join('/')) + ' · abrió @' + UI.esc(est.caja.abierta_por) + ' a las ' + UI.esc(UI.hora(est.caja.apertura)) + '</p>' +
       '<div class="cifras">' +
       cifra('Debe haber en caja', d(r.esperado), 'destacada') + cifra('Fondo inicial', d(r.fondo)) + cifra('Efectivo de motorizados', d(r.liquidado)) + cifra('Efectivo en el local', d(r.efectivo_local)) +
-      cifra('Entradas', d(r.entradas)) + cifra('Salidas', d(r.salidas)) + cifra('Fondos a motorizados', d(r.fondos_motorizado)) + cifra('Ventas del día', d(r.ventas) + ' <small style="font-size:13px">(' + r.pedidos + ')</small>') +
+      cifra('Entradas', d(r.entradas)) + cifra('Salidas', d(r.salidas)) + cifra('Fondos a motorizados', d(r.fondos_motorizado)) + cifra('Pedidos del día (sin propina)', d(r.ventas_sin_propina) + ' <small style="font-size:13px">(' + r.pedidos + ')</small>') +
       '</div>' +
+      (est.liquidaciones_incompletas||[]).map(function(l){return '<div class="tarjeta"><b>Liquidación incompleta · '+d(l.entregado)+'</b><p>Recupera el registro original sin volver a recibir dinero.</p><button class="btn" data-recuperar="'+UI.esc(l.id)+'">Recuperar liquidación</button></div>';}).join('')+
       '<div class="acciones" style="margin:14px 0">' +
       '<button class="btn secundario" type="button" data-c="salida">− Salida</button>' +
       '<button class="btn secundario" type="button" data-c="entrada">＋ Entrada</button>' +
@@ -91,10 +92,11 @@
           (t.verificado ? '<span class="etiqueta ok">Verificada</span>' : '<button class="btn chico" type="button" data-verificar="' + UI.esc(t.id) + '">Verificar</button>') + '</div>';
       }).join('') + '</div>' + (r.transferencias_pendientes ? '<p class="ayuda" style="margin:8px 0 0">Sin verificar: ' + d(r.transferencias_pendientes) + '</p>' : '') : '<p class="subtitulo" style="margin:0">Sin pagos digitales hoy.</p>') + '</div>' +
       '</div>' +
+      '<div class="tarjeta" style="margin-top:14px"><h3>Propinas digitales por conciliar</h3><p class="ayuda">No son ingresos propios ni efectivo de caja. Para pedidos históricos, verifica primero si ya se pagaron. Registra únicamente un pago bancario real.</p><b>'+d(r.propinas_digitales_pendientes||0)+'</b>'+ (est.propinas_pendientes||[]).map(function(p){return '<div class="item"><div class="item-cuerpo"><b>'+UI.esc(p.numero)+' · '+d(p.monto)+'</b><small> Motorizado: '+UI.esc((motos.filter(function(m){return String(m.id)===p.motorizado_id;})[0]||{}).nombre||p.motorizado_id)+'</small></div><button class="btn chico" data-propina-pago="'+UI.esc(p.id)+'">Conciliar pago</button></div>';}).join('')+'</div>'+
       '<div class="tarjeta" style="margin-top:14px"><h3 style="margin-top:0">Movimientos</h3>' + (est.movimientos.length || est.liquidaciones.length ? '<div class="lista">' +
         est.liquidaciones.map(function (l) {
           var m = motos.filter(function (x) { return x.id === l.motorizado_id; })[0];
-          return '<div class="item"><div class="item-cuerpo"><div class="item-titulo">Liquidación · ' + UI.esc(m ? m.nombre : '') + '</div><div class="item-sub">' + UI.esc(UI.hora(l.fecha)) + ' · debía ' + d(l.fondo + l.efectivo_cobrado) + ' · recibió @' + UI.esc(l.recibido_por) + '</div></div><div style="text-align:right"><b>' + d(l.entregado) + '</b>' + (l.diferencia ? '<div class="item-sub" style="color:' + (l.diferencia < 0 ? 'var(--error)' : 'var(--exito)') + '">dif. ' + d(l.diferencia) + '</div>' : '') + '</div></div>';
+          return '<div class="item"><div class="item-cuerpo"><div class="item-titulo">Liquidación '+(l.estado==='Aplicando'?'incompleta':'')+' · ' + UI.esc(m ? m.nombre : '') + '</div><div class="item-sub">' + UI.esc(UI.hora(l.fecha)) + ' · debía ' + d(l.fondo + l.efectivo_cobrado) + ' · recibió @' + UI.esc(l.recibido_por) + '</div></div><div style="text-align:right"><b>' + d(l.entregado) + '</b>' + (l.diferencia ? '<div class="item-sub" style="color:' + (l.diferencia < 0 ? 'var(--error)' : 'var(--exito)') + '">dif. ' + d(l.diferencia) + '</div>' : '') + '</div></div>';
         }).join('') +
         est.movimientos.map(function (m) {
           var signo = m.tipo === 'entrada' ? '+' : '−';
@@ -102,10 +104,12 @@
         }).join('') + '</div>' : '<p class="subtitulo" style="margin:0">Sin movimientos todavía.</p>') + '</div>';
     UI.$$('[data-c]', c).forEach(function (b) { b.addEventListener('click', function () { accion(b, b.getAttribute('data-c')); }); });
     UI.$$('[data-liquidar]', c).forEach(function (b) { b.addEventListener('click', function () { liquidar(b, b.getAttribute('data-liquidar')); }); });
-    UI.$$('[data-verificar]', c).forEach(function (b) {
+    UI.$('[data-recuperar]',c).forEach(function(b){b.addEventListener('click',async function(){var l=(est.liquidaciones_incompletas||[]).filter(function(x){return x.id===b.getAttribute('data-recuperar');})[0];if(!l)return;if(await UI.confirmar('Recuperar liquidación','Confirma que el dinero de '+UI.dinero(l.entregado)+' ya fue recibido. No cobres otra vez.','Recuperar'))await guardar(b,'cajaLiquidar',{motorizado_id:l.motorizado_id,entregado:l.entregado,recuperar_id:l.id},'Liquidación recuperada.');});});
+    UI.$('[data-propina-pago]',c).forEach(function(b){b.addEventListener('click',async function(){var p=(est.propinas_pendientes||[]).filter(function(x){return x.id===b.getAttribute('data-propina-pago');})[0];if(!p)return;var ref=await UI.pedirDato({titulo:'Conciliar propina '+p.numero,texto:'Registra sólo si ya comprobaste el pago bancario de '+UI.dinero(p.monto)+' al motorizado. No se envía dinero desde aquí.',etiqueta:'Referencia del pago real',boton:'Confirmar pago realizado',validar:function(v){return v.trim().length<3?'Ingresa la referencia.':'';}});if(ref!==null)await guardar(b,'cajaPropinaDigital',{id:p.id,monto:p.monto,motorizado_id:p.motorizado_id,referencia:ref,confirmacion_bancaria:true},'Propina conciliada.');});});
+    UI.$('[data-verificar]', c).forEach(function (b) {
       b.addEventListener('click', function () {
         UI.trabajando(b, async function () {
-          try { await DATOS.pedir('pedidoPagoVerificar', { id: b.getAttribute('data-verificar'), verificado: true }, { guardar: true }); UI.aviso('Transferencia verificada.', 'ok'); await cargar(); }
+          try { var t=est.transferencias.filter(function(x){return x.id===b.getAttribute('data-verificar');})[0];if(!t)throw Error('Actualiza la caja.');await DATOS.pedir('pedidoPagoVerificar', { id:t.id, verificado:true,total_esperado:Number(t.total) }, { guardar: true }); UI.aviso('Transferencia verificada.', 'ok'); await cargar(); }
           catch (err) { UI.error('No se guardó', err.message); }
         });
       });
@@ -183,7 +187,7 @@
       validar: function (v) { return !(UI.numero(v) >= 0) ? 'Escriba el monto.' : ''; }
     });
     if (monto === null) return;
-    var r = await guardar(boton, 'cajaLiquidar', { motorizado_id: motoId, entregado: UI.numero(monto) }, '');
+    var r = await guardar(boton, 'cajaLiquidar', { motorizado_id: motoId, entregado: UI.numero(monto),total_esperado:Number(p.total),pedidos_esperados:p.pedidos.slice(),op_id:UI.codigoEnvio() }, '');
     if (r && r.liquidacion) {
       var dif = r.liquidacion.diferencia;
       UI.ventana({ icono: dif === 0 ? '✅' : '⚠️', titulo: dif === 0 ? 'Cuadró exacto' : (dif < 0 ? 'Faltan ' + UI.dinero(-dif) : 'Sobran ' + UI.dinero(dif)), texto: p.nombre + ' entregó ' + UI.dinero(r.liquidacion.entregado) + '. Queda registrado.' });
