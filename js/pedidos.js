@@ -669,7 +669,7 @@
     if (op === 'wa_moto') return UI.abrirWhatsApp(p.motorizado.celular, 'Pedido ' + p.numero + ' · ' + p.cliente_nombre + ' · ' + p.telefono + '\n' + (p.direccion || '') + (p.referencia ? ' (' + p.referencia + ')' : '') + '\nMapa: ' + UI.enlaceMapa(p) + '\nCobrar: ' + (p.forma_pago === 'efectivo' ? UI.dinero(p.total) : 'ya pagado, no cobrar') +
       (APP.publico && APP.publico.codigo_entrega !== 'NO' && p.pide_codigo !== false ? '\n🔢 Al entregar, pide al cliente su código de 4 números.' : ''));
     if (op === 'asignar') return asignar(boton, p);
-    if (op === 'verificar') return guardar(boton, 'pedidoPagoVerificar', { id: p.id, verificado: !p.pago_verificado }, 'Listo.');
+    if (op === 'verificar') return guardar(boton, 'pedidoPagoVerificar', { id: p.id, verificado: !p.pago_verificado,total_esperado:Number(p.total) }, 'Listo.');
     if (op === 'ubicacion') {
       var enlace = await UI.pedirDato({ icono: '📍', titulo: 'Ubicación de ' + p.numero, etiqueta: 'Enlace de ubicación', valor: p.ubicacion_enlace, ph: 'https://maps.app.goo.gl/…', ayuda: 'En WhatsApp: abra la ubicación que mandó el cliente → Compartir → Copiar enlace, y péguelo aquí. Reemplaza a la ubicación anterior.', max: 400, validar: function (v) { return v && !/^https:\/\//.test(v) ? 'Pegue el enlace completo (empieza con https://).' : ''; } });
       if (enlace !== null) guardar(boton, 'pedidoUbicacion', { id: p.id, enlace: enlace }, 'Ubicación guardada: el motorizado usará esta.');
@@ -684,7 +684,10 @@
     }
     if (op === 'anular') {
       var motivo = await UI.pedirDato({ icono: '⛔', titulo: 'Anular ' + p.numero, texto: 'El pedido no se borra: queda anulado con el motivo.', etiqueta: 'Motivo', area: true, boton: 'Anular pedido', peligro: true, validar: function (v) { return v.length < 3 ? 'Escriba el motivo.' : ''; } });
-      if (motivo !== null) guardar(boton, 'pedidoAnular', { id: p.id, motivo: motivo }, p.numero + ' anulado.');
+      if(motivo===null)return;
+      var datosAnular={id:p.id,motivo:motivo,total_esperado:Number(p.total)};
+      if(UI.esDigital(p.forma_pago)&&p.pago_verificado===true){if(!await UI.confirmar('Confirmar devolución bancaria','Confirma únicamente si ya devolviste '+UI.dinero(p.total)+' al cliente y comprobaste el banco. El sistema no realiza la transferencia.','Confirmar devolución realizada',true))return;datosAnular.devolucion_confirmada=true;}
+      guardar(boton,'pedidoAnular',datosAnular,p.numero+' anulado.');
     }
   }
 
