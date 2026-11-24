@@ -290,7 +290,7 @@ function accionSyncRevision_() {
 }
 function marcarRevisionSync_(nombre) {
   // No notificar escrituras de auditoría, sesiones ni otros registros ajenos a pedidos.
-  if (['pedidos','pedido_detalle','pedido_cambios','clientes','motorizados','caja','caja_movimientos','turnos','turnos_motorizados','rastreo','configuracion','zonas_envio','platos','locales'].indexOf(nombre) >= 0) syncPendiente_ = true;
+  if (['pedidos','pedido_detalle','pedido_cambios','clientes','motorizados','caja','caja_movimientos','liquidaciones_motorizado','turnos','rastreo','configuracion','zonas_envio','platos','locales'].indexOf(nombre) >= 0) syncPendiente_ = true;
 }
 function publicarRevisionSync_() {
   syncPendiente_ = false;
