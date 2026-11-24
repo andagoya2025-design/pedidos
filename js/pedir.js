@@ -555,7 +555,7 @@
     if(accion.tipo==='vaciar')return vaciarPreenvio();
     if(accion.tipo==='continuar')return $('#btn-ver-pedido').click();
     var it=lista[accion.i];if(!it||carrito[claveItem(it.plato,it.extras)]!==it||it.cantidad<=0)return;
-    if(accion.tipo==='editar'&&!it.plato.agotado)return agregar(it.plato.id,null,it);
+    if(accion.tipo==='editar'&&!it.plato.agotado){await agregar(it.plato.id,null,it);if(paso===1&&puedeVaciarPreenvio())return abrirCarritoPreenvio();return;}
     if(accion.tipo==='quitar'){delete carrito[claveItem(it.plato,it.extras)];cambio();pintarPlatos();pintarBarra(false);if(cantidadTotal())return abrirCarritoPreenvio();}
   }
 
@@ -709,13 +709,18 @@
   }
 
   /* ----- Ubicación: GPS con mapa, pegar enlace, quitar ----- */
+  var ubicSolicitud=0;
+  function ubicacionPreenvioVigente(estado,solicitud){
+    return !!estado&&paso===2&&entrega.tipo==='domicilio'&&estado===$('#ubic-zona')&&solicitud===ubicSolicitud&&!envioPendiente;
+  }
   function conectarUbicacion() {
     $('#btn-gps').addEventListener('click', function (e) {
       var b = e.currentTarget;
       UI.trabajando(b, async function () {
-        var estado = $('#ubic-zona');
+        var estado = $('#ubic-zona'), solicitud=++ubicSolicitud;
         estado.innerHTML = '<p class="ayuda">Buscando tu ubicación… acepta el permiso si te lo pide.</p>';
         var pos = await UI.ubicacion();
+        if(!ubicacionPreenvioVigente(estado,solicitud))return;
         if (!pos) { estado.innerHTML = '<div class="banda error" style="margin:10px 0 0;text-align:left">⚠️ <span>No pudimos tomar tu ubicación.<br>' + UI.ayudaUbicacion() + '<br><br>Si no se puede, usa <b>«Pegar ubicación»</b> o <b>«Por WhatsApp»</b>, o escribe tu dirección.</span></div>'; return; }
         ubic = { lat: pos.lat, lng: pos.lng, precision: pos.precision, fuente: 'gps' };
         cambio(); mostrarMapa(); zonaPorPunto();
@@ -723,7 +728,7 @@
     });
     $('#btn-pegar').addEventListener('click', pegarUbicacion);
     $('#btn-ubic-wa').addEventListener('click', function () {
-      ubic = { lat: '', lng: '', fuente: 'whatsapp', enlace: '' }; cambio();
+      ubicSolicitud++;ubic = { lat: '', lng: '', fuente: 'whatsapp', enlace: '' }; cambio();
       if (mapa) { mapa.destruir(); mapa = null; }
       $('#ubic-zona').innerHTML = '<div class="ubic-lista">💬 <span>Al enviar el pedido te sale el botón <b>«Enviar mi ubicación por WhatsApp»</b>. En el chat toca <b>📎 (o +) → Ubicación → Enviar mi ubicación actual</b>.</span><button class="btn secundario chico" type="button" id="btn-quitar">✕</button></div>';
       $('#btn-quitar').addEventListener('click', quitarUbicacion);
@@ -745,8 +750,10 @@
   async function pegarUbicacion() {
     /* Camino rápido: si ya copió el enlace, se usa con un solo toque.
        3.1.5: en iPhone el navegador no deja leer lo copiado → se va directo al cuadro para pegar con el dedo. */
+    var estado=$('#ubic-zona'),solicitud=++ubicSolicitud;
     var ios = /iPhone|iPad|iPod/.test(global.navigator.userAgent);
     var enlace = await leerCopiado(); // en iPhone aparece la burbuja «Pegar»: al tocarla se usa directo
+    if(!ubicacionPreenvioVigente(estado,solicitud))return;
     if (!enlace) {
       var dato = '';
       var ok = await UI.ventana({
@@ -769,15 +776,17 @@
           return true;
         } }]
       });
-      if (!ok || !dato) return;
+      if (!ok || !dato || !ubicacionPreenvioVigente(estado,solicitud)) return;
       enlace = dato;
     }
-    var estado = $('#ubic-zona');
+    if(!ubicacionPreenvioVigente(estado,solicitud))return;
     estado.innerHTML = '<p class="ayuda">Leyendo la ubicación…</p>';
     try {
       var r = await DATOS.pedir('ubicacionResolver', { enlace: enlace, disp_id: UI.dispId() });
+      if(!ubicacionPreenvioVigente(estado,solicitud))return;
       if (r.punto) { ubic = { lat: r.punto.lat, lng: r.punto.lng, fuente: 'enlace', enlace: enlace }; cambio(); mostrarMapa(); zonaPorPunto(); return; }
     } catch (err) { /* se guarda el enlace tal cual */ }
+    if(!ubicacionPreenvioVigente(estado,solicitud))return;
     ubic = { lat: '', lng: '', fuente: 'enlace', enlace: enlace }; cambio();
     estado.innerHTML = '<div class="ubic-lista">✅ <span>Ubicación guardada. El motorizado abrirá tu enlace.</span><button class="btn secundario chico" type="button" id="btn-quitar">✕ Quitar</button></div>';
     $('#btn-quitar').addEventListener('click', quitarUbicacion);
@@ -792,7 +801,7 @@
     mapa = UI.mapa($('#mapa'), { lat: ubic.lat, lng: ubic.lng, zoom: 17, alMover: function (pt) { ubic.lat = pt.lat; ubic.lng = pt.lng; cambio(); zonaPorPunto(); } });
     $('#btn-quitar').addEventListener('click', quitarUbicacion);
   }
-  function quitarUbicacion() { ubic = null; entrega.zona = ''; cambio(); if (mapa) { mapa.destruir(); mapa = null; } $('#ubic-zona').innerHTML = ''; UI.$$('input[name=zona]').forEach(function (x) { x.checked = false; }); if ($('#ubic-cobertura')) $('#ubic-cobertura').textContent = ''; }
+  function quitarUbicacion() { ubicSolicitud++;ubic = null; entrega.zona = ''; cambio(); if (mapa) { mapa.destruir(); mapa = null; } $('#ubic-zona').innerHTML = ''; UI.$$('input[name=zona]').forEach(function (x) { x.checked = false; }); if ($('#ubic-cobertura')) $('#ubic-cobertura').textContent = ''; }
 
   /* ---------------- 3.1.5: cuentas bancarias, políticas y efectivo por cliente ---------------- */
   function cuentasBanco() {
@@ -836,13 +845,18 @@
   function verPoliticas() {
     UI.ventana({ icono: '📋', titulo: 'Cómo funciona tu pedido', html: '<div class="politicas-lista">' + textoPoliticas().split('\n').filter(String).map(function (l) { return '<p>' + UI.esc(l) + '</p>'; }).join('') + '</div>' });
   }
-  var efectivoCliente = null, efectivoTel = '';
+  var efectivoCliente = null, efectivoTel = '', efectivoConsulta = 0;
+  function telefonoEfectivoPreenvio(){return String((checkoutMem['cliente']||{}).telefono||'');}
+  function invalidarEfectivoPreenvio(){efectivoConsulta++;efectivoCliente=null;efectivoTel='';}
   async function revisarEfectivoCliente() {
-    var tel = (checkoutMem['cliente'] || {}).telefono || '';
+    var tel = telefonoEfectivoPreenvio();
     if (!UI.digitos(tel) || tel === efectivoTel) return;
-    efectivoTel = tel;
-    try { efectivoCliente = (await DATOS.pedir('pagoOpciones', { telefono: tel })).efectivo === true; } catch (e) { efectivoCliente = false; }
-    if (efectivoCliente && paso === 3 && !UI.$('[data-forma=efectivo]')) { guardarNotas(); pintarConfirmar(); restaurarNotas(); }
+    var consulta=++efectivoConsulta, permitido=false;
+    efectivoTel=tel;efectivoCliente=null;
+    try { permitido=(await DATOS.pedir('pagoOpciones', { telefono: tel })).efectivo === true; } catch (e) { permitido=false; }
+    if(consulta!==efectivoConsulta||tel!==telefonoEfectivoPreenvio())return;
+    efectivoCliente=permitido;
+    if(paso===3&&!envioPendiente&&!cotizacionEnCurso&&efectivoPermitido()!==!!UI.$('[data-forma=efectivo]')){guardarNotas();pintarConfirmar();restaurarNotas();}
   }
 
   /* ---------------- Paso 3: confirmar y pagar ---------------- */
@@ -943,14 +957,14 @@
   function totalActual() { return importesCheckout().total; }
   function efectivoPermitido() {
     var c = cfg();
-    if (efectivoCliente) return true; // 3.1.5: el local autorizó a este cliente
+    if (efectivoCliente && efectivoTel===telefonoEfectivoPreenvio()) return true; // sólo el cliente autorizado
     if (c.efectivo_permitido === 'NO') return false;
     var max = Number(c.efectivo_maximo);
     return !(max > 0 && totalActual() > max);
   }
   var checkoutMem = {};
   function guardarCheckout(k,v) { checkoutMem[k] = v; }
-  function limpiarCheckout() { checkoutMem = {}; notasTmp = {}; cuponAplicado = null; entrega = {tipo:'',zona:'',mesa:params.get('mesa')||'',cuando:'ya',hora:''}; pago = {forma:'efectivo',propina:0}; }
+  function limpiarCheckout() { invalidarEfectivoPreenvio(); checkoutMem = {}; notasTmp = {}; cuponAplicado = null; entrega = {tipo:'',zona:'',mesa:params.get('mesa')||'',cuando:'ya',hora:''}; pago = {forma:'efectivo',propina:0}; }
   var notasTmp = {};
   function guardarNotas() { ['privacidad','politicas'].forEach(function(k){var el=$('#pe-'+k); if(el) guardarCheckout('acepta_'+k,el.checked);}); var promo=UI.$('[name=acepta_promos]'); if(promo) guardarCheckout('acepta_promos',promo.checked); notasTmp = { cupon: ($('#pe-cupon') || {}).value || '', notas: ($('#pe-notas') || {}).value || '' }; }
   function restaurarNotas() { if ($('#pe-cupon')) $('#pe-cupon').value = notasTmp.cupon || ''; if ($('#pe-notas')) $('#pe-notas').value = notasTmp.notas || ''; if(cuponAplicado&&$('#pe-cupon-estado')&&$('#pe-cupon').value.trim().toUpperCase()===cuponAplicado.codigo)$('#pe-cupon-estado').textContent='✅ Cupón aplicado: −'+UI.dinero(cuponAplicado.descuento)+' en platos.'; }
