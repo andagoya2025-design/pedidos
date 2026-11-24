@@ -1218,6 +1218,7 @@
       var x = lista.filter(function (y) { return y.n === numero; })[0];
       if (!x || !pedido || pedido.consulta_error || pedido.no_existe) return UI.aviso('Actualiza el estado antes de solicitar cambios.', 'error');
       if (!Array.isArray(solicitudesPorPedido[numero])) return UI.aviso('Actualiza las solicitudes antes de continuar.', 'error');
+      if (solicitudesPorPedido[numero].some(function(v){return v.aplicado===true||v.estado==='Aplicada';})) return UI.aviso('Ya utilizaste tu oportunidad de modificar el pedido.','error');
       if (solicitudAbierta(solicitudesPorPedido[numero])) return UI.aviso('Ya existe una modificación en revisión. Espera la respuesta del restaurante.', 'error');
       var estado = pedido.estado;
       // Preguntar qué desea hacer, en vez de suponer que toda solicitud
@@ -1256,6 +1257,7 @@
         return;
       } finally { b.disabled = false; }
       if (politica.numero !== numero) return UI.aviso('No se pudo validar el pedido. Actualiza el seguimiento.', 'error');
+      if (politica.modalidad === 'cambio_definitivo') { UI.aviso(politica.mensaje,'error'); await pintarSeguimiento(false); return; }
       var nombres = { agregar: 'agregar productos', aumentar: 'aumentar cantidades', cambiar: 'cambiar productos', quitar: 'quitar productos', reducir: 'reducir cantidades', cancelar: 'cancelar el pedido' };
       if (politica.permitido) {
         var detalle = await editorCambio(tipo, politica);
@@ -1412,7 +1414,7 @@
   function tarjetaPropuesta(sol,x,r) {
     var q=sol.cotizacion;
     var h='<div class="seg-caja ux-solicitud-pedido ux-propuesta-prioritaria"><b>'+UI.esc(sol.estado==='Cotizada'?'Propuesta enviada por el restaurante · '+x.n:sol.estado==='Confirmada cliente'?'Modificación aceptada · '+x.n:sol.aplicado?'Modificación aplicada · '+x.n:'Modificación · '+sol.tipo)+'</b>';
-    if(!q)return h+'<p>'+UI.esc(sol.respuesta||'Estamos revisando tu solicitud.')+'</p>'+(sol.detalle?'<div class="ux-mensaje-propuesta"><b>Cambio solicitado</b>'+UI.esc(sol.detalle)+'</div>':'')+(solicitudAbierta([sol])?'<div class="ux-resumen-item"><span>Total vigente</span><b>'+UI.esc(UI.dinero(r.total))+'</b></div><p class="ayuda">El nuevo total se confirmará cuando el restaurante envíe la propuesta.</p>':'')+'</div>';
+    if(!q)return h+'<p>'+UI.esc(sol.respuesta||'Estamos revisando tu solicitud.')+'</p>'+(sol.detalle?'<div class="ux-mensaje-propuesta"><b>Cambio solicitado</b>'+UI.esc(sol.detalle)+'</div>':'')+(solicitudAbierta([sol])?'<div class="ux-comparacion-totales"><div class="ux-total-anterior"><small>Total vigente</small><strong>'+UI.esc(UI.dinero(r.total))+'</strong></div><div class="ux-total-nuevo"><small>Nuevo total</small><strong>Pendiente</strong></div><div class="ux-total-diferencia"><span>Diferencia económica</span><b>Por confirmar</b></div></div><p class="ayuda">El nuevo total se confirmará cuando el restaurante envíe la propuesta.</p>':'')+'</div>';
     h+=UI.compararTotalesCambio(q)+(q.mensaje?'<div class="ux-mensaje-propuesta"><b>Mensaje del restaurante</b>'+UI.esc(q.mensaje)+'</div>':'')+'<details '+(sol.estado==='Cotizada'?'open':'')+'><summary>Comparar productos e importes</summary>'+UI.compararDetalleCambio(q)+'</details>';
     if(sol.estado==='Cotizada')h+='<button class="btn bloque" type="button" data-aceptar-cambio="'+UI.esc(sol.id)+'" data-numero-cambio="'+UI.esc(x.n)+'">Aceptar modificación</button><button class="btn secundario bloque" type="button" data-rechazar-cambio="'+UI.esc(sol.id)+'" data-numero-cambio="'+UI.esc(x.n)+'">Mantener pedido original</button>';
     else if(sol.estado==='Confirmada cliente'){
@@ -1420,11 +1422,12 @@
       else if(UI.esDigital(r.forma_pago)&&r.pago_verificado&&q.adicional<0)h+='<p>El restaurante debe conciliar una devolución de '+UI.esc(UI.dinero(-q.adicional))+'.</p>';
       else h+='<p>El restaurante está aplicando la modificación. Espera el total actualizado antes de realizar otro pago.</p>';
     }else if(sol.estado==='Aplicando')h+='<p>El restaurante está conciliando la modificación. No envíes otro pago.</p>';
-    else if(sol.aplicado)h+='<p>Consulta el detalle actualizado de tu pedido.</p>';
+    else if(sol.aplicado)h+='<p>Tu modificación fue aplicada. Ya utilizaste tu oportunidad de modificar el pedido. Si necesitas ayuda, comunícate con el restaurante.</p>';
     return h+'</div>';
   }
   function estadoSolicitudHtml(solicitudes,r) {
     if (!Array.isArray(solicitudes)) return '<p class="ayuda">No pudimos verificar las solicitudes. Actualiza antes de realizar cambios.</p><button class="btn secundario chico bloque" type="button" data-seg-act>Actualizar solicitudes</button>';
+    if(solicitudes.some(function (x) { return x.aplicado === true || x.estado === 'Aplicada'; })) return '<div class="ux-solicitud-pendiente"><b>Modificación definitiva</b><p>Ya utilizaste tu oportunidad de modificar el pedido. No se permiten nuevos cambios. Si necesitas ayuda, comunícate con el restaurante.</p></div>';
     var s=solicitudAbierta(solicitudes);
     if(s)return '<div class="ux-solicitud-pendiente"><small>'+UI.esc(s.estado==='Cotizada'?'Revisa la propuesta de arriba.':s.estado==='Confirmada cliente'?'Ya aceptaste. No envíes otra solicitud.':'Tu modificación está en revisión.')+'</small></div>';
     return '<p class="ayuda">'+UI.esc(mensajeCambioPedido(r.estado))+'</p><button class="btn secundario chico bloque" type="button" data-escribir="'+UI.esc(r.numero)+'">Solicitar cambio</button>';
@@ -1436,7 +1439,7 @@
     var nombreFin = tipo === 'domicilio' ? 'Entregado' : 'Listo';
     var digital = UI.esDigital(r.forma_pago) && r.estado !== 'Anulado';
     return '<div class="seg-caja"><div class="seg-cabeza"><b>Tu pedido ' + UI.esc(r.numero) + '</b>' + UI.chipEstado(r.estado) +
-      '<button class="btn secundario chico" type="button" data-seg-act aria-label="Actualizar">↻</button></div>' +
+      '<button class="btn secundario chico ux-actualizar-seg" type="button" data-seg-act aria-label="Actualizar datos del pedido"><span aria-hidden="true" class="ux-actualizar-icono">↻</span> Actualizar</button></div>' +
       (r.estado === 'Anulado' ? '<p class="item-sub">' + UI.esc(r.motivo_anulacion || 'Fue anulado. Escríbenos por WhatsApp si tienes dudas.') + '</p>' :
         '<div class="seg-linea">' + pasos.map(function (n, k) { return '<span class="' + (k <= i ? 'hecho' : '') + (k === i ? ' actual' : '') + '"><i></i>' + UI.esc(k === pasos.length - 1 ? nombreFin : n) + '</span>'; }).join('') + '</div>' +
         (r.estado !== 'Entregado' ? '<p class="item-sub" style="margin:6px 0 0">' +
