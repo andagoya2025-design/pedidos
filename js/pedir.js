@@ -326,7 +326,7 @@
       });
       var k = claveItem(p, extras);
       var anterior = carrito[k] ? Number(carrito[k].cantidad) || 0 : 0;
-      if(extras.length!==(Array.isArray(i.extras)?i.extras.length:0)||extras.some(function(n){return extras.filter(function(k){return k===n;}).length>maxExtraUI(p.extras.find(function(e){return e.nombre===n;}));})||anterior+cantidad>1000){omitidos++;return;}
+      if(extras.length>1000||extras.length!==(Array.isArray(i.extras)?i.extras.length:0)||extras.some(function(n){return extras.filter(function(k){return k===n;}).length>maxExtraUI(p.extras.find(function(e){return e.nombre===n;}));})||anterior+cantidad>1000){omitidos++;return;}
       carrito[k] = { plato: p, extras: extras, cantidad: anterior + cantidad };
       agregados++;
     });
@@ -462,6 +462,12 @@
   function leerExtrasUI(extras,elemento,atributo){
     var out=[];(extras||[]).forEach(function(e,i){var a=elemento.querySelector('['+atributo(i)+']');if(!a)return;var n=a.type==='checkbox'?(a.checked?1:0):a.value===''?NaN:Number(a.value);if(!Number.isInteger(n)||n<0||n>maxExtraUI(e))throw Error('Cantidad de extra inválida: '+e.nombre);for(var j=0;j<n;j++)out.push(e.nombre);});return out;
   }
+  /* Sólo selección previa: el lector compartido con solicitudes posteriores queda intacto. */
+  function leerExtrasPreenvio(extras,elemento,atributo){
+    var seleccion=leerExtrasUI(extras,elemento,atributo);
+    if(seleccion.length>1000)throw Error('Máximo 1000 extras en total por plato. Reduce las cantidades.');
+    return seleccion;
+  }
   async function agregar(pid, boton, editar) {
     var p = plato(pid);
     if (!p.extras.length&&!editar) { if (boton) volarAlCarrito(boton); return sumar(pid, 1); }
@@ -474,12 +480,12 @@
       }).join('')+'</div>'+
         '<div class="cantidad-fila"><span>Cantidad de platos</span><div class="contador"><button type="button" data-q="-1" aria-label="Menos platos">−</button><input id="q-num" type="number" min="1" max="1000" inputmode="numeric" value="'+cantidad+'" aria-label="Cantidad de platos"><button type="button" data-q="1" aria-label="Más platos">＋</button></div></div><p><b>Subtotal: <span id="q-precio">'+UI.dinero(p.precio)+'</span></b></p>',
       alAbrir:function(v){
-        function actualizar(){cantidad=Number(UI.$('#q-num',v).value);actualizarImportesExtrasPreenvio(p.extras,v,cantidad);try{if(!Number.isSafeInteger(cantidad)||cantidad<1||cantidad>1000)throw Error('Cantidad inválida');var ex=leerExtrasUI(p.extras,v,function(i){return 'data-extra-q="'+i+'"';});UI.$('#q-precio',v).textContent=UI.dinero(unitario({plato:p,extras:ex})*cantidad);}catch(e){UI.$('#q-precio',v).textContent='Revisa las cantidades';}}
+        function actualizar(){cantidad=Number(UI.$('#q-num',v).value);actualizarImportesExtrasPreenvio(p.extras,v,cantidad);try{if(!Number.isSafeInteger(cantidad)||cantidad<1||cantidad>1000)throw Error('Cantidad inválida');var ex=leerExtrasPreenvio(p.extras,v,function(i){return 'data-extra-q="'+i+'"';});UI.$('#q-precio',v).textContent=UI.dinero(unitario({plato:p,extras:ex})*cantidad);}catch(e){UI.$('#q-precio',v).textContent=e.message||'Revisa las cantidades';}}
         v.addEventListener('click',function(e){var extra=e.target.closest('[data-extra-paso]');if(extra){var el=extra.parentNode.querySelector('input');el.value=Math.max(0,Math.min(Number(el.max),Number(el.value||0)+Number(extra.getAttribute('data-extra-paso'))));actualizar();return;}var b=e.target.closest('[data-q]');if(!b)return;cantidad=Math.max(1,Math.min(1000,Number(UI.$('#q-num',v).value||1)+Number(b.getAttribute('data-q'))));UI.$('#q-num',v).value=cantidad;actualizar();});
         v.addEventListener('input',actualizar);v.addEventListener('change',actualizar);actualizar();
       },
       botones:[{texto:'Cancelar',valor:false,clase:'secundario'},{texto:editar?'Guardar cambios':'Agregar al pedido',valor:true,antes:function(v){
-        try{cantidad=Number(UI.$('#q-num',v).value);if(!Number.isSafeInteger(cantidad)||cantidad<1||cantidad>1000)throw Error('Cantidad de platos inválida.');elegidos=leerExtrasUI(p.extras,v,function(i){return 'data-extra-q="'+i+'"';});var existente=carrito[claveItem(p,elegidos)];if((existente&&existente!==editar?existente.cantidad:0)+cantidad>1000)throw Error('La cantidad acumulada supera el máximo técnico de 1000.');return true;}catch(e){UI.aviso(e.message,'error');return false;}
+        try{cantidad=Number(UI.$('#q-num',v).value);if(!Number.isSafeInteger(cantidad)||cantidad<1||cantidad>1000)throw Error('Cantidad de platos inválida.');elegidos=leerExtrasPreenvio(p.extras,v,function(i){return 'data-extra-q="'+i+'"';});var existente=carrito[claveItem(p,elegidos)];if((existente&&existente!==editar?existente.cantidad:0)+cantidad>1000)throw Error('La cantidad acumulada supera el máximo técnico de 1000.');return true;}catch(e){UI.aviso(e.message,'error');return false;}
       }}]
     });
     if (!ok) return;
@@ -489,7 +495,7 @@
     carrito[k].cantidad += cantidad;
     cambio(); UI.vibrar();
     UI.aviso((editar?'Actualizado: ':'Agregado: ') + cantidad + ' × ' + p.nombre, 'ok');
-    if(editar&&paso===3){if($('#pe-cupon-estado'))$('#pe-cupon-estado').textContent='Carrito modificado: vuelve a aplicar el cupón.';pintarItemsResumen();if(items().length)totales();}else{pintarPlatos();pintarBarra(true);}
+    if(editar&&paso===3){refrescarResumenPreenvio();}else{pintarPlatos();pintarBarra(true);}
   }
 
   /* Pequeña animación: un punto vuela del botón al carrito. */
@@ -522,18 +528,19 @@
     var elegido = await UI.ventana({
       icono: '🥤', titulo: '¿Le agregas algo?', texto: 'Lo que más piden para acompañar:',
       html: '<div class="sugeridos">' + sug.slice(0, 4).map(function (p) {
-        return '<button class="sugerido" type="button" data-s="' + UI.esc(p.id) + '"><span class="sug-foto" data-ico="' + iconoCategoria(p) + '">' + fotoHtml(p) + '</span><b>' + UI.esc(p.nombre) + '</b><span>' + UI.dinero(p.precio) + '</span></button>';
+        return '<button class="sugerido" type="button" data-s="' + UI.esc(p.id) + '"><span class="sug-foto" data-ico="' + iconoCategoria(p) + '">' + fotoHtml(p) + '</span><b>' + UI.esc(p.nombre) + '</b><span>' + UI.dinero(p.precio) + ' · Toca para agregar</span></button>';
       }).join('') + '</div>',
       alAbrir: function (v) {
         v.addEventListener('click', function (e) {
           var b = e.target.closest('[data-s]'); if (!b) return;
-          sumar(b.getAttribute('data-s'), 1); b.classList.add('elegido'); b.querySelector('span:last-child').textContent = '✓ Agregado';
+          var pid=b.getAttribute('data-s'); if(sumar(pid,1)!==true)return; b.classList.add('elegido'); b.querySelector('span:last-child').textContent=textoSugeridoPreenvio(plato(pid),cantidadPlato(pid));
         });
       },
       botones: [{ texto: 'Continuar', valor: true }]
     });
     return elegido;
   }
+  function textoSugeridoPreenvio(p,n){return n+' × '+UI.dinero(p.precio)+' = '+UI.dinero(Math.round(Number(p.precio)*100)*n/100);}
   function codigoSesion() { return String(Math.floor(Date.now() / 3600000)); } // una vez por hora
 
   /* ---------------- Paso 2: entrega y datos ---------------- */
@@ -868,6 +875,7 @@
     $('#ver-politicas').addEventListener('click', function (e) { e.preventDefault(); verPoliticas(); });
     UI.$$('[data-cuenta]').forEach(function (b) { b.addEventListener('click', function () { pago.cuenta = b.getAttribute('data-cuenta'); guardarNotas(); pintarConfirmar(); restaurarNotas(); }); });
     if (pago.forma === 'transferencia' && cuentasBanco().length === 1) pago.cuenta = etiquetaCuenta(cuentasBanco()[0]);
+    restaurarNotas();
     pintarItemsResumen();
     totales();
     revisarEfectivoCliente();
@@ -907,6 +915,19 @@
     $('#total-boton').textContent=UI.dinero(m.total);
   }
 
+  /* Mantener datos al actualizar las formas de pago, sin tocar el envío. */
+  function refrescarResumenPreenvio(){
+    if(paso!==3||envioPendiente)return;
+    guardarNotas();
+    if(!items().length){irA(1);return;}
+    if(efectivoPermitido()!==!!UI.$('[data-forma=efectivo]')){
+      pintarConfirmar();
+    }else{
+      pintarItemsResumen();totales();
+    }
+    if($('#pe-cupon-estado')&&$('#pe-cupon')&&$('#pe-cupon').value.trim()&&!cuponAplicado)
+      $('#pe-cupon-estado').textContent='Carrito modificado: vuelve a aplicar el cupón.';
+  }
   function pintarItemsResumen() {
     var lista = items();
     if (!lista.length) return irA(1);
@@ -923,18 +944,16 @@
       if(envioPendiente)return;
       var it=lista[Number(b.getAttribute('data-r-quitar'))];if(!it)return;
       guardarNotas();delete carrito[claveItem(it.plato,it.extras)];cambio();UI.vibrar(10);
-      if($('#pe-cupon-estado'))$('#pe-cupon-estado').textContent='Carrito modificado: vuelve a aplicar el cupón.';
-      pintarItemsResumen();if(items().length)totales();
+      refrescarResumenPreenvio();
     });});
-    UI.$$('[data-r-cant]', $('#resumen-items')).forEach(function(el){el.addEventListener('change',function(){var n=Number(el.value),it=lista[Number(el.getAttribute('data-r-cant'))];if(el.value===''||!Number.isSafeInteger(n)||n<0||n>1000){el.value=it.cantidad;UI.aviso('Cantidad inválida: use un entero entre 0 y 1000.','error');return;}it.cantidad=n;cambio();if($('#pe-cupon-estado'))$('#pe-cupon-estado').textContent='Carrito modificado: vuelve a aplicar el cupón.';if(!items().length)guardarNotas();pintarItemsResumen();if(items().length)totales();});});
+    UI.$$('[data-r-cant]', $('#resumen-items')).forEach(function(el){el.addEventListener('change',function(){var n=Number(el.value),it=lista[Number(el.getAttribute('data-r-cant'))];if(el.value===''||!Number.isSafeInteger(n)||n<0||n>1000){el.value=it.cantidad;UI.aviso('Cantidad inválida: use un entero entre 0 y 1000.','error');return;}it.cantidad=n;cambio();refrescarResumenPreenvio();});});
     UI.$$('[data-r-mas],[data-r-menos]', $('#resumen-items')).forEach(function (b) {
       b.addEventListener('click', function () {
         var mas = b.hasAttribute('data-r-mas');
         var it = lista[Number(b.getAttribute(mas ? 'data-r-mas' : 'data-r-menos'))];
         if(mas&&it.cantidad>=1000)return UI.aviso('La cantidad supera el máximo técnico de 1000.','error');it.cantidad = Math.max(0,it.cantidad + (mas ? 1 : -1));
         cambio(); UI.vibrar(10);
-        if ($('#pe-cupon-estado')) $('#pe-cupon-estado').textContent = 'Carrito modificado: vuelve a aplicar el cupón.';
-        if(!items().length)guardarNotas();pintarItemsResumen(); if(items().length)totales();
+        refrescarResumenPreenvio();
       });
     });
   }
