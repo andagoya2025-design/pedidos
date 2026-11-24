@@ -382,7 +382,7 @@
         '<div class="plato-info">' + (p.etiquetas || (M.populares || []).indexOf(p.id) >= 0 ? '<div class="chips">' + ((M.populares || []).indexOf(p.id) >= 0 ? '<span class="chip-etiqueta">🔥 Lo más pedido</span>' : '') + UI.chipsEtiquetas(p.etiquetas) + '</div>' : '') +
         '<h3>' + UI.esc(p.nombre) + '</h3>' + (p.descripcion ? '<p>' + UI.esc(p.descripcion) + '</p>' : '') +
         (p.extras.length ? '<p class="plato-extras">＋ Puedes personalizarlo</p>' : '') +
-        '<div class="plato-pie"><span class="precio">' + UI.dinero(p.precio) + '</span><span style="flex:1"></span>' +
+        '<div class="plato-pie"><div class="preenvio-precio-principal"><span class="precio">' + UI.dinero(cant?subtotalTarjetaPreenvio(p.id):p.precio) + '</span><small>'+(cant?'Subtotal · '+UI.dinero(p.precio)+' c/u':'Precio unitario')+'</small></div><span style="flex:1"></span>' +
         (p.agotado ? '<span class="etiqueta">Agotado</span>' :
           (cant && !p.extras.length ? '<div class="contador"><button type="button" data-menos="' + UI.esc(p.id) + '" aria-label="Quitar uno">−</button><input type="number" inputmode="numeric" min="0" max="1000" data-cant-plato="' + UI.esc(p.id) + '" aria-label="Cantidad de ' + UI.esc(p.nombre) + '" value="' + cant + '"><button type="button" data-mas="' + UI.esc(p.id) + '" aria-label="Agregar uno">＋</button></div>'
             : '<button class="btn chico btn-agregar" type="button" data-agregar="' + UI.esc(p.id) + '">' + (cant ? '＋ Otro' : '＋ Agregar') + '</button>')) +
@@ -539,6 +539,15 @@
   function botonVaciarCheckoutPreenvio(){
     return '<button class="btn secundario preenvio-vaciar" type="button" id="btn-vaciar-preenvio">Vaciar todo el carrito</button>';
   }
+  function cantidadLineaCarritoPreenvio(it,n){
+    if(paso!==1||!puedeVaciarPreenvio()||!it||carrito[claveItem(it.plato,it.extras)]!==it)return false;
+    if(!Number.isSafeInteger(n)||n<0||n>1000||(it.plato.agotado&&n>it.cantidad)){UI.aviso('Cantidad inválida o producto agotado.','error');return false;}
+    if(n===0)delete carrito[claveItem(it.plato,it.extras)];else it.cantidad=n;
+    cambio();pintarPlatos();pintarBarra(false);return true;
+  }
+  function lineaCarritoPreenvio(it,i){
+    return '<div class="preenvio-linea" data-carrito-linea="'+i+'"><div class="preenvio-cabecera"><span class="preenvio-mini">'+fotoHtml(it.plato)+'</span><div><b data-carrito-nombre="'+i+'">'+it.cantidad+' × '+UI.esc(it.plato.nombre)+'</b><div class="item-sub">'+UI.esc(resumenExtrasCantidad(it.extras)||'Sin extras')+'</div><div class="item-sub">'+UI.dinero(unitario(it))+' c/u'+(it.extras.length?' con extras':'')+'</div></div></div><div data-carrito-extras="'+i+'">'+desgloseExtrasPreenvio(it)+'</div><div class="preenvio-importe"><span>Subtotal</span><b data-carrito-importe="'+i+'">'+UI.dinero(unitario(it)*it.cantidad)+'</b></div><div class="preenvio-acciones"><div class="contador"><button type="button" data-carrito-menos="'+i+'" aria-label="Disminuir cantidad">−</button><input type="number" inputmode="numeric" min="0" max="1000" data-carrito-cant="'+i+'" value="'+it.cantidad+'" aria-label="Cantidad de '+UI.esc(it.plato.nombre)+'"><button type="button" data-carrito-mas="'+i+'" aria-label="Aumentar cantidad"'+(it.plato.agotado?' disabled':'')+'>＋</button></div>'+(!it.plato.agotado?'<button type="button" class="btn secundario chico" data-carrito-editar="'+i+'">Editar</button>':'')+'<button type="button" class="btn secundario chico" data-carrito-quitar="'+i+'">Quitar</button></div></div>';
+  }
   async function abrirCarritoPreenvio(){
     if(paso!==1)return;
     if(envioPendiente||recuperacionEnCurso||cotizacionEnCurso)return UI.aviso('Primero comprueba el envío pendiente.','error');
@@ -546,10 +555,24 @@
     if(!lista.length)return UI.aviso('Tu carrito está vacío. Agrega un producto.','ok');
     var accion=await UI.ventana({
       titulo:'Tu carrito',texto:'Revisa todos los productos antes de enviar.',
-      html:lista.map(function(it,i){return '<div class="preenvio-linea"><div class="preenvio-cabecera"><span class="preenvio-mini">'+fotoHtml(it.plato)+'</span><div><b>'+it.cantidad+' × '+UI.esc(it.plato.nombre)+'</b><div class="item-sub">'+UI.esc(resumenExtrasCantidad(it.extras)||'Sin extras')+'</div></div></div>'+desgloseExtrasPreenvio(it)+'<div class="preenvio-importe"><span>Subtotal</span><b>'+UI.dinero(unitario(it)*it.cantidad)+'</b></div><div class="preenvio-acciones">'+(!it.plato.agotado?'<button type="button" class="btn secundario chico" data-carrito-editar="'+i+'">Editar</button>':'')+'<button type="button" class="btn secundario chico" data-carrito-quitar="'+i+'">Quitar</button></div></div>';}).join('')+
-      '<div class="preenvio-importe preenvio-total"><b>Subtotal de productos</b><b>'+UI.dinero(subtotal())+'</b></div><button type="button" class="btn secundario bloque preenvio-vaciar" data-carrito-vaciar>Vaciar todo el carrito</button>',
+      html:lista.map(lineaCarritoPreenvio).join('')+
+      '<div class="preenvio-importe preenvio-total"><b>Subtotal de productos</b><b data-carrito-total aria-live="polite">'+UI.dinero(subtotal())+'</b></div><button type="button" class="btn secundario bloque preenvio-vaciar" data-carrito-vaciar>Vaciar todo el carrito</button>',
       botones:[{texto:'Seguir eligiendo',valor:null,clase:'secundario'},{texto:'Continuar',valor:{tipo:'continuar'}}],
-      alAbrir:function(v,cerrar){v.addEventListener('click',function(e){var b=e.target.closest('[data-carrito-editar],[data-carrito-quitar],[data-carrito-vaciar]');if(!b)return;var tipo=b.hasAttribute('data-carrito-vaciar')?'vaciar':b.hasAttribute('data-carrito-editar')?'editar':'quitar';cerrar({tipo:tipo,i:Number(b.getAttribute('data-carrito-'+tipo))});});}
+      alAbrir:function(v,cerrar){
+        function actualizar(i,n){
+          var it=lista[i],campo=UI.$('[data-carrito-cant="'+i+'"]',v);
+          if(!cantidadLineaCarritoPreenvio(it,n)){if(campo&&it)campo.value=it.cantidad;return;}
+          if(n===0){UI.$('[data-carrito-linea="'+i+'"]',v).remove();if(!cantidadTotal()){cerrar(null);return;}}
+          else{campo.value=n;UI.$('[data-carrito-nombre="'+i+'"]',v).textContent=n+' × '+it.plato.nombre;UI.$('[data-carrito-importe="'+i+'"]',v).textContent=UI.dinero(unitario(it)*n);UI.$('[data-carrito-extras="'+i+'"]',v).innerHTML=desgloseExtrasPreenvio(it);}
+          UI.$('[data-carrito-total]',v).textContent=UI.dinero(subtotal());
+        }
+        v.addEventListener('change',function(e){var el=e.target.closest('[data-carrito-cant]');if(!el)return;actualizar(Number(el.getAttribute('data-carrito-cant')),el.value===''?NaN:Number(el.value));});
+        v.addEventListener('click',function(e){
+          var q=e.target.closest('[data-carrito-mas],[data-carrito-menos]');
+          if(q){var mas=q.hasAttribute('data-carrito-mas'),i=Number(q.getAttribute(mas?'data-carrito-mas':'data-carrito-menos'));if(lista[i])actualizar(i,lista[i].cantidad+(mas?1:-1));return;}
+          var b=e.target.closest('[data-carrito-editar],[data-carrito-quitar],[data-carrito-vaciar]');if(!b)return;var tipo=b.hasAttribute('data-carrito-vaciar')?'vaciar':b.hasAttribute('data-carrito-editar')?'editar':'quitar';cerrar({tipo:tipo,i:Number(b.getAttribute('data-carrito-'+tipo))});
+        });
+      }
     });
     if(!accion||paso!==1||!puedeVaciarPreenvio())return;
     if(accion.tipo==='vaciar')return vaciarPreenvio();
@@ -564,7 +587,7 @@
     var barra = $('#barra-pedido');
     barra.hidden = !n || paso !== 1;
     var acceso=$('#btn-carrito-preenvio'),vaciar=$('#btn-vaciar-preenvio');
-    if(acceso){acceso.innerHTML='<span>🛒 Carrito ('+n+')</span><b>'+UI.esc(UI.dinero(subtotal()))+'</b>';acceso.disabled=!!envioPendiente;}
+    if(acceso){acceso.innerHTML='<span class="preenvio-carrito-label"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h3l3 13h11l3-10H6"/><circle cx="9" cy="21" r="1"/><circle cx="19" cy="21" r="1"/></svg> Carrito ('+n+')</span><b>'+UI.esc(UI.dinero(subtotal()))+'</b>';acceso.disabled=!!envioPendiente;}
     if(vaciar)vaciar.disabled=!puedeVaciarPreenvio();
     var b = $('#btn-ver-pedido');
     b.innerHTML = '<span class="cant">' + n + '</span> Continuar <span class="barra-total">' + UI.esc(UI.dinero(subtotal())) + ' →</span>';

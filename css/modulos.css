@@ -658,3 +658,15 @@ details.otras-fechas[open] summary { margin-bottom: 10px; }
 .pedir-app #btn-carrito-preenvio b {white-space:nowrap;}
 .preenvio-vaciar {font-size:13px;}
 @media(max-width:340px){.pedir-app .preenvio-carrito-acceso .btn{font-size:12px;padding-inline:7px;}}
+
+/* 3.1.25: contraste explícito y subtotal en la posición habitual del precio. */
+.pedir-app #btn-carrito-preenvio {background:#fff;color:#702c37;border:1px solid #702c37;box-shadow:0 2px 8px rgba(65,28,35,.12);}
+.pedir-app #btn-carrito-preenvio:hover,.pedir-app #btn-carrito-preenvio:focus-visible {background:#fff5f5;color:#702c37;}
+.preenvio-carrito-label {display:inline-flex;align-items:center;gap:6px;min-width:0;}
+.preenvio-carrito-label svg {flex:none;}
+.pedir-app .preenvio-precio-principal {display:grid;gap:2px;min-width:0;}
+.pedir-app .preenvio-precio-principal .precio {font-size:clamp(20px,5.6vw,26px);line-height:1.15;font-variant-numeric:tabular-nums;}
+.pedir-app .preenvio-precio-principal small {font-size:11px;color:var(--texto-2);overflow-wrap:anywhere;}
+.pedir-app .preenvio-subtotal-tarjeta {border:1px solid var(--borde);background:var(--acento-suave);color:var(--texto);}
+.preenvio-linea [data-carrito-extras]:empty {display:none;}
+.preenvio-linea .contador {flex:none;}
