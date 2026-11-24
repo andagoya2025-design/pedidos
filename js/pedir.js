@@ -1328,14 +1328,14 @@
       if (politica.permitido) {
         var detalle = await editorCambio(tipo, politica);
         if (detalle === null || detalle === undefined) return;
-        var seleccionCambio = detalle.items || [];
+        var seleccionCambio = detalle.items || [], seleccionIntegral=detalle.seleccion;
         detalle = String(detalle.texto || '').trim();
         if (detalle.length < 5 || detalle.length > 500) return UI.aviso('Describe el cambio entre 5 y 500 caracteres.', 'error');
         try {
           b.disabled = true;
           var solicitud = await DATOS.pedir('pedidoCambioSolicitar', x.s ?
-            { s: x.s, tipo: tipo, detalle: detalle, items: seleccionCambio } :
-            { numero: numero, telefono: x.tel || (checkoutMem['cliente'] || {}).telefono || '', tipo: tipo, detalle: detalle, items: seleccionCambio }, { guardar: true });
+            { s: x.s, tipo: tipo, detalle: detalle, items: seleccionCambio, seleccion: seleccionIntegral } :
+            { numero: numero, telefono: x.tel || (checkoutMem['cliente'] || {}).telefono || '', tipo: tipo, detalle: detalle, items: seleccionCambio, seleccion: seleccionIntegral }, { guardar: true });
           if (solicitud.estado === 'Pendiente' || solicitud.repetida === true) {
             UI.aviso(solicitud.repetida ? 'Tu solicitud ya está pendiente de respuesta.' : 'Solicitud enviada al restaurante. Espera su confirmación; tu pedido no cambió todavía.', 'exito');
             await pintarSeguimiento(false);
@@ -1400,13 +1400,13 @@
       '<label for="ux-nota">' + (tipo === 'cancelar' ? 'Motivo de cancelación' : 'Notas o solicitud manual (opcional si seleccionas productos)') + '</label><textarea id="ux-nota" maxlength="500" rows="2" placeholder="' + (tipo === 'cancelar' ? 'Describe el motivo' : 'Ej. Sin cebolla') + '"></textarea><div class="ux-seleccion-resumen" data-ux-resumen aria-live="polite"></div>';
     var detalle = null;
     function leer(velo) {
-      var partes = [], originales = 0, agregados = 0, estimado = 0, itemsSeleccionados = [], actuales = [], nuevosElegidos = [];
+      var partes = [], originales = 0, agregados = 0, estimado = 0, itemsSeleccionados = [], actuales = [], nuevosElegidos = [], retirar=[], incorporar=[];
       function recoger(lista, prefijo) {
         lista.forEach(function (p,i) {
           var el = velo.querySelector('[data-ux-cant="' + prefijo + i + '"]');
           if (!el) return;
           var n = Number(el.value), max = Number(el.max);
-          if (!Number.isInteger(n) || n < 0 || n > max) throw Error('Revisa las cantidades.');
+          if (el.value===''||!Number.isInteger(n) || n < 0 || n > max) throw Error('Revisa las cantidades.');
           if (!n) return;
           if(tipo==='quitar'&&n!==Number(p.cantidad))throw Error('Para quitar, selecciona toda la cantidad. Para disminuir, usa reducir.');
           var extras = prefijo === 'o' ? String(p.extras || '') : '';
@@ -1417,22 +1417,27 @@
             precio=unitario({plato:p,extras:elegidos});
             agregados += n;
           } else { originales += n; }
-          if (tipo === 'agregar' || tipo === 'aumentar') itemsSeleccionados.push({plato_id:String(p.id || p.plato_id),cantidad:n,extras:extras.split(',').map(function(e){return e.trim();}).filter(Boolean)});
-          (prefijo === 'o' ? actuales : nuevosElegidos).push({nombre:p.nombre,cantidad:n,extras:extras,total:n*precio});
+          var exLista=extras.split(',').map(function(e){return e.trim();}).filter(Boolean);
+          if (tipo === 'agregar' || tipo === 'aumentar') itemsSeleccionados.push({plato_id:String(prefijo==='o'?p.plato_id:p.id),cantidad:n,extras:exLista});
+          if(prefijo==='o'&&['cambiar','reducir','quitar'].indexOf(tipo)>=0)retirar.push({id:String(p.id),cantidad:n});
+          if(prefijo==='n'&&tipo==='cambiar')incorporar.push({plato_id:String(p.id),cantidad:n,extras:exLista});
+          (prefijo === 'o' ? actuales : nuevosElegidos).push({nombre:p.nombre,cantidad:n,extras:resumenExtrasCantidad(exLista),total:n*precio});
           estimado += n * precio * (prefijo === 'o' && tipo !== 'aumentar' ? -1 : 1);
-          partes.push((prefijo === 'n' ? 'Agregar ' : tipo === 'aumentar' ? 'Aumentar ' : tipo === 'cambiar' ? 'Sustituir ' : 'Retirar ') + n + ' × ' + p.nombre + (extras ? ' (' + extras + ')' : ''));
+          partes.push((prefijo === 'n' ? 'Agregar ' : tipo === 'aumentar' ? 'Aumentar ' : tipo === 'cambiar' ? 'Sustituir ' : 'Retirar ') + n + ' × ' + p.nombre + (extras ? ' (' + resumenExtrasCantidad(exLista) + ')' : ''));
         });
       }
       recoger(filas,'o'); recoger(nuevos,'n');
       var nota = velo.querySelector('#ux-nota').value.trim();
-      if (nota) partes.push(nota);
-      return { texto: partes.join('; '), originales: originales, agregados: agregados, estimado: estimado, items: itemsSeleccionados, actuales: actuales, nuevos: nuevosElegidos };
+      var seleccion=retirar.length?{retirar:retirar,agregar:incorporar}:undefined;
+      var texto=partes.join('; ')+(nota?(partes.length?'; ':'')+nota:'');
+      if(texto.length>500&&(itemsSeleccionados.length||seleccion)){texto='Solicitud de '+(itemsSeleccionados.length+retirar.length+incorporar.length)+' líneas seleccionadas.'+(nota?' Nota: '+nota:'');}
+      return { texto: texto, originales: originales, agregados: agregados, estimado: estimado, items: itemsSeleccionados, seleccion:seleccion, actuales: actuales, nuevos: nuevosElegidos };
     }
     var ok = await UI.ventana({ titulo: titulos[tipo] || 'Solicitar cambio', texto: 'Selecciona las cantidades o escribe tu solicitud. El restaurante debe aprobarla antes de modificar el pedido.', html: html,
       botones: [{ texto: 'Volver', valor: null, clase: 'secundario' }, { texto: 'Enviar solicitud', valor: true, antes: function(velo) {
         try { var v = leer(velo); if (tipo === 'cambiar' && !(v.originales && v.agregados)) throw Error('Selecciona el producto original y su sustituto.');
           if (v.texto.length < 5 || v.texto.length > 500) throw Error('Describe el cambio entre 5 y 500 caracteres.');
-          detalle = {texto:v.texto,items:v.items}; return true;
+          detalle = {texto:v.texto,items:v.items,seleccion:v.seleccion}; return true;
         } catch(e) { UI.aviso(e.message,'error'); return false; }
       }}],
       alAbrir: function(velo) {
