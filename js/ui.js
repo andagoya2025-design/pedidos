@@ -104,8 +104,11 @@
       document.body.appendChild(cont);
     }
     var el = document.createElement('div');
-    el.className = 'aviso-flotante ' + (tipo || '');
-    el.innerHTML = '<span>' + (tipo === 'error' ? '⚠️' : tipo === 'ok' ? '✅' : 'ℹ️') + '</span><span>' + UI.esc(texto) + '</span>';
+    tipo = tipo === 'exito' ? 'ok' : tipo;
+    el.className = 'aviso-flotante aviso-premium ' + (tipo || '');
+    var error = tipo === 'error', exito = tipo === 'ok';
+    var ruta = error ? '<path d="M12 8v4m0 4h.01"/><circle cx="12" cy="12" r="9"/>' : exito ? '<path d="m8 12 3 3 5-6"/><circle cx="12" cy="12" r="9"/>' : '<circle cx="12" cy="12" r="9"/><path d="M12 11v5m0-8h.01"/>';
+    el.innerHTML = '<span class="aviso-premium-icono" aria-hidden="true"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'+ruta+'</svg></span><span class="aviso-premium-texto"><strong>'+(error?'Atención':exito?'Operación confirmada':'Información')+'</strong><span>'+UI.esc(texto)+'</span></span>';
     cont.appendChild(el);
     setTimeout(function () { el.style.opacity = '0'; el.style.transition = 'opacity .3s'; }, tipo === 'error' ? 5200 : 3000);
     setTimeout(function () { el.remove(); }, tipo === 'error' ? 5600 : 3400);
