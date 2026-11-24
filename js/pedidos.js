@@ -25,10 +25,10 @@
       cont.innerHTML = '<section class="pd-premium"><div class="pd-premium-titulo"><div><h1>Pedidos</h1><p class="subtitulo">' + UI.esc(APP.nombreLocal(APP.local)) + '</p></div>' +
         '<button class="btn secundario chico sonido-btn" type="button" id="btn-sonido" aria-pressed="' + sonido + '" aria-label="Sonido de pedido nuevo" title="Sonido de pedido nuevo">' + iconoPedido(sonido ? 'bell' : 'mute') + '</button></div>' +
         '<div class="pd-premium-acciones"><button class="btn" type="button" id="btn-nuevo-pedido">' + iconoPedido('plus') + ' Crear pedido</button>' +
-        '<button class="btn secundario" type="button" id="btn-cambios">' + iconoPedido('list') + ' Solicitudes</button>' +
+        '<button class="btn secundario" type="button" id="btn-cambios">' + iconoPedido('list') + ' Solicitudes <span id="pd-solic-count" aria-live="polite">—</span></button>' +
         '<button class="btn secundario" type="button" id="btn-buscar-pedido" aria-label="Buscar pedido" title="Buscar pedido">' + iconoPedido('search') + '</button>' +
         '<button class="btn secundario" type="button" data-actualizar aria-label="Actualizar pedidos" title="Actualizar pedidos">' + iconoPedido('refresh') + '</button></div>' +
-        '<div id="pd-cuerpo">' + UI.esqueleto(4) + '</div></section>';
+        '<p id="pd-conexion" class="ayuda" role="status">Conectando con el servidor…</p><div id="pd-cuerpo">' + UI.esqueleto(4) + '</div></section>';
       UI.$('[data-actualizar]', cont).addEventListener('click', function (e) { UI.trabajando(e.currentTarget, cargar); });
       UI.$('#btn-nuevo-pedido', cont).addEventListener('click', nuevoPedido);
       UI.$('#btn-buscar-pedido', cont).addEventListener('click', buscarPedido);
@@ -48,6 +48,22 @@
 
   /* El restaurante selecciona productos REALES del menú, sin cambiar aún el pedido.
    * Permite varios productos y extras; el servidor recalcula todos los precios. */
+  function sugerirSolicitudHistorica(x, platos) {
+    if (x.tipo !== 'agregar') return [];
+    var normal = function(v){return String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');};
+    var partes=String(x.detalle||'').split(';'), items=[], claves=Object.create(null);
+    for(var i=0;i<partes.length;i++){
+      var m=/^Agregar\s+([1-9]\d?)\s*[×x]\s*(.+?)(?:\s+\(([^()]*)\))?\s*$/i.exec(partes[i].trim());
+      if(!m||Number(m[1])>50)return [];
+      var ps=platos.filter(function(p){return normal(p.nombre)===normal(m[2]);});
+      if(ps.length!==1)return [];
+      var p=ps[0], extras=[], nombres=m[3]?m[3].split(','):[], disponibles=Array.isArray(p.extras)?p.extras:[];
+      for(var j=0;j<nombres.length;j++){var es=disponibles.filter(function(e){return normal(e.nombre)===normal(nombres[j]);});if(es.length!==1||extras.indexOf(es[0].nombre)>=0)return [];extras.push(es[0].nombre);}
+      var k=JSON.stringify([String(p.id),extras.slice().sort()]);if(claves[k])return [];claves[k]=true;
+      items.push({plato_id:p.id,cantidad:Number(m[1]),extras:extras});
+    }
+    return items.length<=30?items:[];
+  }
   async function cotizarSolicitud(x) {
     var menu;
     try { menu = await DATOS.pedir('menuListar', { local_id: x.local_id }); }
@@ -57,11 +73,12 @@
         (String(p.local_id) === String(x.local_id) || String(p.local_id) === 'TODOS');
     });
     if (!platos.length) return UI.aviso('No hay productos disponibles para cotizar.', 'error');
-    var items = Array.isArray(x.items_solicitados) ? x.items_solicitados.map(function(it){return {plato_id:it.plato_id,cantidad:it.cantidad,extras:it.extras.slice()};}) : [];
+    var items = Array.isArray(x.items_solicitados) ? x.items_solicitados.map(function(it){return {plato_id:it.plato_id,cantidad:it.cantidad,extras:Array.isArray(it.extras)?it.extras.slice():[]};}) : [];
+    if (!items.length) items = sugerirSolicitudHistorica(x, platos);
     var otro = true;
     if(items.length){
       var precarga=items.map(function(it){var p=platos.filter(function(v){return String(v.id)===String(it.plato_id);})[0];return it.cantidad+' × '+(p?p.nombre:'Producto no disponible')+(it.extras.length?' ('+it.extras.join(', ')+')':'');}).join('; ');
-      var modo=await UI.ventana({titulo:'Productos solicitados',texto:precarga,botones:[{texto:'Cerrar',valor:null,clase:'secundario'},{texto:'Editar selección',valor:'editar'},{texto:'Cotizar selección',valor:'cotizar'}]});
+      var modo=await UI.ventana({titulo:'Revisar productos solicitados',texto:precarga+'. Verifica la selección contra la solicitud original: '+x.detalle,botones:[{texto:'Cerrar',valor:null,clase:'secundario'},{texto:'Editar selección',valor:'editar'},{texto:'Cotizar selección',valor:'cotizar'}]});
       if(!modo)return;
       if(modo==='cotizar')otro=false;else items=[];
     }
@@ -142,15 +159,15 @@
     var abiertas = ['Pendiente', 'Aprobada para coordinar', 'Cotizada', 'Confirmada cliente', 'Aplicando'];
     var lista = (datos.solicitudes || []).filter(function (x) { return abiertas.indexOf(x.estado) >= 0; })
       .sort(function (a, b) { return String(a.creado).localeCompare(String(b.creado)); });
-    if (typeof pedidoId === 'string' && est.datos) { var seleccionado = est.datos.pedidos.filter(function (p) { return String(p.id) === pedidoId; })[0]; if (seleccionado) lista = lista.filter(function (x) { return x.numero === seleccionado.numero; }); }
+    if (typeof pedidoId === 'string' && est.datos) { var seleccionado = est.datos.pedidos.filter(function (p) { return String(p.id) === pedidoId; })[0]; if (seleccionado) lista = lista.filter(function (x) { return String(x.numero) === String(seleccionado.numero); }); }
     if (!lista.length) return UI.aviso('No hay solicitudes de cambios abiertas.', 'ok');
     var opciones = [{ texto: 'Cerrar', valor: null, clase: 'secundario' }];
-    lista.slice(0, 12).forEach(function (x, i) {
+    lista.forEach(function (x, i) {
       opciones.push({ texto: x.numero + ' · ' + x.tipo + ' · ' + x.estado, valor: String(i) });
     });
     var elegido = await UI.ventana({
       icono: '📝', titulo: 'Solicitudes abiertas (' + lista.length + ')',
-      texto: 'Selecciona una solicitud. Se muestran hasta 12, desde la más antigua.',
+      texto: 'Selecciona una solicitud para revisar sus detalles. Ordenadas desde la más antigua.',
       botones: opciones
     });
     if (elegido === null || elegido === undefined) return;
@@ -429,6 +446,11 @@
    * Vigila en TODA la app (no solo en el panel) para dueño y cajero, también con
    * la pestaña en segundo plano. Consulta liviana: solo una marca de tiempo. */
   var vigia = null, vigilando = false, ultimaMarca = 0, identidadAvisos = '', vistosAvisos = Object.create(null);
+  function actualizarEstadoSolicitudes(r, error) {
+    var contador = UI.$('#pd-solic-count'), estado = UI.$('#pd-conexion');
+    if (contador && !error) contador.textContent = Array.isArray(r.solicitudes) ? String(r.solicitudes.length) : '—';
+    if (estado) estado.textContent = error ? 'Conexión interrumpida. Reintentando automáticamente.' : 'Conexión actualizada · ' + UI.fechaHora(new Date().toISOString());
+  }
   function vigilar() {
     if (vigia || vigilando) return;
     async function revisar() {
@@ -443,6 +465,7 @@
       try {
         var r = await DATOS.pedir('pedidosNuevos', { local_id: local });
         if (APP.sesion !== s || (APP.local || s.local_id || 'TODOS') !== local) return;
+        actualizarEstadoSolicitudes(r, false);
         if (Array.isArray(r.pedidos) && Array.isArray(r.solicitudes)) {
           var pedidos = [], solicitudes = [];
           r.pedidos.forEach(function(p) { var k = 'p:' + p.id; if (!vistosAvisos[k]) { vistosAvisos[k] = true; pedidos.push(p); } });
@@ -454,8 +477,8 @@
         if (APP.vistaActual === 'pedidos' && est.datos && document.visibilityState === 'visible') {
           try { await cargar(); } catch (e) {}
         }
-      } catch(e) { /* reintentar en siguiente vuelta */ }
-      finally { vigilando = false; vigia = setTimeout(revisar, 25000); }
+      } catch(e) { if (APP.sesion === s && (APP.local || s.local_id || 'TODOS') === local) actualizarEstadoSolicitudes(null, true); }
+      finally { vigilando = false; vigia = setTimeout(revisar, 15000); }
     }
     vigia = setTimeout(revisar, 1500);
   }
@@ -483,7 +506,7 @@
     var permiso = UI.permisoNotificaciones();
     var v = await UI.ventana({
       icono: '🔔', titulo: 'Avisos de pedidos y solicitudes',
-      texto: 'El panel revisa cada 25 segundos. Mantenga la app abierta y el volumen arriba. Los navegadores pueden suspender los avisos en segundo plano. Pruebe el sonido al iniciar el turno.',
+      texto: 'El panel revisa cada 15 segundos. Mantenga la app abierta y el volumen arriba. Los navegadores pueden suspender los avisos en segundo plano. Pruebe el sonido al iniciar el turno.',
       html: '<p class="ayuda">Sonido: <b>' + (on ? 'activado' : 'silenciado') + '</b> · Notificación en pantalla: <b>' +
         (permiso === 'granted' ? 'activada' : permiso === 'denied' ? 'bloqueada (actívela en el candado 🔒 de la barra de dirección)' : permiso === 'no' ? 'este teléfono no la permite' : 'sin activar') + '</b></p>',
       botones: [
