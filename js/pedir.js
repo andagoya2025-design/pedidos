@@ -727,7 +727,13 @@
   /* ---------------- Paso 3: confirmar y pagar ---------------- */
   function pintarConfirmar() {
     $('#barra-pedido').hidden = true;
-    if (!items().length) return irA(1);
+    if (!items().length && !envioPendiente) return irA(1);
+    if (envioPendiente) {
+      cuerpo().innerHTML = '<div class="tarjeta" role="alert"><h2>Pedido anterior pendiente de confirmación</h2><p>Primero comprobaremos si el restaurante recibió tu pedido. No necesitas volver a llenar tus datos ni crear otro carrito.</p><button class="btn bloque" type="button" id="btn-recuperar-confirmar">↻ Comprobar y recuperar pedido</button><button class="btn secundario bloque" type="button" id="btn-volver-menu" style="margin-top:8px">Volver al menú</button></div>';
+      $('#btn-recuperar-confirmar').addEventListener('click', function (ev) { recuperarEnvio(ev.currentTarget); });
+      $('#btn-volver-menu').addEventListener('click', function () { irA(1); });
+      return;
+    }
     var c = cfg(), cli = MEM.leer('cliente') || {};
     var z = zonaElegida();
     /* 3.1.3: efectivo solo si el dueño lo permite y hasta su monto máximo */
@@ -852,6 +858,7 @@
   async function enviar(ev) {
     ev.preventDefault();
     var f = ev.target, boton = f.querySelector('button[type=submit]');
+    if (envioPendiente) return recuperarEnvio(boton);
     var d = UI.leerFormulario(f);
     var cli = MEM.leer('cliente') || {};
     var priv = $('#pe-privacidad'), promos = f.querySelector('[name=acepta_promos]');
