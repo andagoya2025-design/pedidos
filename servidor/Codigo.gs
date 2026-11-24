@@ -1460,7 +1460,7 @@ function cerrarCambiosIncompatibles_(p, nuevoEstado, usuario) {
   if (!SpreadsheetApp.getActive().getSheetByName('pedido_cambios')) return 0;
   var n = 0;
   cambiosPedido_().forEach(function (x) {
-    if (String(x.pedido_id) !== String(p.id) || ['Pendiente', 'Aprobada para coordinar', 'Cotizada', 'Confirmada cliente', 'Aplicando'].indexOf(String(x.estado)) < 0) return;
+    if (String(x.pedido_id) !== String(p.id) || ['Pendiente', 'Aprobada para coordinar', 'Cotizada', 'Confirmada cliente'].indexOf(String(x.estado)) < 0) return;
     if (politicaCambiosPedido_(nuevoEstado, String(x.tipo)).permitido) return;
     actualizarCampos_('pedido_cambios', x._fila, x, {
       estado: 'Rechazada', resuelto: new Date(), resuelto_por: usuario,
@@ -2231,6 +2231,9 @@ function accionPedidoEstado_(data, ctx) {
     p = buscarPedido_(data.id, ctx);
     if (desde && String(p.estado) !== desde) throw fallo_('Este pedido cambió a «' + p.estado + '». Toque Actualizar.', 'CAMBIO');
     if (!(permitidos[String(p.estado)] || []).some(function (x) { return x === a; })) throw fallo_('No se puede pasar de «' + p.estado + '» a «' + a + '».');
+    if (SpreadsheetApp.getActive().getSheetByName('pedido_cambios') && cambiosPedido_().some(function (x) {
+      return String(x.pedido_id) === String(p.id) && String(x.estado) === 'Aplicando';
+    })) throw fallo_('Existe un adicional con aplicación incompleta. No avances el pedido hasta conciliar importes, detalle e inventario.', 'REVISION_MANUAL');
     if (a === 'En camino' && !p.motorizado_id) throw fallo_('Asigne un motorizado antes de despachar.');
     // Nunca enviar al motorizado mientras hay un cambio que aún requiere respuesta.
     // El personal debe resolverlo explícitamente; no se rechaza silenciosamente al despachar.
@@ -2303,6 +2306,10 @@ function accionPedidoAnular_(data, ctx) {
   try {
     p = buscarPedido_(data.id, ctx);
     if (String(p.estado) === 'Anulado') throw fallo_('Este pedido ya estaba anulado.');
+    // Nunca devolver inventario de una aplicación incompleta: podría duplicar la devolución.
+    if (SpreadsheetApp.getActive().getSheetByName('pedido_cambios') && cambiosPedido_().some(function (x) {
+      return String(x.pedido_id) === String(p.id) && String(x.estado) === 'Aplicando';
+    })) throw fallo_('Este pedido tiene una aplicación de adicionales incompleta. Conciliar antes de anular o devolver stock.', 'REVISION_MANUAL');
     if (String(p.estado) === 'Entregado' && ctx.sesion.rol !== 'dueno') throw fallo_('Un pedido entregado solo lo anula el dueño.', 'PERMISO');
     if (p.liquidacion_id) throw fallo_('El efectivo de este pedido ya se liquidó en caja: no se puede anular.');
     var eraEntregado = String(p.estado) === 'Entregado';
