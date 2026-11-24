@@ -18,8 +18,8 @@
  * ============================================================
  */
 
-var APP_VERSION = '3.1.9';
-var APP_VERSION_NUM = 30109; // 3.1.0 -> 30100 (la pantalla compara con su mínimo)
+var APP_VERSION = '3.1.11';
+var APP_VERSION_NUM = 30111; // 3.1.0 -> 30100 (la pantalla compara con su mínimo)
 var SESION_SEGUNDOS = 21600;  // 6 h; se renueva con cada uso
 var ROLES = ['dueno', 'cajero', 'motorizado'];
 
@@ -1858,6 +1858,8 @@ function accionPedidoConsultar_(data) {
   return { ok: true, data: { numero: String(p.numero), seguimiento: String(p.clave_seguimiento || '') ? String(p.numero) + '-' + String(p.clave_seguimiento) : '', estado: String(p.estado), creado: iso_(p.creado),
     forma_pago: String(p.forma_pago), pago_verificado: p.pago_verificado === true, cuenta_pago: String(p.cuenta_pago || ''), /* 3.1.5 */
     preparando: iso_(p.preparando), en_camino: iso_(p.en_camino), entregado: iso_(p.entregado), hora_estimada: iso_(p.hora_estimada), total: redondear_(p.total),
+    detalle: detallePorPedido_([String(p.id)])[String(p.id)] || [],
+    importes: { subtotal: redondear_(p.subtotal), envio: redondear_(p.envio), descuento: redondear_(p.descuento), iva: redondear_(p.iva), propina: redondear_(p.propina), total: redondear_(p.total) },
     tipo_entrega: tipoEntrega_(p), mesa: String(p.mesa || ''), calificacion: numero_(p.calificacion) || '', motivo_anulacion: String(p.estado) === 'Anulado' ? String(p.motivo_anulacion) : '',
     sellos: cli ? numero_(cli.sellos) : 0, sellos_meta: numero_(cfgC.fidelidad_sellos),
     tiempo_preparacion: numero_(cfgC.minutos_preparacion) || 20,
