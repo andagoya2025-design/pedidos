@@ -866,10 +866,12 @@
     });
   }
 
+  var cotizacionEnCurso=false;
   async function enviar(ev) {
     ev.preventDefault();
     var f = ev.target, boton = f.querySelector('button[type=submit]');
     if (envioPendiente) return recuperarEnvio(boton);
+    if(cotizacionEnCurso)return;
     var d = UI.leerFormulario(f);
     var cli = checkoutMem['cliente'] || {};
     var priv = $('#pe-privacidad'), promos = f.querySelector('[name=acepta_promos]');
@@ -893,6 +895,27 @@
         lat: dom && ubic && ubic.lat !== '' ? ubic.lat : '', lng: dom && ubic && ubic.lng !== '' ? ubic.lng : '',
         ubicacion_fuente: dom && ubic ? ubic.fuente : '', ubicacion_enlace: dom && ubic && ubic.enlace ? ubic.enlace : '' }
     };
+    // Cotización de sólo lectura. El servidor vuelve a validar bajo candado antes de escribir.
+    cotizacionEnCurso=true;
+    boton.disabled=true;
+    try{
+      var q=await DATOS.pedir('pedidoCotizar',datos);
+      if(q.repetido&&q.pedido){datos.total_esperado=Number(q.pedido.total);}
+      else {
+        if(!q||typeof q.total!=='number'||!Number.isFinite(q.total)||q.total<0)throw Error('No se recibió una cotización válida.');
+        if(Math.round(q.total*100)!==Math.round(totalActual()*100)){
+          var ok=await UI.ventana({titulo:'Confirma el importe actualizado',html:
+            '<p>El restaurante calculó el importe definitivo. Revisa antes de enviar.</p>'+
+            '<p>Subtotal: '+UI.esc(UI.dinero(q.subtotal))+' · Envío: '+UI.esc(UI.dinero(q.envio))+'</p>'+
+            '<p>Descuento: '+UI.esc(UI.dinero(q.descuento))+' · Premio: '+UI.esc(UI.dinero(q.premio))+' · Propina: '+UI.esc(UI.dinero(q.propina))+'</p>'+
+            '<p>IVA: '+UI.esc(UI.dinero(q.iva))+'</p><p><b>Total anterior: '+UI.esc(UI.dinero(totalActual()))+'</b><br><b>Total actualizado: '+UI.esc(UI.dinero(q.total))+'</b></p>',
+            botones:[{texto:'Volver',valor:false,clase:'secundario'},{texto:'Aceptar '+UI.dinero(q.total),valor:true}]});
+          if(!ok)return;
+        }
+        datos.total_esperado=q.total;
+      }
+    }catch(err){UI.aviso(err.message||'No se pudo comprobar el importe. No se envió el pedido.','error');return;}
+    finally{cotizacionEnCurso=false;boton.disabled=false;}
     // Si la respuesta anterior se perdió, reintentar exactamente la misma carga.
     // Nunca reutilizar un op_id con platos, importes o dirección distintos.
     if (envioPendiente) datos = envioPendiente;
@@ -917,6 +940,12 @@
         UI.vibrar([30, 40, 30]);
         pintarExito(r.pedido, detalle);
       } catch (err) {
+        if(err.codigo==='PRECIO_CAMBIO'){
+          envioPendiente=null;codigoEnvio='';
+          try{global.sessionStorage.removeItem('mipedido_envio_pendiente');}catch(e){}
+          UI.aviso('El importe cambió antes de guardar. Revisa y envía nuevamente; no se creó el pedido.','error');
+          return;
+        }
         // El código de envío se conserva: si vuelve a intentar, no se duplica.
         var decision = await UI.ventana({ icono: '⚠️', titulo: 'No pudimos confirmar el envío', texto: 'Comprueba el pedido original antes de crear otro. No se duplicará el envío.', botones: [{ texto: 'Cerrar', valor: null, clase: 'secundario' }, { texto: 'Comprobar pedido', valor: 'comprobar' }] });
         if (decision === 'comprobar' && !recuperacionEnCurso) await recuperarEnvio(boton);
