@@ -2477,11 +2477,15 @@ function accionMisEntregas_(data, ctx) {
     return abierto || (String(p.estado) === 'Entregado' && fechaCalendario_(p.entregado, cfg) === fechaCalendario_(new Date(), cfg));
   });
   var det = detallePorPedido_(mios.map(function (p) { return String(p.id); }));
+  var bloqueos = {};
+  if (SpreadsheetApp.getActive().getSheetByName('pedido_cambios')) cambiosPedido_().forEach(function (x) {
+    if (['Pendiente', 'Aprobada para coordinar', 'Cotizada', 'Confirmada cliente', 'Aplicando'].indexOf(String(x.estado)) >= 0) bloqueos[String(x.pedido_id)] = true;
+  });
   var cajas = leerTabla_('caja').filter(function (c) { return String(c.estado) === 'abierta'; });
   var deuda = deudaMotorizado_(String(m.id), cajas, pedidos);
   return { ok: true, data: {
     motorizado: { id: String(m.id), nombre: String(m.nombre) },
-    pedidos: mios.map(function (p) { return pedidoSalida_(p, det[String(p.id)] || []); }).sort(function (a, b) { return a.creado < b.creado ? -1 : 1; }),
+    pedidos: mios.map(function (p) { var salida = pedidoSalida_(p, det[String(p.id)] || []); salida.cambios_pendientes = !!bloqueos[String(p.id)]; return salida; }).sort(function (a, b) { return a.creado < b.creado ? -1 : 1; }),
     debe: { fondo: deuda.fondo, efectivo: deuda.efectivo, total: deuda.total },
     turno: turnoSalida_(turnoAbierto_(String(m.id))), // 3.1
     exigir_turno: siNo_(cfg.exigir_turno), codigo_entrega: siNo_(cfg.codigo_entrega)
