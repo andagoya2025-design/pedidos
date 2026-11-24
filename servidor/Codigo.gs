@@ -155,6 +155,7 @@ var ACCIONES = {
   pedidoCrear:        { tipo: 'publica', fn: accionPedidoCrear_ },
   pedidoConsultar:    { tipo: 'publica', fn: accionPedidoConsultar_ },
   pedidoRecuperar:     { tipo: 'publica', fn: accionPedidoRecuperar_ },
+  pedidoPoliticaCambios: { tipo: 'publica', fn: accionPedidoPoliticaCambios_ },
   menuListar:         { tipo: 'sesion',  roles: ['dueno', 'cajero'], fn: accionMenuListar_ },
   categoriaGuardar:   { tipo: 'dueno',   fn: accionCategoriaGuardar_ },
   platoGuardar:       { tipo: 'dueno',   fn: accionPlatoGuardar_ },
@@ -1330,6 +1331,34 @@ function UI_dinero_(n) { return (leerConfig_().moneda || 'USD') + ' ' + redondea
 
 /* Seguimiento del cliente: número + teléfono (sin listas, sin datos ajenos). */
 /* Consulta idempotente previa al reintento: solo devuelve el pedido del mismo teléfono. */
+/* Política central de modificaciones: no altera pedidos ni cobra automáticamente.
+ * La autorización final corresponde al restaurante y requiere una operación posterior.
+ */
+function politicaCambiosPedido_(estado, tipo) {
+  estado = String(estado || '');
+  tipo = String(tipo || '');
+  if (['Anulado', 'Entregado'].indexOf(estado) >= 0)
+    return { permitido: false, modalidad: 'nuevo_pedido', mensaje: 'Este pedido ya terminó. Realiza uno nuevo.' };
+  if (estado === 'En camino')
+    return { permitido: false, modalidad: 'nuevo_envio', mensaje: 'El motorizado ya salió y no debe regresar. Los adicionales requieren un pedido y entrega independientes, o retiro.' };
+  if (estado === 'Preparando') {
+    if (tipo === 'quitar' || tipo === 'reducir' || tipo === 'cambiar')
+      return { permitido: false, modalidad: 'sin_reduccion', mensaje: 'El restaurante ya está preparando. No se pueden quitar, reducir ni sustituir productos.' };
+    if (tipo === 'agregar' || tipo === 'aumentar')
+      return { permitido: true, modalidad: 'solicitud_aprobacion', mensaje: 'Puedes solicitar productos adicionales o aumentar cantidades. El restaurante debe aprobar precio, disponibilidad y tiempo antes de cobrar.' };
+  }
+  if (estado === 'Recibido' && ['agregar', 'aumentar', 'quitar', 'reducir', 'cambiar', 'cancelar'].indexOf(tipo) >= 0)
+    return { permitido: true, modalidad: 'solicitud_aprobacion', mensaje: 'Puedes solicitar este cambio antes de la preparación. Solo se aplica si el restaurante lo aprueba.' };
+  return { permitido: false, modalidad: 'no_disponible', mensaje: 'Este cambio no está disponible para el estado actual.' };
+}
+function accionPedidoPoliticaCambios_(data) {
+  var consulta = accionPedidoConsultar_({ s: data.s, numero: data.numero, telefono: data.telefono });
+  var p = consulta.data;
+  var tipo = limpiarTexto_(data.tipo, 20);
+  var politica = politicaCambiosPedido_(p.estado, tipo);
+  return { ok: true, data: { numero: p.numero, estado: p.estado, tipo: tipo, permitido: politica.permitido, modalidad: politica.modalidad, mensaje: politica.mensaje, aplicado: false } };
+}
+
 function accionPedidoRecuperar_(data) {
   if (!estaInstalado_()) throw fallo_('El sistema aún no está instalado.', 'NO_INSTALADO');
   var opId = limpiarTexto_(data.op_id, 80);
