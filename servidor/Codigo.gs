@@ -156,6 +156,7 @@ var ACCIONES = {
   /* ---- Fases 2 a 7 (sección 11). roles = quién puede usarla ---- */
   menuPublico:        { tipo: 'publica', fn: accionMenuPublico_ },
   pedidoCrear:        { tipo: 'publica', fn: accionPedidoCrear_ },
+    pedidoCotizar:      { tipo: 'publica', fn: accionPedidoCotizar_ },
   pedidoConsultar:    { tipo: 'publica', fn: accionPedidoConsultar_ },
   pedidoRecuperar:     { tipo: 'publica', fn: accionPedidoRecuperar_ },
   pedidoPoliticaCambios: { tipo: 'publica', fn: accionPedidoPoliticaCambios_ },
@@ -1208,7 +1209,8 @@ function importesCreacion_(subtotal,envio,descuento,premio,propina,cfg){
   return {total:(grav+tip+(incl?0:iva))/100,baseIva:base/100,iva:iva/100};
 }
 
-function accionPedidoCrear_(data, ctx) {
+function accionPedidoCotizar_(data,ctx){return accionPedidoCrear_(data,ctx,true);}
+function accionPedidoCrear_(data, ctx, soloCotizar) {
   if (!estaInstalado_()) throw fallo_('El sistema aún no está instalado.', 'NO_INSTALADO');
   var cfg = leerConfig_();
   if (estadoLicencia_(cfg).estado !== 'activa') throw fallo_('Por ahora no estamos recibiendo pedidos en línea. Escríbenos por WhatsApp.', 'LICENCIA');
@@ -1331,6 +1333,11 @@ function accionPedidoCrear_(data, ctx) {
       var maxEf = numero_(cfg.efectivo_maximo);
       if (maxEf > 0 && total > maxEf) throw fallo_('En efectivo se aceptan pedidos de hasta ' + UI_dinero_(maxEf) + '. Elige transferencia' + (cfg.deuna_qr_url ? ' o Deuna.' : '.'), 'EFECTIVO');
     }
+
+    if(soloCotizar===true)return {ok:true,data:{subtotal:subtotal,envio:envio,descuento:descuento,premio:premio,propina:propina,iva:iva,total:total}};
+    if(Object.prototype.hasOwnProperty.call(data,'total_esperado')&&
+      (typeof data.total_esperado!=='number'||!isFinite(data.total_esperado)||redondear_(data.total_esperado)!==total))
+      throw fallo_('El importe cambió antes de guardar. Revisa la cotización actualizada.','PRECIO_CAMBIO');
 
     // Número correlativo: el mayor que exista + 1 (bajo candado: nunca se repite).
     var mayor = 0;
