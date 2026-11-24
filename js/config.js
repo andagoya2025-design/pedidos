@@ -28,8 +28,8 @@
   global.APP_CONFIG = Object.freeze({
     url: valida(URL_SCRIPT) ? String(URL_SCRIPT).trim() : '',
     configurada: valida(URL_SCRIPT),
-    versionPantalla: '3.1.13',
-    versionScriptMinima: 30109, // 3.1.8 — editor y avisos persistentes
+    versionPantalla: '3.1.14',
+    versionScriptMinima: 30114, // instalar primero Apps Script 3.1.14
     tiempoEsperaMs: 25000
   });
 })(window);

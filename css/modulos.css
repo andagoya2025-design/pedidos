@@ -608,3 +608,6 @@ details.otras-fechas[open] summary { margin-bottom: 10px; }
 
 /* Respuestas rápidas y gestión de solicitudes: alcance local */
 .ux-respuesta-rapida{display:grid;gap:8px;margin:12px 0}.ux-respuesta-rapida textarea,.ux-respuesta-rapida select{width:100%;font-size:16px}.ux-respuesta-rapida small{color:var(--texto-2);text-align:right}.ventana.ux-gestion-modal>.acciones{position:sticky;bottom:0;background:var(--superficie);padding:10px 0 6px;z-index:2;border-top:1px solid var(--borde)}
+
+/* Seguimiento compacto por pedido; no cambia el resto de la app. */
+.seg-pedido-compacto{border:1px solid var(--borde);border-radius:14px;margin:10px 0;padding:8px;background:var(--superficie)}.seg-pedido-compacto>summary{display:grid;grid-template-columns:1fr auto;gap:4px 12px;cursor:pointer;padding:10px;list-style:none}.seg-pedido-compacto>summary::after{content:'▾';grid-column:2;grid-row:2;text-align:right}.seg-pedido-compacto[open]>summary::after{content:'▴'}.seg-pedido-compacto>summary small{grid-column:1;color:var(--texto-2)}.seg-pedido-compacto .seg-caja{margin:6px 0}.ux-cambio-fila [data-variante]{grid-column:1/-1;justify-self:start}

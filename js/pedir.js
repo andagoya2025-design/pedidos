@@ -1100,6 +1100,7 @@
           if (p.no_existe || p.consulta_error) { return; }
           if (p.estado !== x.e) { x.e = p.estado; if (p.estado === 'Entregado') x.fe = Date.now(); cambio2 = true; }
           if (p.total != null && Number.isFinite(Number(p.total)) && Number(p.total) !== Number(x.t)) { x.t = p.total; cambio2 = true; }
+          if(Array.isArray(p.detalle)&&p.detalle.length){var nuevos=p.detalle.map(function(d){return {p:String(d.plato_id),n:d.nombre,c:Number(d.cantidad),x:String(d.extras||'').split(',').map(function(v){return v.trim();}).filter(Boolean)};});if(JSON.stringify(nuevos)!==JSON.stringify(x.i)){x.i=nuevos;cambio2=true;}}
           if (p.seguimiento && !x.s) { x.s = p.seguimiento; cambio2 = true; }
           if (p.calificacion && !x.cal) { x.cal = p.calificacion; cambio2 = true; }
         });
@@ -1126,27 +1127,16 @@
       } catch (e) { /* Seguimiento sigue funcionando si falla la consulta de solicitudes. */ }
     }));
     var acceso = $('#btn-mi-pedido'); if (acceso) { acceso.hidden = !act.length; acceso.textContent = 'Mi pedido activo (' + act.length + ')'; }
-    cont.innerHTML = (act.length ? '<p class="ayuda">Seguimiento automático cada 15 segundos mientras la app está abierta.</p>' : '') + act.map(function (x) { return res[x.n] && !res[x.n].no_existe && !res[x.n].consulta_error ? tarjetaSeguimiento(res[x.n], x, solicitudesPorPedido[x.n]) + (solicitudesPorPedido[x.n] || []).slice(-3).map(function (sol) {
-      return '<div class="seg-caja ux-solicitud-pedido"><b>Modificación solicitada · ' + UI.esc(sol.tipo) + '</b>' +
-        '<div class="item-sub">Estado: ' + UI.esc(sol.estado) + '</div>' +
-        '<p>' + UI.esc(sol.detalle) + '</p>' +
-        (sol.respuesta ? '<p><b>Respuesta del restaurante:</b> ' + UI.esc(sol.respuesta) + '</p>' : '') +
-        (sol.cotizacion ? '<div class="item-sub"><b>Productos cotizados:</b> ' +
-          UI.esc((sol.cotizacion.lineas || []).map(function (l) { return l.cantidad + '× ' + l.nombre +
-            (l.extras && l.extras.length ? ' (' + l.extras.join(', ') + ')' : ''); }).join('; ')) + '</div>' +
-          '<p><b>' + (sol.aplicado ? 'Adicional aplicado: ' : sol.estado === 'Cotizada' ? 'Adicional a confirmar: ' : 'Adicional aceptado: ') + UI.esc(UI.dinero(sol.cotizacion.adicional)) + '</b>' +
-          (sol.aplicado ? ' · Total al aplicar: ' : ' · Total estimado: ') + UI.esc(UI.dinero(sol.cotizacion.total_estimado)) + '</p>' +
-          (sol.estado === 'Cotizada'
-            ? '<button class="btn chico" type="button" data-aceptar-cambio="' + UI.esc(sol.id) +
-              '" data-numero-cambio="' + UI.esc(x.n) + '">Aceptar importe</button> ' +
-              '<button class="btn secundario chico" type="button" data-rechazar-cambio="' + UI.esc(sol.id) +
-              '" data-numero-cambio="' + UI.esc(x.n) + '">Rechazar</button>'
-            : (sol.aplicado ? '<p><b>Adicional aplicado al pedido.</b> El total actualizado aparece en el seguimiento.</p>' :
-              sol.estado === 'Aplicando' ? '<p><b>Aplicación en revisión.</b> El restaurante debe conciliarla antes de despachar.</p>' :
-              '<p><b>Importe aceptado por ti.</b> Pendiente de gestión y verificación del pago en el restaurante.</p>'))
-          : '') +
-        (sol.aplicado ? '<small>El adicional ya forma parte de tu pedido.</small>' : '<small>Esta solicitud aún no modifica el pedido ni autoriza un cobro automático.</small>') + '</div>';
-    }).join('') : '<div class="seg-caja"><b>' + UI.esc(x.n) + '</b><div class="item-sub">No se pudo actualizar el estado. Conservamos el último estado conocido: ' + UI.esc(x.e) + '.</div><button class="enlace" type="button" data-seg-act>Reintentar</button></div>'; }).join('') +
+    var abiertosPrevios=UI.$$('[data-pedido-desplegable][open]',cont).map(function(d){return d.getAttribute('data-pedido-desplegable');});
+    var habiaDesplegables=UI.$$('[data-pedido-desplegable]',cont).length>0;
+    function tarjetaActiva(x,indice){
+      var r=res[x.n],sols=solicitudesPorPedido[x.n],abierta=solicitudAbierta(sols);
+      var contenido=r&&!r.no_existe&&!r.consulta_error?tarjetaSeguimiento(r,x,sols)+(sols||[]).slice(-3).map(function(sol){return tarjetaPropuesta(sol,x,r);}).join(''):'<div class="seg-caja"><b>'+UI.esc(x.n)+'</b><p>No se pudo actualizar. Último estado: '+UI.esc(x.e)+'</p><button class="enlace" type="button" data-seg-act>Reintentar</button></div>';
+      if(act.length<=1)return contenido;
+      var abrir=habiaDesplegables?abiertosPrevios.indexOf(x.n)>=0:indice===0;
+      return '<details class="seg-pedido-compacto" data-pedido-desplegable="'+UI.esc(x.n)+'" '+(abrir?'open':'')+'><summary><b>'+UI.esc(x.n)+'</b><span>'+UI.esc(UI.dinero(r&&!r.consulta_error&&!r.no_existe?r.total:x.t))+'</span><small>'+UI.esc(abierta?abierta.estado==='Cotizada'?'Propuesta por aceptar':abierta.estado==='Confirmada cliente'?'Cambio aceptado':'Modificación en revisión':r&&!r.consulta_error&&!r.no_existe?r.estado:x.e)+'</small></summary>'+contenido+'</details>';
+    }
+    cont.innerHTML = (act.length ? '<h3>Mis pedidos activos ('+act.length+')</h3>' : '') + act.map(tarjetaActiva).join('') +
       (hist.length ? '<details class="seg-caja mis-pedidos"' + '' + '><summary><b>🧾 Mis pedidos anteriores</b> <small>(' + hist.length + ')</small></summary>' +
         '<div class="lista">' + hist.map(function (x) {
           var fecha = new Date(x.f || Date.now());
@@ -1156,6 +1146,7 @@
         }).join('') + '</div>' +
         '<p class="ayuda" style="margin:8px 0 4px">Tu historial se guarda solo en este teléfono y se borra solo a los ' + diasHistorial() + ' días.</p>' +
         '<button class="btn borde chico" type="button" id="mp-borrar">🗑 Borrar mi historial</button></details>' : '');
+    UI.$$('[data-pedido-desplegable]',cont).forEach(function(d){d.addEventListener('toggle',function(){if(d.open)UI.$$('[data-pedido-desplegable][open]',cont).forEach(function(otro){if(otro!==d)otro.open=false;});});});
     // La confirmación del cliente se vincula a la cotización vigente y al pedido autenticado.
     ['aceptar', 'rechazar'].forEach(function (accion) {
       UI.$$('[data-' + accion + '-cambio]', cont).forEach(function (b) {
@@ -1169,12 +1160,8 @@
             })[0];
             if (!x || !sol) return UI.aviso('La cotización cambió. Actualiza tu pedido.', 'error');
             var acepta = accion === 'aceptar';
-            var texto = acepta
-              ? '¿Aceptas el adicional de ' + UI.dinero(sol.cotizacion.adicional) + ' para ' + numero +
-                '? Total estimado: ' + UI.dinero(sol.cotizacion.total_estimado) +
-                '. Esto no realiza un cargo ni modifica todavía el pedido.'
-              : '¿Rechazas el adicional de ' + UI.dinero(sol.cotizacion.adicional) + '? Tu pedido original no cambiará.';
-            var confirmado = await UI.confirmar(acepta ? 'Confirmar importe adicional' : 'Rechazar cotización',
+            var texto=acepta?'Confirma el nuevo total de '+UI.dinero(sol.cotizacion.total_estimado)+' para '+numero+'. No se realiza un cargo automático.':'Tu pedido original se mantiene sin cambios.';
+            var confirmado = await UI.confirmar(acepta ? 'Aceptar modificación definitiva' : 'Mantener pedido original',
               texto, acepta ? 'Sí, acepto el importe' : 'Sí, rechazar');
             if (!confirmado) return;
             try {
@@ -1186,7 +1173,7 @@
               payload.acepta = acepta;
               var resultado = await DATOS.pedir('pedidoCambioConfirmar', payload);
               UI.aviso(resultado.estado === 'Confirmada cliente'
-                ? 'Importe aceptado. Espera la verificación de pago y aplicación por el restaurante.'
+                ? 'Modificación aceptada. Consulta el siguiente paso en tu pedido.'
                 : 'Cotización rechazada; el pedido original no cambia.', 'ok');
               await pintarSeguimiento(false);
             } catch (err) {
@@ -1199,6 +1186,7 @@
     UI.$$('[data-seg-act]', cont).forEach(function (b) { b.addEventListener('click', function (e) { UI.trabajando(e.currentTarget, function () { return pintarSeguimiento(true); }); }); });
     UI.$$('[data-calificar]', cont).forEach(function (b) { b.addEventListener('click', function () { var x = lista.filter(function (y) { return y.n === b.getAttribute('data-calificar'); })[0]; if (x) calificar({ numero: x.n, telefono: x.tel || (checkoutMem['cliente'] || {}).telefono || '', s: x.s }); }); });
     UI.$$('[data-comprobante]', cont).forEach(function (b) { b.addEventListener('click', function () { var p = res[b.getAttribute('data-comprobante')]; if (p) UI.abrirWhatsApp(cfg().whatsapp, 'Hola, envío el comprobante del pedido *' + p.numero + '* por ' + UI.dinero(p.total) + (p.cuenta_pago ? ' (a ' + p.cuenta_pago + ')' : '') + '. 👇'); }); });
+    UI.$$('[data-comprobante-ajuste]',cont).forEach(function(b){b.addEventListener('click',function(){var n=b.getAttribute('data-comprobante-ajuste'),p=res[n],sol=solicitudAbierta(solicitudesPorPedido[n]);if(p&&p.pago_verificado&&sol&&sol.estado==='Confirmada cliente'&&sol.cotizacion&&sol.cotizacion.adicional>0)UI.abrirWhatsApp(cfg().whatsapp,'Hola, envío comprobante del ajuste del pedido '+n+' por '+UI.dinero(sol.cotizacion.adicional)+'.');});});
     UI.$$('[data-escribir]', cont).forEach(function (b) { b.addEventListener('click', async function () {
       var numero = b.getAttribute('data-escribir');
       var pedido = res[numero];
@@ -1326,6 +1314,7 @@
           var n = Number(el.value), max = Number(el.max);
           if (!Number.isInteger(n) || n < 0 || n > max) throw Error('Revisa las cantidades.');
           if (!n) return;
+          if(tipo==='quitar'&&n!==Number(p.cantidad))throw Error('Para quitar, selecciona toda la cantidad. Para disminuir, usa reducir.');
           var extras = prefijo === 'o' ? String(p.extras || '') : '';
           var precio = Number(p.precio) || 0;
           if (prefijo === 'n') {
@@ -1395,10 +1384,26 @@
   function solicitudAbierta(solicitudes) {
     return (Array.isArray(solicitudes)?solicitudes:[]).find(function(s){return ['Pendiente','Aprobada para coordinar','Cotizada','Confirmada cliente','Aplicando'].indexOf(s.estado)>=0;})||null;
   }
+  function tarjetaPropuesta(sol,x,r) {
+    var q=sol.cotizacion;
+    function lista(t,ls){return '<h4>'+t+'</h4>'+ls.map(function(d){return '<div class="ux-resumen-item"><span>'+UI.esc(d.cantidad+' × '+d.nombre+(d.extras&&d.extras.length?' · '+d.extras:''))+'</span><b>'+UI.esc(UI.dinero(d.total_linea))+'</b></div>';}).join('');}
+    var h='<div class="seg-caja ux-solicitud-pedido"><b>'+UI.esc(sol.estado==='Cotizada'?'Tu propuesta está lista':sol.estado==='Confirmada cliente'?'Modificación aceptada':sol.aplicado?'Modificación aplicada':'Modificación · '+sol.tipo)+'</b>';
+    if(!q)return h+'<p>'+UI.esc(sol.respuesta||'Estamos revisando tu solicitud.')+'</p></div>';
+    if(q.integral)h+=lista('Pedido anterior',q.antes||[])+lista('Pedido propuesto',q.despues||[]);else h+=lista('Productos adicionales',q.lineas||[]);
+    h+='<div class="ux-resumen-item"><span>Total propuesto</span><b>'+UI.esc(UI.dinero(q.total_estimado))+'</b></div><div class="ux-resumen-item"><span>Diferencia</span><b>'+UI.esc(UI.dinero(q.adicional))+'</b></div>';
+    if(sol.estado==='Cotizada')h+='<button class="btn bloque" type="button" data-aceptar-cambio="'+UI.esc(sol.id)+'" data-numero-cambio="'+UI.esc(x.n)+'">Aceptar modificación</button><button class="btn secundario bloque" type="button" data-rechazar-cambio="'+UI.esc(sol.id)+'" data-numero-cambio="'+UI.esc(x.n)+'">Mantener pedido original</button>';
+    else if(sol.estado==='Confirmada cliente'){
+      if(UI.esDigital(r.forma_pago)&&r.pago_verificado&&q.adicional>0){h+='<p>Pago adicional pendiente: <b>'+UI.esc(UI.dinero(q.adicional))+'</b></p>'+(r.forma_pago==='transferencia'?tarjetasCuentas(q.adicional,r.numero,false,r.cuenta_pago):'')+(UI.digitos(cfg().whatsapp)?'<button class="btn bloque" data-comprobante-ajuste="'+UI.esc(r.numero)+'" type="button">Enviar comprobante adicional</button>':'');}
+      else if(UI.esDigital(r.forma_pago)&&r.pago_verificado&&q.adicional<0)h+='<p>El restaurante debe conciliar una devolución de '+UI.esc(UI.dinero(-q.adicional))+'.</p>';
+      else h+='<p>El restaurante está aplicando la modificación. Espera el total actualizado antes de realizar otro pago.</p>';
+    }else if(sol.estado==='Aplicando')h+='<p>El restaurante está conciliando la modificación. No envíes otro pago.</p>';
+    else if(sol.aplicado)h+='<p>Consulta el detalle actualizado de tu pedido.</p>';
+    return h+'</div>';
+  }
   function estadoSolicitudHtml(solicitudes,r) {
     if (!Array.isArray(solicitudes)) return '<p class="ayuda">No pudimos verificar las solicitudes. Actualiza antes de realizar cambios.</p><button class="btn secundario chico bloque" type="button" data-seg-act>Actualizar solicitudes</button>';
     var s=solicitudAbierta(solicitudes);
-    if(s)return '<div class="ux-solicitud-pendiente"><b>Modificación en revisión</b><small>'+UI.esc(s.estado)+' · '+UI.esc(s.detalle)+'</small><small>Tu pedido vigente se mantiene hasta aplicar la modificación. No necesitas enviar otra solicitud.</small><button class="btn secundario chico bloque" type="button" data-seg-act>Actualizar estado</button></div>';
+    if(s)return '<div class="ux-solicitud-pendiente"><small>'+UI.esc(s.estado==='Cotizada'?'Revisa la propuesta debajo.':s.estado==='Confirmada cliente'?'Ya aceptaste. No envíes otra solicitud.':'Tu modificación está en revisión.')+'</small></div>';
     return '<p class="ayuda">'+UI.esc(mensajeCambioPedido(r.estado))+'</p><button class="btn secundario chico bloque" type="button" data-escribir="'+UI.esc(r.numero)+'">Solicitar cambio</button>';
   }
   function tarjetaSeguimiento(r, x, solicitudes) {
@@ -1416,7 +1421,7 @@
             r.estado === 'En camino' ? (r.eta_moto ? '<b>Llega en unos ' + r.eta_moto.desde + ' a ' + r.eta_moto.hasta + ' min.</b> Tiempo orientativo; puede variar.' : (r.en_camino ? 'Salió hace ' + UI.minutosDesde(r.en_camino) + ' min. ' + (UI.minutosDesde(r.en_camino) > (Number(cfg().minutos_preparacion) || 20) + 30 ? 'Hay más tráfico de lo normal; seguimos atentos a tu entrega.' : 'Te avisaremos si hay cambios.') : 'Pronto estará en camino.')) :
             'Tiempo aproximado: <b>' + ((Number(r.tiempo_preparacion) || 20) + (Number(r.tiempo_zona) || 0)) + ' a ' + ((Number(r.tiempo_preparacion) || 20) + (Number(r.tiempo_zona) || 0) + 10) + ' min.</b> Puede variar') + '</p>' : '')) +
       detalleSeguimiento(r,x) +
-      (digital ? (r.pago_verificado
+      (digital ? (solicitudAbierta(solicitudes)||!Array.isArray(solicitudes)?'<div class="pago-estado espera">Espera a resolver la modificación antes de enviar otro pago.</div>':r.pago_verificado
         ? '<div class="pago-estado ok">✅ <span><b>Pago confirmado en nuestra cuenta.</b>' + (r.estado === 'Recibido' ? ' El restaurante ya puede revisar tu pedido.' : '') + '</span></div>'
         : '<div class="pago-estado espera">⏳ <span><b>Pago por confirmar.</b> Tu pedido se prepara cuando confirmemos el pago de <b>' + UI.esc(UI.dinero(r.total)) + '</b> en nuestra cuenta' + (r.cuenta_pago ? ' (' + UI.esc(r.cuenta_pago) + ')' : '') + '. Si pagaste desde otro banco puede tardar un poco.</span></div>' +
           (r.forma_pago === 'transferencia' ? tarjetasCuentasSolo(r) : '') +
