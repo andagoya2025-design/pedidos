@@ -927,13 +927,21 @@
         var p = consulta.pedido;
         guardarMiPedido({ n: p.numero, tel: original.cliente.telefono, s: p.clave_seguimiento ? p.numero + '-' + p.clave_seguimiento : '', f: Date.now(), t: p.total, e: p.estado || 'Recibido', l: original.local_id,
           i: original.items.map(function (x) { var pl = plato(x.plato_id); return { p: x.plato_id, c: x.cantidad, x: x.extras, n: pl ? pl.nombre : '' }; }) });
+        // Recuperar el pedido no significa que el carrito actual sea el original.
+        // Solo vaciarlo cuando sus artículos coinciden con el envío recuperado;
+        // de lo contrario preservar el nuevo pedido que el cliente esté armando.
+        var firmaItems = function (items) { return JSON.stringify((items || []).map(function (x) {
+          return { p: String(x.plato_id || x.p || ''), c: Number(x.cantidad || x.c || 0), e: x.extras || x.x || '' };
+        }).sort(function (a, b) { return JSON.stringify(a).localeCompare(JSON.stringify(b)); })); };
+        var carritoActual = Object.keys(carrito).map(function (k) { var x = carrito[k]; return { plato_id: x.plato_id || x.p || k, cantidad: x.cantidad || x.c, extras: x.extras || x.x || '' }; });
+        var esMismoCarrito = firmaItems(carritoActual) === firmaItems(original.items);
         MEM.guardar('ultimo_carrito', { local: original.local_id, items: original.items });
-        // La recuperación confirma un pedido YA creado: retirar del carrito los
-        // artículos enviados para no inducir al cliente a pagarlos otra vez.
-        carrito = {}; codigoEnvio = ''; envioPendiente = null; ubic = null; pago.propina = 0;
+        if (esMismoCarrito) { carrito = {}; ubic = null; pago.propina = 0; }
+        codigoEnvio = ''; envioPendiente = null;
         try { global.sessionStorage.removeItem('mipedido_envio_pendiente'); } catch (e) { /* sin almacenamiento */ }
-        UI.aviso('El restaurante ya recibió tu pedido ' + p.numero + '. No se ha creado otro.', 'exito');
-        pintarExito(p);
+        UI.aviso('Pedido ' + p.numero + ' localizado. No se ha creado otro.', 'exito');
+        if (esMismoCarrito) pintarExito(p);
+        else { pintarMenu(); pintarSeguimiento(true); }
         return;
       }
     } catch (err) {
