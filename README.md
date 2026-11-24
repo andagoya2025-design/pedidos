@@ -5,7 +5,7 @@ Una copia por cliente: cada negocio tiene su propia hoja de Google y su propio s
 
 ## Versión vigente
 
-**MiPedido 3.1.14.** Para instalar o actualizar Apps Script, utilizar únicamente [`servidor/Codigo_MiPedido_3.1.14.txt`](servidor/Codigo_MiPedido_3.1.14.txt) (copia exacta de `servidor/Codigo.gs`). `Codigo.gs` es el archivo fuente mantenido; el TXT facilita la descarga e instalación. Las versiones anteriores se conservan en el historial de Git y en el respaldo `backup/antes-limpieza-20261124`, no en la carpeta principal.
+**Pantallas MiPedido 3.1.15 · Servidor 3.1.14.** Para instalar o actualizar Apps Script, utilizar únicamente [`servidor/Codigo_MiPedido_3.1.14.txt`](servidor/Codigo_MiPedido_3.1.14.txt) (copia exacta de `servidor/Codigo.gs`). `Codigo.gs` es el archivo fuente mantenido; el TXT facilita la descarga e instalación. Las versiones anteriores se conservan en el historial de Git y en el respaldo `backup/antes-limpieza-20261124`, no en la carpeta principal.
 
 `servidor/Pruebas.gs` es opcional y exclusivo de una hoja de ensayo: no instalar ni ejecutar en producción. Las pruebas automáticas de `tests/` se conservan para evitar regresiones. `MiPedido_Setup.html` es el asistente local de configuración; `instalar.html` es el instalador técnico. `herramientas-proveedor/` y `COMERCIAL.md` son recursos separados de administración comercial.
 
