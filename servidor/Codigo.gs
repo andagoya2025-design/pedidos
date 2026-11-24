@@ -1078,11 +1078,11 @@ function limpiarMenuCache_() { CacheService.getScriptCache().remove('MENU_PUBLIC
 /* Extras guardados como JSON: [{nombre, precio}] */
 function maxExtra_(e) {
   var n=Number(e.max_cantidad);
-  return Number(e.precio)>0&&Number.isInteger(n)&&n>=1&&n<=10?n:1;
+  return Number(e.precio)>0?(Number.isSafeInteger(n)&&n>=1&&n<=1000?n:1000):1;
 }
 function validarExtrasPedido_(seleccion,disp) {
   if(seleccion==null)seleccion=[];
-  if(!Array.isArray(seleccion)||seleccion.length>200)throw fallo_('Extras inválidos.','EXTRAS');
+  if(!Array.isArray(seleccion)||seleccion.length>1000)throw fallo_('Extras inválidos.','EXTRAS');
   var vistos=Object.create(null),nombres=[],cent=0;
   seleccion.forEach(function(nombre){
     if(typeof nombre!=='string')throw fallo_('Extra inválido.','EXTRAS');
@@ -1097,7 +1097,7 @@ function validarExtrasPedido_(seleccion,disp) {
 function leerExtras_(txt) {
   try {
     var a = JSON.parse(String(txt || '[]'));
-    return Array.isArray(a) ? a.map(function (x) { return { nombre: limpiarTexto_(x.nombre, 60), precio: redondear_(x.precio), max_cantidad: maxExtra_(x) }; }).filter(function (x) { return x.nombre; }) : [];
+    return Array.isArray(a) ? a.map(function (x) { return { nombre: limpiarTexto_(x.nombre, 60), precio: redondear_(x.precio), max_cantidad: maxExtra_(x), limite_comercial: Number(x.precio)>0&&x.max_cantidad!=null&&x.max_cantidad!=='' }; }).filter(function (x) { return x.nombre; }) : [];
   } catch (e) { return []; }
 }
 
@@ -1202,12 +1202,12 @@ function cotizarLineasCreacion_(items, platos, localId, sinInsumos) {
     var p=platos[String(it.plato_id)],cant=Number(it.cantidad);
     if(!p||p.activo!==true||(String(p.local_id)!=='TODOS'&&String(p.local_id)!==String(localId)))throw fallo_('Un plato de su pedido ya no está disponible. Revise su pedido.','PLATO');
     if(p.agotado===true||sinInsumos[String(p.id)])throw fallo_('«'+p.nombre+'» se agotó. Quítelo de su pedido.','AGOTADO');
-    if(!Number.isInteger(cant)||cant<1||cant>50)throw fallo_('Cantidad no válida en «'+p.nombre+'».','CANTIDAD');
+    if(!Number.isInteger(cant)||cant<1||cant>1000)throw fallo_('Cantidad no válida en «'+p.nombre+'».','CANTIDAD');
     if(!isFinite(Number(p.precio))||Number(p.precio)<0)throw fallo_('Precio inválido.','PRECIO');
     var elegidos=validarExtrasPedido_(it.extras,leerExtras_(p.extras_json)),nombres=elegidos.nombres,cent=Math.round(redondear_(p.precio)*100)+elegidos.centavos;
     var key=JSON.stringify([String(p.id),nombres.map(claveComparar_).sort()]);
     variantes[key]=(variantes[key]||0)+cant;
-    if(variantes[key]>50)throw fallo_('Máximo 50 unidades por variante.','CANTIDAD');
+    if(variantes[key]>1000)throw fallo_('Máximo técnico de 1000 unidades por variante.','CANTIDAD');
     subtotalCent+=cent*cant;masCaro=Math.max(masCaro,cent/100);
     detalleFilas.push({plato_id:String(p.id),nombre:String(p.nombre),precio:cent/100,cantidad:cant,extras:nombres.join(', '),total_linea:cent*cant/100});
   });
@@ -1501,7 +1501,7 @@ function seleccionSolicitud_(tipo, items, p) {
   var platos = leerTabla_('platos'), originales = detallePorPedido_([String(p.id)])[String(p.id)] || [];
   var agotados = agotadosPorLocal_()[String(p.local_id)] || {}, agrupados = Object.create(null);
   items.forEach(function(it) {
-    if (!it || !Number.isInteger(it.cantidad) || it.cantidad < 1 || it.cantidad > 50) throw fallo_('Cantidad inválida.', 'CANTIDAD');
+    if (!it || !Number.isInteger(it.cantidad) || it.cantidad < 1 || it.cantidad > 1000) throw fallo_('Cantidad inválida.', 'CANTIDAD');
     var plato = platos.filter(function(v){return String(v.id)===String(it.plato_id);})[0];
     if (!plato || plato.activo !== true || plato.agotado === true || agotados[String(plato.id)] || (String(plato.local_id)!=='TODOS' && String(plato.local_id)!==String(p.local_id))) throw fallo_('Producto no disponible.', 'AGOTADO');
     if(!Array.isArray(it.extras))throw fallo_('Extras inválidos.','EXTRAS');
@@ -1511,7 +1511,7 @@ function seleccionSolicitud_(tipo, items, p) {
     var existentes=originales.filter(function(v){return String(v.plato_id)===linea.plato_id && String(v.extras||'').split(',').map(function(n){return claveComparar_(n.trim());}).filter(Boolean).sort().join('|')===extras.map(claveComparar_).sort().join('|');});
     var actual=existentes.reduce(function(n,v){return n+numero_(v.cantidad);},0);
     if(tipo==='aumentar'&&!existentes.length)throw fallo_('Usa agregar para productos nuevos.', 'CAMBIO');
-    if(linea.cantidad+(tipo==='aumentar'?actual:0)>50)throw fallo_('Máximo 50 unidades por variante.', 'CANTIDAD');
+    if(linea.cantidad+(tipo==='aumentar'?actual:0)>1000)throw fallo_('Máximo técnico de 1000 unidades por variante.', 'CANTIDAD');
   });
   return Object.keys(agrupados).sort().map(function(k){return agrupados[k];});
 }
@@ -1622,10 +1622,10 @@ function planCambioIntegral_(p,t,sel,filas,platos,cfg,agotados) {
   retirar.forEach(function(it){var d=despues.filter(function(v){return v.id===String(it.id);})[0],n=Number(it.cantidad);if(!d||vistos[d.id]||!Number.isInteger(n)||n<1||n>d.cantidad||t==='quitar'&&n!==d.cantidad||t==='reducir'&&n>=d.cantidad)throw fallo_('Retiro inválido.');vistos[d.id]=true;bajas.push(Object.assign({},d,{cantidad:n,total_linea:redondear_(n*d.precio)}));d.cantidad-=n;d.total_linea=redondear_(d.cantidad*d.precio);});
   var variantes=Object.create(null);
   function clave(id,ex){return JSON.stringify([String(id),ex.map(claveComparar_).sort()]);}
-  agregar.forEach(function(it){var n=Number(it.cantidad),pl=platos.filter(function(v){return String(v.id)===String(it.plato_id);})[0];if(!Number.isInteger(n)||n<1||n>50||!pl||pl.activo!==true||pl.agotado===true||agotados[String(pl.id)]||String(pl.local_id)!=='TODOS'&&String(pl.local_id)!==String(p.local_id))throw fallo_('Producto no disponible o cantidad inválida.');
+  agregar.forEach(function(it){var n=Number(it.cantidad),pl=platos.filter(function(v){return String(v.id)===String(it.plato_id);})[0];if(!Number.isInteger(n)||n<1||n>1000||!pl||pl.activo!==true||pl.agotado===true||agotados[String(pl.id)]||String(pl.local_id)!=='TODOS'&&String(pl.local_id)!==String(p.local_id))throw fallo_('Producto no disponible o cantidad inválida.');
     var ex=validarExtrasPedido_(it.extras,leerExtras_(pl.extras_json)),nombres=ex.nombres,precio=(Math.round(redondear_(pl.precio)*100)+ex.centavos)/100;
     var k=clave(pl.id,nombres),exist=despues.filter(function(v){return v.cantidad>0&&clave(v.plato_id,v.extras.split(',').map(function(x){return x.trim();}).filter(Boolean))===k;});
-    if(variantes[k]||t==='aumentar'&&!exist.length||exist.reduce(function(a,v){return a+v.cantidad;},0)+n>50)throw fallo_('Variante duplicada, ajena al pedido o cantidad excesiva.');
+    if(variantes[k]||t==='aumentar'&&!exist.length||exist.reduce(function(a,v){return a+v.cantidad;},0)+n>1000)throw fallo_('Variante duplicada, ajena al pedido o cantidad excesiva.');
     variantes[k]=true;precio=redondear_(precio);var alta={plato_id:String(pl.id),nombre:String(pl.nombre),cantidad:n,precio:precio,extras:nombres,total_linea:redondear_(precio*n)};altas.push(alta);
     despues.push({id:'',plato_id:alta.plato_id,nombre:alta.nombre,cantidad:n,precio:precio,extras:nombres.join(', '),total_linea:alta.total_linea});
   });
@@ -1716,7 +1716,7 @@ function accionPedidoCambioCotizar_(data, ctx) {
   items.forEach(function (it) {
     var plato = platos[String(it.plato_id)];
     var cantidad = Number(it.cantidad);
-    if (!Number.isInteger(cantidad) || cantidad < 1 || cantidad > 50)
+    if (!Number.isInteger(cantidad) || cantidad < 1 || cantidad > 1000)
       throw fallo_('Cantidad no válida.', 'CANTIDAD');
     if (!plato || plato.activo !== true || plato.agotado === true || agotados[String(plato.id)] ||
         (String(plato.local_id) !== 'TODOS' && String(plato.local_id) !== String(p.local_id)))
@@ -1733,7 +1733,7 @@ function accionPedidoCambioCotizar_(data, ctx) {
       });
       if (!existentes.length) throw fallo_('Para aumentar, el producto y sus extras deben existir en el pedido. Usa agregar para productos nuevos.', 'CAMBIO');
       var cantidadActual = existentes.reduce(function (n, v) { return n + numero_(v.cantidad); }, 0);
-      if (cantidadActual + cantidad > 50) throw fallo_('El aumento supera 50 unidades de este producto.', 'CANTIDAD');
+      if (cantidadActual + cantidad > 1000) throw fallo_('El aumento supera el máximo técnico de 1000 unidades de este producto.', 'CANTIDAD');
     }
     var unitario = redondear_(numero_(plato.precio) + costoExtras);
     var total = redondear_(unitario * cantidad);
@@ -2095,8 +2095,8 @@ function accionPlatoGuardarBase_(data, ctx) {
   var extras = (Array.isArray(data.extras) ? data.extras : []).map(function (x) {
     var n = limpiarTexto_(x.nombre, 60), pr = Number(x.precio || 0);
     if (n && !(pr >= 0 && pr <= 1000)) throw fallo_('Precio del extra «' + n + '» no válido.');
-    var max=x.max_cantidad==null||x.max_cantidad===''?1:Number(x.max_cantidad);
-    if(n&&(!Number.isInteger(max)||max<1||max>10))throw fallo_('Cantidad máxima de extra inválida.');
+    var max=x.max_cantidad==null||x.max_cantidad===''?null:Number(x.max_cantidad);
+    if(n&&pr>0&&max!==null&&(!Number.isSafeInteger(max)||max<1||max>1000))throw fallo_('Cantidad máxima de «'+n+'» inválida: use un entero entre 1 y 1000, o deje vacío.');
     if(n&&n.indexOf(',')>=0)throw fallo_('El nombre del extra no debe contener comas.');
     return { nombre: n, precio: redondear_(pr), max_cantidad: pr>0?max:1 };
   }).filter(function (x) { return x.nombre; });
