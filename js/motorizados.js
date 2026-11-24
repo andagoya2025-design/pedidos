@@ -230,14 +230,21 @@
   /* =================== Mis entregas (motorizado) =================== */
   var mias = null;
   var timerEntregas = null, consultandoEntregas = false;
+  var vigiaMoto = DATOS.crearVigiaSync();
   function programarActualizacionEntregas() {
     if (timerEntregas) clearTimeout(timerEntregas);
     timerEntregas = setTimeout(function () {
       timerEntregas = null;
       if (APP.vistaActual !== 'entregas' || !APP.sesion || APP.sesion.rol !== 'motorizado') return;
-      if (document.visibilityState === 'visible') cargarMias(true);
+      if (document.visibilityState === 'visible' && navigator.onLine !== false && !consultandoEntregas && !document.querySelector('.velo') && !DATOS.ocupado()) {
+        var s=APP.sesion;
+        vigiaMoto(String(s.usuario_id||s.usuario||''), function () {
+          if (APP.sesion!==s || APP.vistaActual!=='entregas' || document.querySelector('.velo') || DATOS.ocupado()) return false;
+          return cargarMias(true);
+        },30000).catch(function(){});
+      }
       programarActualizacionEntregas();
-    }, 30000);
+    }, document.visibilityState === 'visible' ? 3000 : 30000);
   }
 
   APP.vistas.entregas = {
@@ -253,13 +260,15 @@
   async function cargarMias(silencioso) {
     if (consultandoEntregas) return;
     consultandoEntregas = true;
+    var sesionConsulta=APP.sesion;
     try {
       var nuevos = await DATOS.pedir('misEntregas', {});
-      if (APP.vistaActual !== 'entregas') return;
+      if (APP.vistaActual !== 'entregas' || APP.sesion!==sesionConsulta) return false;
       if (!silencioso || !mias || JSON.stringify(nuevos) !== JSON.stringify(mias)) {
         mias = nuevos;
         pintarMias();
       }
+      return true;
     } catch (err) {
       if (!silencioso && !mias && UI.$('#en-cuerpo')) UI.$('#en-cuerpo').innerHTML = '<div class="banda error">⚠️ <span>' + UI.esc(err.message) + '</span></div>';
     } finally {
