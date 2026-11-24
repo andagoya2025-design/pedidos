@@ -1139,8 +1139,15 @@
       if (politica.numero !== numero) return UI.aviso('No se pudo validar el pedido. Actualiza el seguimiento.', 'error');
       var nombres = { agregar: 'agregar productos', aumentar: 'aumentar cantidades', cambiar: 'cambiar productos', quitar: 'quitar productos', reducir: 'reducir cantidades', cancelar: 'cancelar el pedido' };
       if (politica.permitido) {
-        var detalle = global.prompt('Describe los productos y cantidades para solicitar ' + (nombres[tipo] || tipo) + ':');
-        if (detalle === null) return;
+        var detalle = await UI.pedirDato({
+          icono: '📝', titulo: 'Solicitar cambio',
+          etiqueta: 'Productos, cantidades y detalles',
+          ph: 'Ejemplo: agregar 2 jugos de naranja',
+          modo: 'text', boton: 'Enviar solicitud',
+          texto: 'El restaurante debe confirmar el cambio antes de aplicarlo.',
+          validar: function (v) { return v.trim().length >= 5 && v.length <= 500 ? '' : 'Describe el cambio entre 5 y 500 caracteres.'; }
+        });
+        if (detalle === null || detalle === undefined) return;
         detalle = String(detalle).trim();
         if (detalle.length < 5 || detalle.length > 500) return UI.aviso('Describe el cambio entre 5 y 500 caracteres.', 'error');
         try {
