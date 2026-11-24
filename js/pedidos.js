@@ -127,7 +127,7 @@
     var datos;
     try { datos = await DATOS.pedir('pedidoCambiosListar', { local_id: APP.local }); }
     catch (err) { return UI.aviso('No se pudieron cargar las solicitudes: ' + err.message, 'error'); }
-    var abiertas = ['Pendiente', 'Aprobada para coordinar', 'Cotizada', 'Confirmada cliente'];
+    var abiertas = ['Pendiente', 'Aprobada para coordinar', 'Cotizada', 'Confirmada cliente', 'Aplicando'];
     var lista = (datos.solicitudes || []).filter(function (x) { return abiertas.indexOf(x.estado) >= 0; })
       .sort(function (a, b) { return String(a.creado).localeCompare(String(b.creado)); });
     if (!lista.length) return UI.aviso('No hay solicitudes de cambios abiertas.', 'ok');
@@ -148,16 +148,53 @@
     var decisiones = [{ texto: 'Volver', valor: null, clase: 'secundario' }];
     if (puedeCotizar) decisiones.push({ texto: x.estado === 'Cotizada' ? 'Recotizar' : 'Cotizar adicionales', valor: 'cotizar' });
     if (x.estado === 'Pendiente') decisiones.push({ texto: 'Coordinar', valor: 'Aprobada para coordinar' });
-    if (x.estado !== 'Pendiente') decisiones.push({ texto: 'Cerrar sin aplicar', valor: 'Cerrada sin aplicar' });
-    decisiones.push({ texto: 'Rechazar', valor: 'Rechazada' });
+    if (x.estado === 'Confirmada cliente') decisiones.push({ texto: 'Aplicar adicional ' + UI.dinero(x.adicional), valor: 'aplicar' });
+    if (['Aprobada para coordinar', 'Cotizada', 'Confirmada cliente'].indexOf(x.estado) >= 0)
+      decisiones.push({ texto: 'Cerrar sin aplicar', valor: 'Cerrada sin aplicar' });
+    if (x.estado !== 'Aplicando') decisiones.push({ texto: 'Rechazar', valor: 'Rechazada' });
     var decision = await UI.ventana({
       titulo: x.numero + ' · ' + x.tipo,
       texto: x.detalle + '. Estado: ' + x.estado +
-        '. Una cotización aceptada NO es un cobro, ni modifica el pedido. Debe cerrarse antes del despacho.',
+        (x.estado === 'Aplicando' ? '. Atención: posible operación interrumpida. No despachar; requiere conciliación técnica.' :
+          '. La aceptación del cliente todavía NO aplica el cambio. Solo el paso Aplicar modifica el pedido.'),
       botones: decisiones
     });
     if (!decision) return;
     if (decision === 'cotizar') return cotizarSolicitud(x);
+    if (decision === 'aplicar') {
+      var digital = x.forma_pago === 'transferencia' || x.forma_pago === 'deuna';
+      var referencia = '';
+      if (digital) {
+        referencia = await UI.pedirDato({
+          titulo: 'Verificación bancaria obligatoria', etiqueta: 'Referencia del pago adicional',
+          modo: 'text', boton: 'Continuar', ph: 'Número de transferencia o Deuna',
+          texto: 'Comprueba en la app del banco o Deuna que recibiste el importe adicional de ' +
+            UI.dinero(x.adicional) + '. La aceptación del cliente NO prueba que haya pagado.',
+          validar: function (v) { return String(v).trim().length >= 4 ? '' : 'Ingresa al menos 4 caracteres de la referencia del pago real.'; }
+        });
+        if (referencia === null || referencia === undefined || String(referencia).trim().length < 4) return;
+        referencia = String(referencia).trim();
+      }
+      var seguro = await UI.confirmar('Aplicar adicional a ' + x.numero,
+        'Se incorporarán productos al pedido por ' + UI.dinero(x.adicional) +
+        (digital ? '. Confirma que verificaste personalmente el depósito adicional.' :
+          '. Se añadirá al total a cobrar en efectivo; confirma que el cliente fue informado.') +
+        ' Se volverán a verificar precio, impuestos e inventario.', 'Sí, aplicar adicional');
+      if (!seguro) return;
+      try {
+        var aplicado = await DATOS.pedir('pedidoCambioAplicar', {
+          id: x.id, cotizacion_id: x.cotizacion_id,
+          pago_adicional_verificado: digital, referencia_pago_extra: referencia
+        }, { guardar: true });
+        UI.aviso(aplicado.repetida ? 'Este adicional ya estaba aplicado. No se duplicó.' :
+          'Adicional aplicado: ' + UI.dinero(aplicado.adicional) + '. Nuevo total: ' + UI.dinero(aplicado.total_nuevo), 'ok');
+        await cargar();
+      } catch (err) {
+        UI.aviso('No se aplicó o requiere revisión: ' + (err.message || 'Error') +
+          '. Si aparece Aplicando, NO reintentar ni despachar sin conciliación.', 'error');
+      }
+      return;
+    }
     var respuesta = await UI.pedirDato({
       titulo: 'Respuesta al cliente', etiqueta: 'Motivo o instrucciones', modo: 'text',
       boton: 'Guardar respuesta', ph: 'Explica qué se acordó',
