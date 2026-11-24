@@ -7,7 +7,11 @@ const source = fs.readFileSync(path.join(__dirname, '..', 'servidor', 'Codigo.gs
 const start = source.indexOf('function accionPedidoCambioCotizar_(');
 const end = source.indexOf('function accionPedidoCambioResolver_(', start);
 assert.ok(start >= 0 && end > start, 'La cotización debe existir en el backend');
-const fnSource = source.slice(start, end);
+function extraer(nombre) {
+  const i = source.indexOf('function '+nombre+'('), j = source.indexOf('\nfunction ',i+1);
+  assert.ok(i>=0 && j>i, nombre); return source.slice(i,j);
+}
+const fnSource = ['maxExtra_','validarExtrasPedido_'].map(extraer).join('\n')+'\n'+source.slice(start,end);
 function cotizar(data, overrides = {}) {
   const base = {
     limpiarTexto_: (v,n) => String(v || '').slice(0,n),
@@ -43,7 +47,7 @@ test('cotiza dos unidades sin modificar el pedido', () => {
 test('rechaza cantidades inválidas', () => assert.throws(() => cotizar({id:'SOL1',items:[{plato_id:'PL1',cantidad:0}]}),/Cantidad/));
 test('rechaza productos no disponibles', () => assert.throws(() => cotizar({id:'SOL1',items:[{plato_id:'NO',cantidad:1}]}),/disponible/));
 test('rechaza cotización vacía', () => assert.throws(() => cotizar({id:'SOL1',items:[]}),/Elige/));
-test('rechaza extras inexistentes', () => assert.throws(() => cotizar({id:'SOL1',items:[{plato_id:'PL1',cantidad:1,extras:['inexistente']}]}),/extra/));
+test('rechaza extras inexistentes', () => assert.throws(() => cotizar({id:'SOL1',items:[{plato_id:'PL1',cantidad:1,extras:['inexistente']}]}),/extra/i));
 test('impide cotizar solicitudes ajenas al local', () => assert.throws(() => cotizar({id:'SOL1',items:[{plato_id:'PL1',cantidad:1}]},{puedeVerLocal_:()=>false}),/permiso/));
 test('impide cotizar una solicitud ya resuelta', () => assert.throws(() => cotizar({id:'SOL1',items:[{plato_id:'PL1',cantidad:1}]},{cambiosPedido_:()=>[{id:'SOL1',local_id:'LOC1',pedido_id:'P1',estado:'Rechazada',tipo:'agregar'}]}),/resuelta/));
 test('impide cotizar si el pedido ya salió', () => assert.throws(() => cotizar({id:'SOL1',items:[{plato_id:'PL1',cantidad:1}]},{politicaCambiosPedido_:()=>({permitido:false})}),/no admite/));
