@@ -1112,7 +1112,8 @@
     if (x.l && x.l !== localId && M.locales.some(function (l) { return l.id === x.l; })) {
       // Nunca mezclar productos de dos restaurantes al repetir un pedido histórico.
       if (cantidadTotal()) return UI.aviso('Tu carrito tiene productos de otro local. Vacíalo antes de repetir este pedido.', 'error');
-      localId = x.l; categoria = ''; busqueda = ''; entrega.zona = '';
+      if (!localesConMenu().some(function (l) { return l.id === x.l; })) return UI.aviso('El restaurante de ese pedido ya no recibe pedidos.', 'error');
+      localId = x.l; categoria = ''; busqueda = ''; entrega.zona = ''; entrega.hora = ''; ubic = null;
       MEM.guardar('pedir_local', localId); marcarAgotados();
     }
     var lista = x.i.map(function (y) { return { plato_id: y.p, cantidad: y.c, extras: y.x || [] }; }).filter(function (y) { var p = plato(y.plato_id); return p && !p.agotado && (p.local_id === 'TODOS' || p.local_id === localId); });
