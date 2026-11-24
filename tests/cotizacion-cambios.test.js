@@ -23,7 +23,10 @@ function cotizar(data, overrides = {}) {
     numero_: Number,
     redondear_: v => Math.round(v*100)/100,
     claveComparar_: v => String(v).toLowerCase(),
-    fallo_: msg => new Error(msg)
+    fallo_: msg => new Error(msg),
+    leerConfig_: () => ({ precios_incluyen_iva: 'SI', iva_porcentaje: '15' }),
+    siNo_: v => String(v) === 'SI',
+    detallePorPedido_: () => ({})
   };
   const env = {...base,...overrides};
   const fn = new Function(...Object.keys(env),fnSource+';return accionPedidoCambioCotizar_')(...Object.values(env));
