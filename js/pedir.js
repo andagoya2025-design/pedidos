@@ -931,9 +931,9 @@
         // Solo vaciarlo cuando sus artículos coinciden con el envío recuperado;
         // de lo contrario preservar el nuevo pedido que el cliente esté armando.
         var firmaItems = function (items) { return JSON.stringify((items || []).map(function (x) {
-          return { p: String(x.plato_id || x.p || ''), c: Number(x.cantidad || x.c || 0), e: x.extras || x.x || '' };
+          return { p: String(x.plato_id || x.p || ''), c: Number(x.cantidad || x.c || 0), e: (Array.isArray(x.extras || x.x) ? (x.extras || x.x).slice() : String(x.extras || x.x || '').split(',')).map(function (v) { return String(v).trim(); }).filter(Boolean).sort() };
         }).sort(function (a, b) { return JSON.stringify(a).localeCompare(JSON.stringify(b)); })); };
-        var carritoActual = Object.keys(carrito).map(function (k) { var x = carrito[k]; return { plato_id: x.plato_id || x.p || k, cantidad: x.cantidad || x.c, extras: x.extras || x.x || '' }; });
+        var carritoActual = Object.keys(carrito).map(function (k) { var x = carrito[k]; return { plato_id: (x.plato && x.plato.id) || x.plato_id || x.p || k, cantidad: x.cantidad || x.c, extras: x.extras || x.x || '' }; });
         var esMismoCarrito = firmaItems(carritoActual) === firmaItems(original.items);
         MEM.guardar('ultimo_carrito', { local: original.local_id, items: original.items });
         if (esMismoCarrito) { carrito = {}; ubic = null; pago.propina = 0; }
@@ -1070,7 +1070,7 @@
           var p = res[x.n]; if (!p) return;
           if (p.no_existe || p.consulta_error) { return; }
           if (p.estado !== x.e) { x.e = p.estado; if (p.estado === 'Entregado') x.fe = Date.now(); cambio2 = true; }
-          if (p.total && !x.t) { x.t = p.total; cambio2 = true; }
+          if (p.total != null && Number.isFinite(Number(p.total)) && Number(p.total) !== Number(x.t)) { x.t = p.total; cambio2 = true; }
           if (p.seguimiento && !x.s) { x.s = p.seguimiento; cambio2 = true; }
           if (p.calificacion && !x.cal) { x.cal = p.calificacion; cambio2 = true; }
         });
