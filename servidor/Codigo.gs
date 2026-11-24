@@ -1419,7 +1419,7 @@ function accionPedidoCambioSolicitar_(data) {
     if (!p) throw fallo_('Pedido no encontrado.', 'NO_EXISTE');
     var politica = politicaCambiosPedido_(String(p.estado), tipo);
     if (!politica.permitido) throw fallo_(politica.mensaje, 'CAMBIO');
-    var pendientes = cambiosPedido_().filter(function (x) { return String(x.pedido_id) === String(p.id) && ['Pendiente', 'Aprobada para coordinar', 'Cotizada', 'Confirmada cliente'].indexOf(String(x.estado)) >= 0; });
+    var pendientes = cambiosPedido_().filter(function (x) { return String(x.pedido_id) === String(p.id) && ['Pendiente', 'Aprobada para coordinar', 'Cotizada', 'Confirmada cliente', 'Aplicando'].indexOf(String(x.estado)) >= 0; });
     if (pendientes.length) {
       var igual = pendientes.filter(function (x) { return String(x.tipo) === tipo && String(x.detalle) === detalle; })[0];
       if (igual) return { ok: true, data: { id: String(igual.id), estado: String(igual.estado), repetida: true, aplicado: false } };
@@ -1726,11 +1726,12 @@ function accionPedidoCambioAplicar_(data, ctx) {
       ? redondear_(numero_(quote.subtotal_adicional) / (1 + numero_(cfg.iva_porcentaje) / 100))
       : redondear_(quote.subtotal_adicional);
     var ivaExtra = redondear_(numero_(quote.adicional) - baseExtra);
+    var totalNuevo = redondear_(numero_(p.total) + numero_(quote.adicional));
     actualizarCampos_('pedidos', p._fila, p, {
       subtotal: redondear_(numero_(p.subtotal) + numero_(quote.subtotal_adicional)),
       base_iva: redondear_(numero_(p.base_iva) + baseExtra),
       iva: redondear_(numero_(p.iva) + ivaExtra),
-      total: redondear_(numero_(p.total) + numero_(quote.adicional)),
+      total: totalNuevo,
       inventario_descontado: p.inventario_descontado === true || inventario
     });
     actualizarCampos_('pedido_cambios', x._fila, x, {
@@ -1743,7 +1744,7 @@ function accionPedidoCambioAplicar_(data, ctx) {
     CacheService.getScriptCache().remove('POPULAR_30');
     limpiarMenuCache_();
     resultado = { id: id, estado: 'Aplicada', aplicado: true, repetida: false,
-      adicional: redondear_(quote.adicional), total_nuevo: redondear_(numero_(p.total) + numero_(quote.adicional)),
+      adicional: redondear_(quote.adicional), total_nuevo: totalNuevo,
       pago_verificado: esDigital_(p.forma_pago) };
   } finally { lock.releaseLock(); }
   bitacora_(ctx.sesion, 'PEDIDOS', 'ADICIONAL_APLICADO', resultado.id + ' · ' + UI_dinero_(resultado.adicional), ctx.dispositivo);
@@ -1786,7 +1787,7 @@ function accionPedidoRecuperar_(data) {
     return String(x.op_id) === opId && String(x.telefono) === tel;
   })[0];
   if (!p) return { ok: true, data: { encontrado: false } };
-  return { ok: true, data: { encontrado: true, pedido: pedidoSalida_(p) } };
+  return { ok: true, data: { encontrado: true, pedido: { numero: String(p.numero), clave_seguimiento: String(p.clave_seguimiento || ''), total: redondear_(p.total), estado: String(p.estado) } } };
 }
 
 function accionPedidoConsultar_(data) {
