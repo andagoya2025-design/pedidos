@@ -17,12 +17,13 @@
     pintar: function (cont) {
       est = { datos: null, motos: [], cargadoEn: 0, verAnulados: false, diaEntregado: UI.hoy(), alertados: {} }; // 3.1.6
       var sonido = global.APP_MEMORIA.leer('sonido_pedidos') !== false;
-      cont.innerHTML = UI.encabezado('Pedidos', APP.nombreLocal(APP.local),
-        '<button class="btn secundario chico sonido-btn" type="button" id="btn-sonido" aria-pressed="' + sonido + '" title="Sonido de pedido nuevo">' + (sonido ? '🔔' : '🔕') + '</button>' +
-        '<button class="btn secundario chico" type="button" id="btn-buscar-pedido" aria-label="Buscar pedido">🔎</button>' +
-        '<button class="btn secundario chico" type="button" id="btn-cambios">📝 Solicitudes</button>' +
-        '<button class="btn chico" type="button" id="btn-nuevo-pedido">＋ Nuevo</button>') +
-        '<div id="pd-cuerpo">' + UI.esqueleto(4) + '</div>';
+      cont.innerHTML = '<section class="pd-premium"><div class="pd-premium-titulo"><div><h1>Pedidos</h1><p class="subtitulo">' + UI.esc(APP.nombreLocal(APP.local)) + '</p></div>' +
+        '<button class="btn secundario chico sonido-btn" type="button" id="btn-sonido" aria-pressed="' + sonido + '" aria-label="Sonido de pedido nuevo" title="Sonido de pedido nuevo">' + iconoPedido(sonido ? 'bell' : 'mute') + '</button></div>' +
+        '<div class="pd-premium-acciones"><button class="btn" type="button" id="btn-nuevo-pedido">' + iconoPedido('plus') + ' Crear pedido</button>' +
+        '<button class="btn secundario" type="button" id="btn-cambios">' + iconoPedido('list') + ' Solicitudes</button>' +
+        '<button class="btn secundario" type="button" id="btn-buscar-pedido" aria-label="Buscar pedido" title="Buscar pedido">' + iconoPedido('search') + '</button>' +
+        '<button class="btn secundario" type="button" data-actualizar aria-label="Actualizar pedidos" title="Actualizar pedidos">' + iconoPedido('refresh') + '</button></div>' +
+        '<div id="pd-cuerpo">' + UI.esqueleto(4) + '</div></section>';
       UI.$('[data-actualizar]', cont).addEventListener('click', function (e) { UI.trabajando(e.currentTarget, cargar); });
       UI.$('#btn-nuevo-pedido', cont).addEventListener('click', nuevoPedido);
       UI.$('#btn-buscar-pedido', cont).addEventListener('click', buscarPedido);
@@ -31,7 +32,7 @@
         var b = e.currentTarget;
         avisosVentana().then(function () {
           var on = global.APP_MEMORIA.leer('sonido_pedidos') !== false;
-          b.setAttribute('aria-pressed', String(on)); b.textContent = on ? '🔔' : '🔕';
+          b.setAttribute('aria-pressed', String(on)); b.innerHTML = iconoPedido(on ? 'bell' : 'mute');
         });
       });
       cargar().then(function () { var ver = (APP.parametros || {}).ver; if (ver) { APP.parametros = {}; abrirPorNumero(ver); } });
