@@ -1127,7 +1127,7 @@
     }));
     var acceso = $('#btn-mi-pedido'); if (acceso) { acceso.hidden = !act.length; acceso.textContent = 'Mi pedido activo (' + act.length + ')'; }
     cont.innerHTML = (act.length ? '<p class="ayuda">Seguimiento automático cada 15 segundos mientras la app está abierta.</p>' : '') + act.map(function (x) { return res[x.n] && !res[x.n].no_existe && !res[x.n].consulta_error ? tarjetaSeguimiento(res[x.n], x) + (solicitudesPorPedido[x.n] || []).slice(-3).map(function (sol) {
-      return '<div class="seg-caja"><b>📝 Solicitud: ' + UI.esc(sol.tipo) + '</b>' +
+      return '<div class="seg-caja ux-solicitud-pedido"><b>Modificación solicitada · ' + UI.esc(sol.tipo) + '</b>' +
         '<div class="item-sub">Estado: ' + UI.esc(sol.estado) + '</div>' +
         '<p>' + UI.esc(sol.detalle) + '</p>' +
         (sol.respuesta ? '<p><b>Respuesta del restaurante:</b> ' + UI.esc(sol.respuesta) + '</p>' : '') +
@@ -1311,12 +1311,12 @@
           (prefijo === 'n' && Array.isArray(p.extras) && p.extras.length ? '<div class="ux-cambio-extras" hidden>' + p.extras.map(function (e,j) { return '<label><input type="checkbox" data-ux-extra="' + i + '-' + j + '"> ' + UI.esc(e.nombre) + ' (+' + UI.esc(UI.dinero(e.precio)) + ')</label>'; }).join('') + '</div>' : '') + '</div>';
       }).join('');
     }
-    var html = (filas.length ? '<h3>Productos del pedido</h3><div class="ux-cambio-lista">' + controles(filas, 'o', tipo !== 'aumentar') + '</div>' : '') +
-      (nuevos.length ? '<h3>Menú disponible</h3><input type="search" data-ux-buscar placeholder="Buscar producto" aria-label="Buscar producto"><div class="ux-cambio-lista" data-ux-menu>' + controles(nuevos, 'n', false) + '</div>' : '') +
-      '<label for="ux-nota">' + (tipo === 'cancelar' ? 'Motivo de cancelación' : 'Notas o solicitud manual (opcional si seleccionas productos)') + '</label><textarea id="ux-nota" maxlength="500" rows="2" placeholder="' + (tipo === 'cancelar' ? 'Describe el motivo' : 'Ej. Sin cebolla') + '"></textarea><p class="ayuda" data-ux-resumen aria-live="polite"></p>';
+    var html = (filas.length ? '<h3>' + (tipo === 'cambiar' ? '1. Selecciona el producto actual' : 'Productos del pedido') + '</h3><div class="ux-cambio-lista">' + controles(filas, 'o', tipo !== 'aumentar') + '</div>' : '') +
+      (nuevos.length ? '<h3>' + (tipo === 'cambiar' ? '2. Elige el reemplazo' : 'Menú disponible') + '</h3><input type="search" data-ux-buscar placeholder="Buscar producto" aria-label="Buscar producto"><div class="ux-cambio-lista" data-ux-menu>' + controles(nuevos, 'n', false) + '</div>' : '') +
+      '<label for="ux-nota">' + (tipo === 'cancelar' ? 'Motivo de cancelación' : 'Notas o solicitud manual (opcional si seleccionas productos)') + '</label><textarea id="ux-nota" maxlength="500" rows="2" placeholder="' + (tipo === 'cancelar' ? 'Describe el motivo' : 'Ej. Sin cebolla') + '"></textarea><div class="ux-seleccion-resumen" data-ux-resumen aria-live="polite"></div>';
     var detalle = null;
     function leer(velo) {
-      var partes = [], originales = 0, agregados = 0, estimado = 0, itemsSeleccionados = [];
+      var partes = [], originales = 0, agregados = 0, estimado = 0, itemsSeleccionados = [], actuales = [], nuevosElegidos = [];
       function recoger(lista, prefijo) {
         lista.forEach(function (p,i) {
           var el = velo.querySelector('[data-ux-cant="' + prefijo + i + '"]');
@@ -1333,6 +1333,7 @@
             agregados += n;
           } else { originales += n; }
           if (tipo === 'agregar' || tipo === 'aumentar') itemsSeleccionados.push({plato_id:String(p.id || p.plato_id),cantidad:n,extras:extras.split(',').map(function(e){return e.trim();}).filter(Boolean)});
+          (prefijo === 'o' ? actuales : nuevosElegidos).push({nombre:p.nombre,cantidad:n,extras:extras,total:n*precio});
           estimado += n * precio * (prefijo === 'o' && tipo !== 'aumentar' ? -1 : 1);
           partes.push((prefijo === 'n' ? 'Agregar ' : tipo === 'aumentar' ? 'Aumentar ' : tipo === 'cambiar' ? 'Sustituir ' : 'Retirar ') + n + ' × ' + p.nombre + (extras ? ' (' + extras + ')' : ''));
         });
@@ -1340,23 +1341,52 @@
       recoger(filas,'o'); recoger(nuevos,'n');
       var nota = velo.querySelector('#ux-nota').value.trim();
       if (nota) partes.push(nota);
-      return { texto: partes.join('; '), originales: originales, agregados: agregados, estimado: estimado, items: itemsSeleccionados };
+      return { texto: partes.join('; '), originales: originales, agregados: agregados, estimado: estimado, items: itemsSeleccionados, actuales: actuales, nuevos: nuevosElegidos };
     }
     var ok = await UI.ventana({ titulo: titulos[tipo] || 'Solicitar cambio', texto: 'Selecciona las cantidades o escribe tu solicitud. El restaurante debe aprobarla antes de modificar el pedido.', html: html,
       botones: [{ texto: 'Volver', valor: null, clase: 'secundario' }, { texto: 'Enviar solicitud', valor: true, antes: function(velo) {
-        try { var v = leer(velo); if (tipo === 'cambiar' && (v.originales || v.agregados) && !(v.originales && v.agregados)) throw Error('Selecciona el producto original y su sustituto.');
+        try { var v = leer(velo); if (tipo === 'cambiar' && !(v.originales && v.agregados)) throw Error('Selecciona el producto original y su sustituto.');
           if (v.texto.length < 5 || v.texto.length > 500) throw Error('Describe el cambio entre 5 y 500 caracteres.');
           detalle = {texto:v.texto,items:v.items}; return true;
         } catch(e) { UI.aviso(e.message,'error'); return false; }
       }}],
       alAbrir: function(velo) {
-        function resumen() { UI.$$('[data-ux-menu] .ux-cambio-fila',velo).forEach(function(f){var n=f.querySelector('[data-ux-cant]'), ex=f.querySelector('.ux-cambio-extras');if(ex){ex.hidden=!(Number(n.value)>0);if(ex.hidden)UI.$$('input',ex).forEach(function(b){b.checked=false;});}}); try { var v = leer(velo); velo.querySelector('[data-ux-resumen]').textContent = (v.originales || v.agregados) ? 'Diferencia orientativa de productos: ' + UI.dinero(v.estimado) + '. No incluye ajustes de impuestos o descuentos.' : ''; } catch(e) {} }
+        function resumen() {
+          UI.$$('.ux-cambio-fila',velo).forEach(function(f){
+            var n=f.querySelector('[data-ux-cant]'), ex=f.querySelector('.ux-cambio-extras'), activo=Number(n.value)>0;
+            f.classList.toggle('ux-elegido',activo);
+            f.classList.toggle('ux-elegido-actual',activo && n.getAttribute('data-ux-cant').charAt(0)==='o');
+            if(ex){ex.hidden=!activo;if(!activo)UI.$$('input',ex).forEach(function(b){b.checked=false;});}
+          });
+          var caja=velo.querySelector('[data-ux-resumen]');
+          try { caja.innerHTML=resumenSeleccionCambio(tipo,leer(velo)); } catch(e) { caja.textContent='Revisa las cantidades seleccionadas.'; }
+        }
         velo.addEventListener('click',function(e){ var b=e.target.closest('[data-ux-step]'); if(!b)return; var el=b.parentNode.querySelector('input'); el.value=Math.max(0,Math.min(Number(el.max),Number(el.value||0)+Number(b.getAttribute('data-ux-step')))); el.dispatchEvent(new Event('input',{bubbles:true})); });
         velo.addEventListener('input',function(e){ if(e.target.hasAttribute('data-ux-buscar')) { var q=e.target.value.toLowerCase(); UI.$$('[data-ux-menu] [data-busqueda]',velo).forEach(function(f){ f.hidden=f.getAttribute('data-busqueda').indexOf(q)<0; }); } resumen(); });
         velo.addEventListener('change',resumen);
+        resumen();
       }
     });
     return ok ? detalle : null;
+  }
+
+  function resumenSeleccionCambio(tipo, v) {
+    function bloque(t, filas, clase) {
+      return filas.length ? '<section class="ux-seleccion-grupo '+clase+'"><b>'+UI.esc(t)+'</b>'+filas.map(function(f){return '<div class="ux-resumen-item"><span>'+UI.esc(f.cantidad+' × '+f.nombre)+(f.extras?'<small>'+UI.esc(f.extras)+'</small>':'')+'</span><b>'+UI.esc(UI.dinero(f.total))+'</b></div>';}).join('')+'</section>' : '';
+    }
+    if (!v.actuales.length && !v.nuevos.length) return '<p class="ayuda">Selecciona productos para ver el resumen.</p>';
+    return '<h3>Tu selección</h3>'+bloque(tipo==='cambiar'?'Producto actual · seleccionado para reemplazo':tipo==='aumentar'?'Unidades adicionales del pedido':'Unidades seleccionadas para retirar',v.actuales,'actual')+bloque(tipo==='cambiar'?'Nuevo producto solicitado':'Productos adicionales',v.nuevos,'nuevo')+(tipo==='cambiar'&&(!v.originales||!v.agregados)?'<p class="ayuda">Completa ambas selecciones para ver la diferencia.</p>':'<div class="ux-resumen-item"><b>Diferencia estimada</b><b>'+UI.esc((v.estimado>0?'+':'')+UI.dinero(v.estimado))+'</b></div>')+'<small>Estimación de productos. El pedido vigente no cambia hasta la aprobación y aplicación.</small>';
+  }
+  function detalleSeguimiento(r,x) {
+    var d=Array.isArray(r.detalle)?r.detalle:null, m=r.importes;
+    function importe(t,n){return '<div class="ux-resumen-item"><span>'+UI.esc(t)+'</span><b>'+UI.esc(UI.dinero(n))+'</b></div>';}
+    var html='<section class="ux-detalle-pedido"><h3>Detalle de tu pedido</h3>';
+    if (!d || !d.length) {
+      if(!d && x && Array.isArray(x.i) && x.i.length) html+='<p class="ayuda">Selección guardada en este teléfono; pendiente de verificar con el servidor.</p>'+x.i.map(function(l){return '<div class="ux-resumen-item"><span>'+UI.esc(l.c+' × '+(l.n||'Producto'))+(Array.isArray(l.x)&&l.x.length?'<small>'+UI.esc(l.x.join(', '))+'</small>':'')+'</span></div>';}).join('');
+      else html+='<p class="ayuda">Detalle no disponible. Actualiza el seguimiento.</p>';
+    } else html+=d.map(function(l){return '<div class="ux-resumen-item"><span><b>'+UI.esc(l.nombre)+'</b><small>'+UI.esc(l.cantidad+' × '+UI.dinero(l.precio))+'</small>'+(l.extras?'<small>'+UI.esc(l.extras)+'</small>':'')+'</span><b>'+UI.esc(UI.dinero(l.total_linea))+'</b></div>';}).join('');
+    if(m){html+=importe('Subtotal',m.subtotal);if(m.envio)html+=importe('Envío',m.envio);if(m.descuento)html+=importe('Descuento',-Math.abs(m.descuento));if(m.iva)html+=importe('IVA informado',m.iva);if(m.propina)html+=importe('Propina',m.propina);}
+    return html+'<div class="ux-total-pedido">'+importe('Total del pedido',r.total)+'</div></section>';
   }
 
   /* Tarjeta de seguimiento de un pedido en curso. */
@@ -1374,6 +1404,7 @@
           (r.ventana_fin ? 'Ventana solicitada: <b>' + UI.esc(UI.ventanaHora(r.hora_estimada, r.ventana_fin, Number(cfg().ventana_minutos) || 30)) + ' aprox.</b> Sujeta a confirmación.' :
             r.estado === 'En camino' ? (r.eta_moto ? '<b>Llega en unos ' + r.eta_moto.desde + ' a ' + r.eta_moto.hasta + ' min.</b> Tiempo orientativo; puede variar.' : (r.en_camino ? 'Salió hace ' + UI.minutosDesde(r.en_camino) + ' min. ' + (UI.minutosDesde(r.en_camino) > (Number(cfg().minutos_preparacion) || 20) + 30 ? 'Hay más tráfico de lo normal; seguimos atentos a tu entrega.' : 'Te avisaremos si hay cambios.') : 'Pronto estará en camino.')) :
             'Tiempo aproximado: <b>' + ((Number(r.tiempo_preparacion) || 20) + (Number(r.tiempo_zona) || 0)) + ' a ' + ((Number(r.tiempo_preparacion) || 20) + (Number(r.tiempo_zona) || 0) + 10) + ' min.</b> Puede variar') + '</p>' : '')) +
+      detalleSeguimiento(r,x) +
       (digital ? (r.pago_verificado
         ? '<div class="pago-estado ok">✅ <span><b>Pago confirmado en nuestra cuenta.</b>' + (r.estado === 'Recibido' ? ' El restaurante ya puede revisar tu pedido.' : '') + '</span></div>'
         : '<div class="pago-estado espera">⏳ <span><b>Pago por confirmar.</b> Tu pedido se prepara cuando confirmemos el pago de <b>' + UI.esc(UI.dinero(r.total)) + '</b> en nuestra cuenta' + (r.cuenta_pago ? ' (' + UI.esc(r.cuenta_pago) + ')' : '') + '. Si pagaste desde otro banco puede tardar un poco.</span></div>' +
@@ -1383,7 +1414,7 @@
       (r.codigo_entrega ? '<div class="codigo-entrega"><span>🔢 Tu código de entrega</span><b>' + UI.esc(r.codigo_entrega) + '</b><small>Dáselo al motorizado solo cuando tengas tu pedido en la mano.</small></div>' : '') +
       (r.estado === 'Entregado' && !r.calificacion ? '<button class="btn chico bloque" type="button" data-calificar="' + UI.esc(r.numero) + '" style="margin-top:10px">⭐ ¿Cómo estuvo? Califícanos</button>' : '') +
       (r.sellos_meta ? '<div class="sellos" title="Tarjeta de sellos">' + sellosHtml(r.sellos, r.sellos_meta) + '</div>' : '') +
-      (FINALES.indexOf(r.estado) < 0 ? '<p class="ayuda" style="margin:8px 0 0">' + UI.esc(mensajeCambioPedido(r.estado)) + ' <button class="enlace" type="button" data-escribir="' + UI.esc(r.numero) + '">Solicitar cambio</button></p>' : '') +
+      (FINALES.indexOf(r.estado) < 0 ? '<p class="ayuda" style="margin:8px 0 0">' + UI.esc(mensajeCambioPedido(r.estado)) + ' <button class="btn secundario chico bloque" type="button" data-escribir="' + UI.esc(r.numero) + '">Solicitar cambio</button></p>' : '') +
       '</div>';
   }
 
