@@ -20,11 +20,13 @@
       cont.innerHTML = UI.encabezado('Pedidos', APP.nombreLocal(APP.local),
         '<button class="btn secundario chico sonido-btn" type="button" id="btn-sonido" aria-pressed="' + sonido + '" title="Sonido de pedido nuevo">' + (sonido ? '🔔' : '🔕') + '</button>' +
         '<button class="btn secundario chico" type="button" id="btn-buscar-pedido" aria-label="Buscar pedido">🔎</button>' +
+        '<button class="btn secundario chico" type="button" id="btn-cambios">📝 Solicitudes</button>' +
         '<button class="btn chico" type="button" id="btn-nuevo-pedido">＋ Nuevo</button>') +
         '<div id="pd-cuerpo">' + UI.esqueleto(4) + '</div>';
       UI.$('[data-actualizar]', cont).addEventListener('click', function (e) { UI.trabajando(e.currentTarget, cargar); });
       UI.$('#btn-nuevo-pedido', cont).addEventListener('click', nuevoPedido);
       UI.$('#btn-buscar-pedido', cont).addEventListener('click', buscarPedido);
+      UI.$('#btn-cambios', cont).addEventListener('click', verSolicitudes);
       UI.$('#btn-sonido', cont).addEventListener('click', function (e) {
         var b = e.currentTarget;
         avisosVentana().then(function () {
@@ -36,6 +38,46 @@
       vigilar();
     }
   };
+
+
+  async function verSolicitudes() {
+    var datos;
+    try { datos = await DATOS.pedir('pedidoCambiosListar', { local_id: APP.local }); }
+    catch (err) { return UI.aviso('No se pudieron cargar las solicitudes: ' + err.message, 'error'); }
+    var lista = (datos.solicitudes || []).filter(function (x) { return x.estado === 'Pendiente'; });
+    if (!lista.length) return UI.aviso('No hay solicitudes pendientes.', 'ok');
+    var html = '<div class="lista">' + lista.map(function (x) {
+      return '<div class="tarjeta" style="padding:12px;margin:8px 0"><b>' + UI.esc(x.numero) + '</b> · ' + UI.esc(x.tipo) +
+        '<div class="item-sub">Pedido: ' + UI.esc(x.pedido_estado) + '</div><p>' + UI.esc(x.detalle) + '</p>' +
+        '<small>La aprobación para coordinar NO modifica el pedido ni cobra diferencias.</small></div>';
+    }).join('') + '</div>';
+    var elegido = await UI.ventana({
+      icono: '📝', titulo: 'Solicitudes pendientes (' + lista.length + ')',
+      html: html,
+      botones: [{ texto: 'Cerrar', valor: null, clase: 'secundario' },
+        { texto: 'Gestionar primera', valor: 'primera' }]
+    });
+    if (elegido !== 'primera') return;
+    var x = lista[0];
+    var decision = await UI.ventana({
+      titulo: x.numero + ' · ' + x.tipo,
+      texto: x.detalle + '. La aprobación solo indica que el restaurante coordinará el cambio; no altera los importes.',
+      botones: [{ texto: 'Volver', valor: null, clase: 'secundario' },
+        { texto: 'Rechazar', valor: 'Rechazada' },
+        { texto: 'Coordinar', valor: 'Aprobada para coordinar' }]
+    });
+    if (!decision) return;
+    var respuesta = await UI.pedirDato({
+      titulo: 'Respuesta al cliente', etiqueta: 'Motivo o instrucciones', modo: 'text',
+      boton: 'Guardar respuesta', ph: 'Ejemplo: confirmaremos disponibilidad y precio',
+      validar: function (v) { return v.trim().length >= 5 ? '' : 'Escribe una respuesta de al menos 5 caracteres.'; }
+    });
+    if (!respuesta) return;
+    try {
+      await DATOS.pedir('pedidoCambioResolver', { id: x.id, decision: decision, respuesta: respuesta }, { guardar: true });
+      UI.aviso('Respuesta registrada. Comunica la decisión al cliente; el pedido aún no se modificó.', 'ok');
+    } catch (err) { UI.aviso('No se pudo resolver: ' + err.message, 'error'); }
+  }
 
   function cuerpo() { return UI.$('#pd-cuerpo'); }
 
