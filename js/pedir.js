@@ -65,7 +65,7 @@
   }
   function mesasOn() { return Number(cfg().mesas) > 0; }
 
-  function claveItem(p, extras) { return p.id + '|' + extras.slice().sort().join(','); }
+  function claveItem(p, extras) { return JSON.stringify([p.id,extras.slice().sort()]); }
   function unitario(it) {
     return it.plato.precio + it.plato.extras.filter(function (x) { return it.extras.indexOf(x.nombre) >= 0; }).reduce(function (s, x) { return s + x.precio; }, 0);
   }
@@ -77,7 +77,7 @@
   function zonaElegida() { return entrega.tipo === 'domicilio' ? zonasDe(localId).filter(function (z) { return z.id === entrega.zona; })[0] || null : null; }
   function envio() { var z = zonaElegida(); return z ? z.costo : 0; }
   function propina() { return entrega.tipo === 'domicilio' && cfg().propinas !== 'NO' ? pago.propina : 0; }
-  function cambio() { if (!envioPendiente) codigoEnvio = ''; cuponAplicado = null; }
+  function cambio(conservarCupon) { if (!envioPendiente) codigoEnvio = ''; if(conservarCupon!==true)cuponAplicado = null; }
   function puntoValido(x) { return x && x.lat !== '' && x.lng !== '' && x.lat != null && x.lng != null && isFinite(Number(x.lat)) && isFinite(Number(x.lng)); }
   function distanciaLocal() { return puntoValido(local()) && puntoValido(ubic) ? UI.haversineKm(local(), ubic) : null; }
   function minimoZona() { var z = zonaElegida(), l = local(); return z && z.minimo_domicilio !== '' && z.minimo_domicilio != null ? Number(z.minimo_domicilio) || 0 : Number(l.minimo_domicilio) || 0; }
@@ -784,7 +784,7 @@
     UI.$$('[data-forma]').forEach(function (b) { b.addEventListener('click', function () { pago.forma = b.getAttribute('data-forma'); guardarNotas(); pintarConfirmar(); restaurarNotas(); }); });
     UI.$$('[data-propina]').forEach(function (b) {
       b.addEventListener('click', function () {
-        pago.propina = Number(b.getAttribute('data-propina')); cambio();
+        pago.propina = Number(b.getAttribute('data-propina')); cambio(true);
         if (efectivoPermitido() !== !!UI.$('[data-forma=efectivo]')) { guardarNotas(); pintarConfirmar(); restaurarNotas(); return; } // 3.1.3: cambió si alcanza para efectivo
         UI.$$('[data-propina]').forEach(function (x) { x.classList.toggle('activo', x === b); });
         totales();
@@ -810,7 +810,14 @@
     totales();
     revisarEfectivoCliente();
   }
-  function totalActual() { return Math.round((subtotal() + envio() + propina()) * 100) / 100; }
+  function importesCheckout() {
+    function cent(v){return Math.round(Number(v||0)*100);}
+    var sub=cent(subtotal()),e=cent(envio()),pr=cent(propina()),d=cuponAplicado?cent(cuponAplicado.descuento):0;
+    var pct=Number(cfg().iva_porcentaje);if(!Number.isFinite(pct)||pct<0)pct=0;
+    var incl=cfg().precios_incluyen_iva!=='NO',grav=sub+e-d,base=incl?Math.round(grav/(1+pct/100)):grav,iva=incl?grav-base:Math.round(grav*pct/100);
+    return {subtotal:sub/100,envio:e/100,propina:pr/100,descuento:d/100,iva:iva/100,pct:pct,incl:incl,total:(grav+pr+(incl?0:iva))/100};
+  }
+  function totalActual() { return importesCheckout().total; }
   function efectivoPermitido() {
     var c = cfg();
     if (efectivoCliente) return true; // 3.1.5: el local autorizó a este cliente
@@ -826,18 +833,16 @@
   function restaurarNotas() { if ($('#pe-cupon')) $('#pe-cupon').value = notasTmp.cupon || ''; if ($('#pe-notas')) $('#pe-notas').value = notasTmp.notas || ''; }
 
   function totales() {
-    var e = envio(), pr = propina(), descuento = cuponAplicado ? cuponAplicado.descuento : 0, t = subtotal() + e + pr - descuento;
+    var m=importesCheckout();
     $('#totales').innerHTML =
-      '<div class="resumen-linea"><span>Subtotal</span><span>' + UI.dinero(subtotal()) + '</span></div>' +
-      (entrega.tipo === 'domicilio' ? '<div class="resumen-linea"><span>Envío</span><span>' + UI.dinero(e) + '</span></div>' : '') +
-      (pr ? '<div class="resumen-linea"><span>Propina</span><span>' + UI.dinero(pr) + '</span></div>' : '') +
-      (descuento ? '<div class="resumen-linea"><span>Descuento en platos</span><span>−' + UI.dinero(descuento) + '</span></div>' : '') +
-      '<div class="resumen-linea total"><span>Total</span><span>' + UI.dinero(t) + '</span></div>' +
-      (cfg().precios_incluyen_iva !== 'NO' ? (function () { // 3.1.5: IVA desglosado (el precio no cambia; la propina no lleva IVA)
-        var pct = Number(cfg().iva_porcentaje) || 15, gravado = subtotal() + e - descuento, iva = Math.round((gravado - gravado / (1 + pct / 100)) * 100) / 100;
-        return '<div class="resumen-linea iva-linea"><span>Incluye IVA ' + pct + ' %</span><span>' + UI.dinero(iva) + '</span></div>';
-      })() : '');
-    $('#total-boton').textContent = UI.dinero(t);
+      '<div class="resumen-linea"><span>Subtotal</span><span>'+UI.dinero(m.subtotal)+'</span></div>'+
+      (entrega.tipo==='domicilio'?'<div class="resumen-linea"><span>Envío</span><span>'+UI.dinero(m.envio)+'</span></div>':'')+
+      (m.propina?'<div class="resumen-linea"><span>Propina</span><span>'+UI.dinero(m.propina)+'</span></div>':'')+
+      (m.descuento?'<div class="resumen-linea"><span>Descuento en platos</span><span>−'+UI.dinero(m.descuento)+'</span></div>':'')+
+      (!m.incl?'<div class="resumen-linea iva-linea"><span>IVA '+m.pct+' %</span><span>'+UI.dinero(m.iva)+'</span></div>':'')+
+      '<div class="resumen-linea total"><span>Total</span><span>'+UI.dinero(m.total)+'</span></div>'+
+      (m.incl?'<div class="resumen-linea iva-linea"><span>Incluye IVA '+m.pct+' %</span><span>'+UI.dinero(m.iva)+'</span></div>':'');
+    $('#total-boton').textContent=UI.dinero(m.total);
   }
 
   function pintarItemsResumen() {
