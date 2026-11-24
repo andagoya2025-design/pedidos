@@ -620,3 +620,28 @@ details.otras-fechas[open] summary { margin-bottom: 10px; }
 
 /* 3.1.21 candidata: controles de cantidad visibles, también en pantallas estrechas. */
 .opcion-extra{display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px;cursor:default}.opcion-extra>span:first-child{flex:1;min-width:110px;overflow-wrap:anywhere}.contador input[type=number],.opcion .contador input[type=number],.ux-cambio-extras .contador input[type=number]{box-sizing:border-box;min-width:56px;width:64px;height:40px;text-align:center;font-size:16px;border:1px solid var(--borde);border-radius:8px;background:var(--superficie);color:inherit;appearance:textfield;-moz-appearance:textfield}.contador input::-webkit-inner-spin-button,.contador input::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}.contador-extra{flex:none}.contador-extra button{min-width:40px;min-height:40px}.ux-cambio-extras label{flex-wrap:wrap;gap:6px}.opcion input[type=checkbox]{width:20px;height:20px}
+
+
+/* Candidata 3.1.22: únicamente presentación del cliente antes del envío.
+   La foto original y su URL no cambian; se conserva toda la imagen. */
+.pedir-app .plato-foto { aspect-ratio: 1 / 1; background: var(--superficie-2); }
+.pedir-app .plato-foto img, .plato-grande img, .pedir-app .sug-foto img { object-fit: contain; object-position: center; }
+.plato-grande { background: var(--superficie-2); }
+.plato-grande.preenvio-foto { aspect-ratio: 4 / 3; max-height: 220px; }
+.pedir-app .plato-editar-seleccion { width: 100%; margin-top: 4px; }
+.preenvio-opciones .preenvio-opcion { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.preenvio-opciones .preenvio-opcion > span:first-child { flex: 1 1 100%; min-width: 0; }
+.preenvio-extra-precio { margin-left: auto; display: grid; text-align: right; gap: 2px; overflow-wrap: anywhere; }
+.preenvio-extra-precio small { font-size: 11px; color: var(--texto-2); }
+.preenvio-extra-precio small[hidden] { display: none; }
+.preenvio-extra-precio b { font-variant-numeric: tabular-nums; }
+.preenvio-linea { border: 1px solid var(--borde); border-radius: 14px; padding: 12px; margin: 8px 0; display: grid; gap: 8px; min-width: 0; }
+.preenvio-cabecera { display: flex; align-items: center; gap: 10px; overflow-wrap: anywhere; }
+.preenvio-mini { flex: 0 0 60px; width: 60px; height: 60px; border-radius: 10px; overflow: hidden; background: var(--superficie-2); }
+.preenvio-mini img { width: 100%; height: 100%; object-fit: contain; }
+.preenvio-importe { display: flex; justify-content: space-between; gap: 10px; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.preenvio-importe > :last-child { flex-shrink: 0; }
+.preenvio-extra { font-size: 13px; color: var(--texto-2); }
+.preenvio-total { border-top: 1px solid var(--borde); padding-top: 8px; }
+.preenvio-acciones { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+@media(max-width:360px) { .preenvio-linea { padding: 9px; } .preenvio-opciones .preenvio-opcion { padding-inline: 8px; } }
