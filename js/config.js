@@ -28,7 +28,7 @@
   global.APP_CONFIG = Object.freeze({
     url: valida(URL_SCRIPT) ? String(URL_SCRIPT).trim() : '',
     configurada: valida(URL_SCRIPT),
-    versionPantalla: '3.1.14',
+    versionPantalla: '3.1.15',
     versionScriptMinima: 30114, // instalar primero Apps Script 3.1.14
     tiempoEsperaMs: 25000
   });
