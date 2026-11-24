@@ -565,3 +565,13 @@ details.otras-fechas[open] summary { margin-bottom: 10px; }
 .telefono-internacional .entrada {width:100%;max-width:100%;min-width:0;font-size:16px}
 .telefono-internacional select {min-height:48px}
 .telefono-internacional #pe-otro-campo[hidden] {display:none}
+
+/* Pedidos Pro: diseño local, conserva los colores del negocio. */
+.pd-premium-titulo{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
+.pd-premium-titulo h1{margin:0}.pd-premium-titulo .subtitulo{margin:4px 0 0}
+.pd-premium-acciones{display:grid;grid-template-columns:minmax(0,1fr) 48px 48px;gap:8px;margin-bottom:18px}
+.pd-premium-acciones .btn,.pd-premium-titulo .btn{display:flex;align-items:center;justify-content:center;gap:8px;min-height:48px;margin:0;border-radius:12px;padding:8px 10px}
+.pd-premium-acciones #btn-nuevo-pedido{grid-column:1/-1}
+.pd-premium svg{flex:none}.pd-premium .btn.secundario{border:1px solid var(--borde);background:var(--superficie)}
+.pd-premium .columna{border:1px solid var(--borde);background:var(--superficie);padding:10px}.pd-premium .columna .vacio{padding:10px 8px}
+@media(min-width:700px){.pd-premium-acciones{grid-template-columns:minmax(160px,1fr) minmax(140px,1fr) 48px 48px}.pd-premium-acciones #btn-nuevo-pedido{grid-column:auto}}
