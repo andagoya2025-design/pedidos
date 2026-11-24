@@ -1,0 +1,11 @@
+'use strict';
+const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
+const source=fs.readFileSync(path.join(__dirname,'../js/pedidos.js'),'utf8');
+const code=source.slice(source.indexOf('  function enlaceAvisoPropuesta('),source.indexOf('  function vistaCotizacionDefinitiva('));
+const UI={dinero:v=>'$'+Number(v).toFixed(2),digitos:v=>String(v||'').replace(/\D/g,''),esc:v=>String(v).replace(/&/g,'&amp;').replace(/"/g,'&quot;'),enlaceWhatsApp:(p,t)=>'https://wa.me/'+p+'?text='+encodeURIComponent(t)};
+const fn=new Function('UI','enlaceSeguimiento',code+';return {enlaceAvisoPropuesta,botonAvisoPropuesta};')(UI,p=>'https://ejemplo.invalid/pedir.html?s='+p.numero+'-'+p.clave_seguimiento);
+const p={numero:'PED-0001',telefono:'593000000000',clave_seguimiento:'abcdef'},q={total_actual:7.5,total_estimado:9,adicional:1.5,mensaje:'Encebollado disponible'};
+test('aviso incluye comparación y enlace específico del pedido',()=>{const u=fn.enlaceAvisoPropuesta(p,q),t=decodeURIComponent(u.split('?text=')[1]);assert.match(t,/Total anterior: \$7.50/);assert.match(t,/Nuevo total: \$9.00/);assert.match(t,/Diferencia: \+\$1.50/);assert.match(t,/PED-0001-abcdef/);assert.match(t,/Encebollado disponible/);assert.match(t,/no constituye una confirmación de pago/);});
+test('sin teléfono, clave o importes válidos no ofrece aviso',()=>{assert.equal(fn.enlaceAvisoPropuesta({...p,telefono:''},q),'');assert.equal(fn.enlaceAvisoPropuesta({...p,clave_seguimiento:''},q),'');assert.equal(fn.enlaceAvisoPropuesta(p,{...q,total_estimado:null}),'');});
+test('aviso de reducción no confunde con cobro',()=>{assert.match(decodeURIComponent(fn.enlaceAvisoPropuesta(p,{...q,total_estimado:6,adicional:-1.5})),/−\$1.50/);});
+test('botón abre WhatsApp sin afirmar que fue enviado',()=>{const h=fn.botonAvisoPropuesta(p,q);assert.match(h,/Avisar al cliente por WhatsApp/);assert.match(h,/pulsa Enviar/);assert.match(h,/noopener noreferrer/);});
