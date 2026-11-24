@@ -1350,9 +1350,9 @@
         } catch(e) { UI.aviso(e.message,'error'); return false; }
       }}],
       alAbrir: function(velo) {
-        function resumen() { UI.$('[data-ux-menu] .ux-cambio-fila',velo).forEach(function(f){var n=f.querySelector('[data-ux-cant]'), ex=f.querySelector('.ux-cambio-extras');if(ex){ex.hidden=!(Number(n.value)>0);if(ex.hidden)UI.$('input',ex).forEach(function(b){b.checked=false;});}}); try { var v = leer(velo); velo.querySelector('[data-ux-resumen]').textContent = (v.originales || v.agregados) ? 'Diferencia orientativa de productos: ' + UI.dinero(v.estimado) + '. No incluye ajustes de impuestos o descuentos.' : ''; } catch(e) {} }
+        function resumen() { UI.$$('[data-ux-menu] .ux-cambio-fila',velo).forEach(function(f){var n=f.querySelector('[data-ux-cant]'), ex=f.querySelector('.ux-cambio-extras');if(ex){ex.hidden=!(Number(n.value)>0);if(ex.hidden)UI.$$('input',ex).forEach(function(b){b.checked=false;});}}); try { var v = leer(velo); velo.querySelector('[data-ux-resumen]').textContent = (v.originales || v.agregados) ? 'Diferencia orientativa de productos: ' + UI.dinero(v.estimado) + '. No incluye ajustes de impuestos o descuentos.' : ''; } catch(e) {} }
         velo.addEventListener('click',function(e){ var b=e.target.closest('[data-ux-step]'); if(!b)return; var el=b.parentNode.querySelector('input'); el.value=Math.max(0,Math.min(Number(el.max),Number(el.value||0)+Number(b.getAttribute('data-ux-step')))); el.dispatchEvent(new Event('input',{bubbles:true})); });
-        velo.addEventListener('input',function(e){ if(e.target.hasAttribute('data-ux-buscar')) { var q=e.target.value.toLowerCase(); UI.$('[data-ux-menu] [data-busqueda]',velo).forEach(function(f){ f.hidden=f.getAttribute('data-busqueda').indexOf(q)<0; }); } resumen(); });
+        velo.addEventListener('input',function(e){ if(e.target.hasAttribute('data-ux-buscar')) { var q=e.target.value.toLowerCase(); UI.$$('[data-ux-menu] [data-busqueda]',velo).forEach(function(f){ f.hidden=f.getAttribute('data-busqueda').indexOf(q)<0; }); } resumen(); });
         velo.addEventListener('change',resumen);
       }
     });
