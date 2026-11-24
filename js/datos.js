@@ -79,7 +79,7 @@
     if (!resp.ok) throw ErrorApp('El servidor respondió con un error (' + resp.status + ').', 'HTTP');
     var json;
     try { json = await resp.json(); } catch (e) { throw ErrorApp('Respuesta no válida del servidor.', 'RESPUESTA'); }
-    if (typeof json.version_num === 'number' && json.version_num < cfg.versionScriptMinima) scriptViejo = true;
+    if (typeof json.version_num === 'number') scriptViejo = json.version_num < cfg.versionScriptMinima;
     return json;
   }
 
