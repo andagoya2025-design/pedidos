@@ -279,6 +279,7 @@
     var rep = envioPendiente ? null : ultimoCarrito();
     cuerpo().innerHTML = pasos() +
       (envioPendiente ? '<div class="banda aviso-cerrado" role="alert">⚠️ <span><b>Pedido anterior sin confirmar.</b> No hagas otro pedido hasta verificar si llegó al restaurante. El reintento conserva los productos y el código originales.</span></div>' : '') +
+      (envioPendiente ? '<button class="btn" type="button" id="btn-recuperar-envio" style="margin-bottom:12px">↻ Recuperar pedido anterior</button>' : '') +
       (varios ? '<button class="btn secundario chico" type="button" id="btn-cambiar-local" style="margin-bottom:8px">📍 ' + UI.esc(local().nombre) + ' · cambiar</button>' : '<p class="subtitulo" style="margin:0 0 6px">📍 ' + UI.esc(local().nombre) + '</p>') +
       (entrega.tipo === 'mesa' && entrega.mesa ? '<div class="banda" style="margin:0 0 10px">🍽️ <span>Estás en la <b>mesa ' + UI.esc(entrega.mesa) + '</b>. Pide aquí y te lo llevamos.</span></div>' : '') +
       (local().pausado ? '<div class="banda aviso-cerrado" style="margin:0 0 10px">⏸ <span>' + UI.esc(local().mensaje_pausa || 'Este local pausó los pedidos por hoy.') + '</span></div>' : '') +
@@ -291,6 +292,7 @@
         return '<button class="pestana" role="tab" type="button" data-cat="' + UI.esc(c.id) + '" aria-selected="' + (c.id === categoria) + '">' + UI.esc(c.nombre) + '</button>';
       }).join('') + '</div></div>' +
       '<div class="platos" id="lista-platos"></div>';
+    var re = $('#btn-recuperar-envio'); if (re) re.addEventListener('click', function () { recuperarEnvio(re); });
     var cl = $('#btn-cambiar-local'); if (cl) cl.addEventListener('click', pintarLocales);
     var br = $('#btn-repetir'); if (br) br.addEventListener('click', function () { repetir(rep); });
     $('#buscar').addEventListener('input', function (e) { busqueda = e.target.value; pintarPlatos(); });
@@ -875,13 +877,17 @@
       envioPendiente = JSON.parse(JSON.stringify(datos));
       try { global.sessionStorage.setItem('mipedido_envio_pendiente', JSON.stringify({ fecha: Date.now(), datos: envioPendiente })); } catch (e) { /* sin almacenamiento */ }
     }
+    await procesarEnvio(datos, boton);
+  }
+
+  async function procesarEnvio(datos, boton) {
     await UI.trabajando(boton, async function () {
       try {
         var r = await DATOS.pedir('pedidoCrear', datos, { guardar: true });
-        MEM.guardar('ultimo_carrito', { local: localId, items: datos.items });
-        guardarMiPedido({ n: r.pedido.numero, tel: cli.telefono, s: r.pedido.clave_seguimiento ? r.pedido.numero + '-' + r.pedido.clave_seguimiento : '', f: Date.now(), t: r.pedido.total, e: 'Recibido', l: localId,
+        MEM.guardar('ultimo_carrito', { local: datos.local_id, items: datos.items });
+        guardarMiPedido({ n: r.pedido.numero, tel: datos.cliente.telefono, s: r.pedido.clave_seguimiento ? r.pedido.numero + '-' + r.pedido.clave_seguimiento : '', f: Date.now(), t: r.pedido.total, e: 'Recibido', l: localId,
           i: datos.items.map(function (x) { var pl = plato(x.plato_id); return { p: x.plato_id, c: x.cantidad, x: x.extras, n: pl ? pl.nombre : '' }; }) });
-        var detalle = items();
+        var detalle = datos.items.map(function (x) { var pl = plato(x.plato_id); return { plato: pl, cantidad: x.cantidad, extras: x.extras }; });
         r.pedido.ubic_por_wa = !!(ubic && ubic.fuente === 'whatsapp'); // 3.1.1: solo entonces se pide la ubicación por WhatsApp
         carrito = {}; codigoEnvio = ''; envioPendiente = null; ubic = null; pago.propina = 0;
         try { global.sessionStorage.removeItem('mipedido_envio_pendiente'); } catch (e) { /* sin almacenamiento */ }
@@ -892,6 +898,12 @@
         UI.ventana({ icono: '⚠️', titulo: 'No pudimos confirmar el envío', texto: 'No sabemos si el pedido llegó al restaurante. No hagas otro pedido todavía. Puedes reintentar el envío original con el mismo código, aunque hayas cambiado el carrito. No hagas un pedido nuevo hasta confirmar el anterior. Detalle: ' + err.message, botones: [{ texto: 'Entendido', valor: true }] });
       }
     });
+  }
+
+  async function recuperarEnvio(boton) {
+    if (!envioPendiente) return UI.aviso('No hay ningún envío pendiente de recuperación.', 'error');
+    if (envioPendiente.local_id !== localId) return UI.aviso('El envío pendiente pertenece a otro local. No se puede reintentar desde este menú.', 'error');
+    await procesarEnvio(envioPendiente, boton);
   }
 
   function textoWhatsApp(p) {
