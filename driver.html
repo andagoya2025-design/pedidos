@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#1F1B16">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="MiPedido Driver">
+  <meta name="format-detection" content="telephone=no">
+  <title>MiPedido Driver</title>
+  <link rel="manifest" href="manifest-driver.json">
+  <link rel="icon" href="iconos/icono-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="iconos/icono-180.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap">
+  <link rel="stylesheet" href="css/app.css">
+  <link rel="stylesheet" href="css/modulos.css">
+</head>
+<body>
+  <!-- Ingreso -->
+  <main class="ingreso" id="ingreso" hidden>
+    <div class="ingreso-caja">
+      <div class="marca-logo" data-marca-logo aria-hidden="true"></div>
+      <h1 data-marca-nombre>Pedidos</h1>
+      <p class="subtitulo">Ingrese con su usuario y clave</p>
+      <form class="tarjeta" id="form-ingreso" autocomplete="on">
+        <div class="banda error" id="ingreso-mensaje" role="alert" hidden></div>
+        <div class="campo">
+          <label for="ing-usuario">Usuario</label>
+          <input class="entrada" id="ing-usuario" name="usuario" autocomplete="username" autocapitalize="none" spellcheck="false" required>
+        </div>
+        <div class="campo">
+          <label for="ing-clave">Clave</label>
+          <div class="clave-envoltura">
+            <input class="entrada" id="ing-clave" name="clave" type="password" autocomplete="current-password" required>
+            <button class="ver-clave" id="ver-clave" type="button" aria-label="Mostrar u ocultar la clave">👁️</button>
+          </div>
+        </div>
+        <button class="btn bloque" type="submit">Ingresar</button>
+      </form><button class="btn secundario" type="button" id="instalar-pwa" hidden>Instalar Driver</button>
+    </div>
+  </main>
+
+  <!-- Aplicación -->
+  <div class="app" id="app" hidden>
+    <header class="cabecera">
+      <div class="marca">
+        <div class="marca-logo" data-marca-logo aria-hidden="true"></div>
+        <div style="min-width:0">
+          <div class="marca-nombre" data-marca-nombre></div>
+          <div class="marca-sub" id="usuario-chip"></div>
+        </div>
+      </div>
+      <label class="sr" for="selector-local" style="position:absolute;left:-9999px">Local</label>
+      <select class="selector-local" id="selector-local" aria-label="Elegir local"></select>
+    </header>
+    <nav class="navegacion" id="navegacion" aria-label="Menú principal"></nav>
+    <main class="contenido" id="contenido" tabindex="-1"></main>
+  </div>
+
+  <noscript><p style="padding:20px">Esta aplicación necesita JavaScript activado.</p></noscript>
+
+  <script src="js/config.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/datos.js"></script>
+  <script src="js/app.js"></script>
+  <script src="js/configuracion.js"></script>
+  <script src="js/comun.js"></script>
+  <script src="js/qr.js"></script>
+  <script src="js/pedidos.js"></script>
+  <script src="js/menu.js"></script>
+  <script src="js/motorizados.js"></script>
+  <script src="js/caja.js"></script>
+  <script src="js/inventario.js"></script>
+  <script src="js/reportes.js"></script>
+  <script src="js/rastreo.js"></script>
+  <script src="js/monitoreo.js"></script>
+  <script src="js/informe_motorizados.js"></script>
+<script src="js/pwa-cliente.js"></script></body>
+</html>
