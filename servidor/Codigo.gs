@@ -154,6 +154,7 @@ var ACCIONES = {
   menuPublico:        { tipo: 'publica', fn: accionMenuPublico_ },
   pedidoCrear:        { tipo: 'publica', fn: accionPedidoCrear_ },
   pedidoConsultar:    { tipo: 'publica', fn: accionPedidoConsultar_ },
+  pedidoRecuperar:     { tipo: 'publica', fn: accionPedidoRecuperar_ },
   menuListar:         { tipo: 'sesion',  roles: ['dueno', 'cajero'], fn: accionMenuListar_ },
   categoriaGuardar:   { tipo: 'dueno',   fn: accionCategoriaGuardar_ },
   platoGuardar:       { tipo: 'dueno',   fn: accionPlatoGuardar_ },
@@ -1328,6 +1329,20 @@ function accionPedidoCrear_(data, ctx) {
 function UI_dinero_(n) { return (leerConfig_().moneda || 'USD') + ' ' + redondear_(n).toFixed(2); }
 
 /* Seguimiento del cliente: número + teléfono (sin listas, sin datos ajenos). */
+/* Consulta idempotente previa al reintento: solo devuelve el pedido del mismo teléfono. */
+function accionPedidoRecuperar_(data) {
+  if (!estaInstalado_()) throw fallo_('El sistema aún no está instalado.', 'NO_INSTALADO');
+  var opId = limpiarTexto_(data.op_id, 80);
+  if (!/^[A-Za-z0-9_-]{8,80}$/.test(opId)) throw fallo_('Código de envío no válido.');
+  var tel = normalizarTelefono_(data.telefono, leerConfig_().pais_codigo);
+  if (!tel) throw fallo_('Número de celular no válido.');
+  var p = leerTabla_('pedidos').filter(function (x) {
+    return String(x.op_id) === opId && String(x.telefono) === tel;
+  })[0];
+  if (!p) return { ok: true, data: { encontrado: false } };
+  return { ok: true, data: { encontrado: true, pedido: pedidoSalida_(p) } };
+}
+
 function accionPedidoConsultar_(data) {
   if (!estaInstalado_()) throw fallo_('El sistema aún no está instalado.', 'NO_INSTALADO');
   var p;
