@@ -2192,6 +2192,10 @@ function accionPedidosListar_(data, ctx) {
     }
   }
   var det = detallePorPedido_(lista.map(function (p) { return String(p.id); }));
+  var cambiosAbiertos = {};
+  if (SpreadsheetApp.getActive().getSheetByName('pedido_cambios')) cambiosPedido_().forEach(function (x) {
+    if (['Pendiente', 'Aprobada para coordinar', 'Cotizada', 'Confirmada cliente', 'Aplicando'].indexOf(String(x.estado)) >= 0) cambiosAbiertos[String(x.pedido_id)] = String(x.estado);
+  });
   var motos = {};
   leerTabla_('motorizados').forEach(function (m) { motos[String(m.id)] = motoCorto_(m); });
   /* 3.1.5: clave del enlace «Mis pedidos» de cada cliente (para los mensajes de WhatsApp) */
@@ -2208,6 +2212,7 @@ function accionPedidosListar_(data, ctx) {
     pedidos: lista.map(function (p) {
       var o = pedidoSalida_(p, det[String(p.id)] || []);
       o.motorizado = motos[o.motorizado_id] || null;
+      o.cambio_estado = cambiosAbiertos[String(p.id)] || '';
       o.cliente_clave = clis[String(p.cliente_id)] || ''; // 3.1.5
       return o;
     }).sort(function (a, b) { return a.creado < b.creado ? 1 : -1; })
