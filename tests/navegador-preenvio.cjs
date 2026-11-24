@@ -18,12 +18,18 @@ async function run(engine,device,label,url){
  const cart=page.locator('#btn-carrito-preenvio');
  await cart.waitFor({state:'visible'});
  assert.match(await cart.innerText(),/Carrito \(0\)/);
+ assert.equal(await cart.evaluate(e=>getComputedStyle(e).backgroundColor),'rgb(255, 255, 255)');
+ assert.equal(await cart.locator('svg').isVisible(),true);
  for(let i=0;i<cats.length;i++){
   await page.locator('[data-cat="c'+i+'"]').click();
   await page.locator('[data-agregar="p'+i+'"]').click();
   await page.locator('[data-mas="p'+i+'"]').click();
   const card=page.locator('article.plato').filter({has:page.locator('[data-ver="p'+i+'"]')});
   assert.match(await card.locator('.preenvio-subtotal-tarjeta').innerText(),i===2?/3[,.]00/:/10[,.]00/);
+  assert.match(await card.locator('.precio').innerText(),i===2?/3[,.]00/:/10[,.]00/);
+  assert.equal(await card.locator('.precio').isVisible(),true);
+  if(i===2){await page.locator('[data-mas="p2"]').click();assert.match(await card.locator('.precio').innerText(),/4[,.]50/);await page.locator('[data-menos="p2"]').click();}
+
   await page.locator('[data-menos="p'+i+'"]').click();
   assert.match(await card.locator('.preenvio-subtotal-tarjeta').innerText(),i===2?/1[,.]50/:/5[,.]00/);
  }
@@ -37,6 +43,23 @@ async function run(engine,device,label,url){
  assert.match(await cart.innerText(),/Carrito \(8\)/);
  await cart.click();
  assert.equal(await page.locator('.ventana .preenvio-linea').count(),7);
+ const jugo=page.locator('.ventana .preenvio-linea').filter({hasText:'Jugo natural'});
+ await jugo.getByRole('button',{name:'Aumentar cantidad'}).click();
+ assert.equal(await jugo.locator('[data-carrito-cant]').inputValue(),'2');
+ assert.match(await jugo.locator('[data-carrito-importe]').innerText(),/3[,.]00/);
+ await jugo.getByRole('button',{name:'Aumentar cantidad'}).click();
+ assert.match(await jugo.locator('[data-carrito-importe]').innerText(),/4[,.]50/);
+ await jugo.getByRole('button',{name:'Disminuir cantidad'}).click();
+ assert.match(await jugo.locator('[data-carrito-importe]').innerText(),/3[,.]00/);
+ await jugo.locator('[data-carrito-cant]').fill('1');
+ await jugo.locator('[data-carrito-cant]').press('Tab');
+ assert.match(await jugo.locator('[data-carrito-importe]').innerText(),/1[,.]50/);
+ const extra=page.locator('.ventana .preenvio-linea').filter({hasText:'Plato con extras'});
+ await extra.getByRole('button',{name:'Aumentar cantidad'}).click();
+ assert.match(await extra.locator('[data-carrito-importe]').innerText(),/18[,.]00/);
+ await extra.getByRole('button',{name:'Disminuir cantidad'}).click();
+ assert.match(await extra.locator('[data-carrito-importe]').innerText(),/12[,.]00/);
+ assert.match(await page.locator('[data-carrito-total]').innerText(),/38[,.]50/);
  await page.locator('.ventana .preenvio-linea').filter({hasText:'Jugo natural'}).getByRole('button',{name:'Editar',exact:true}).click();
  await page.locator('#q-num').fill('3');
  await page.getByRole('button',{name:'Guardar cambios',exact:true}).click();
