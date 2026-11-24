@@ -249,11 +249,12 @@
   function cuerpo() { return UI.$('#pd-cuerpo'); }
 
   async function cargar() {
+    var sesionCarga=APP.sesion, localCarga=APP.local, diaCarga=est.diaEntregado;
     var r = await Promise.allSettled([
       DATOS.pedir('pedidosListar', { local_id: APP.local, dia: est.diaEntregado || UI.hoy() }),
       DATOS.pedir('motorizadosListar', { local_id: APP.local })
     ]);
-    if (!cuerpo()) return; // se cambió de pantalla mientras cargaba
+    if (!cuerpo() || APP.sesion!==sesionCarga || APP.local!==localCarga || est.diaEntregado!==diaCarga) return false; // se cambió de pantalla o de contexto
     if (r[0].status !== 'fulfilled') {
       // No borrar el tablero válido por una interrupción temporal de red.
       if (!est.datos) cuerpo().innerHTML = '<div class="banda error">⚠️ <span>' + UI.esc(r[0].reason.message) + '</span></div>';
@@ -264,6 +265,7 @@
     est.cargadoEn = Date.now();
     alertarRecibidos();
     pintar();
+    return r[1].status === 'fulfilled';
   }
 
   function ahoraServidor() {
@@ -448,6 +450,7 @@
    * Vigila en TODA la app (no solo en el panel) para dueño y cajero, también con
    * la pestaña en segundo plano. Consulta liviana: solo una marca de tiempo. */
   var vigia = null, vigilando = false, ultimaMarca = 0, identidadAvisos = '', vistosAvisos = Object.create(null);
+  var vigiaAdmin = DATOS.crearVigiaSync();
   function actualizarEstadoSolicitudes(r, error) {
     var contador = UI.$('#pd-solic-count'), estado = UI.$('#pd-conexion');
     if (contador && !error) contador.textContent = Array.isArray(r.solicitudes) ? String(r.solicitudes.length) : '—';
@@ -465,6 +468,9 @@
       var identidad = String(s.usuario_id || s.usuario) + '|' + local;
       if (identidad !== identidadAvisos) { identidadAvisos = identidad; vistosAvisos = Object.create(null); ultimaMarca = 0; }
       try {
+        if (navigator.onLine === false) return;
+        await vigiaAdmin(identidad+'|'+APP.vistaActual+'|'+(est.diaEntregado||''), async function () {
+        if (APP.sesion!==s || (APP.local||s.local_id||'TODOS')!==local) return false;
         var r = await DATOS.pedir('pedidosNuevos', { local_id: local });
         if (APP.sesion !== s || (APP.local || s.local_id || 'TODOS') !== local) return;
         actualizarEstadoSolicitudes(r, false);
@@ -477,10 +483,13 @@
         } else if (r.ultimo > ultimaMarca && (ultimaMarca || Date.now() - r.ultimo < 120000)) avisarNuevo(false, 1);
         ultimaMarca = r.ultimo || ultimaMarca;
         if (APP.vistaActual === 'pedidos' && est.datos && document.visibilityState === 'visible') {
-          try { await cargar(); } catch (e) {}
+          if (document.querySelector('.velo') || DATOS.ocupado()) return false;
+          return await cargar();
         }
+        return true;
+        }, 15000);
       } catch(e) { if (APP.sesion === s && (APP.local || s.local_id || 'TODOS') === local) actualizarEstadoSolicitudes(null, true); }
-      finally { vigilando = false; vigia = setTimeout(revisar, 15000); }
+      finally { vigilando = false; vigia = setTimeout(revisar, document.visibilityState === 'visible' ? 3000 : 15000); }
     }
     vigia = setTimeout(revisar, 1500);
   }
@@ -508,7 +517,7 @@
     var permiso = UI.permisoNotificaciones();
     var v = await UI.ventana({
       icono: '🔔', titulo: 'Avisos de pedidos y solicitudes',
-      texto: 'El panel revisa cada 15 segundos. Mantenga la app abierta y el volumen arriba. Los navegadores pueden suspender los avisos en segundo plano. Pruebe el sonido al iniciar el turno.',
+      texto: 'El panel consulta cambios automáticamente con objetivo de 3 segundos mientras está visible. Mantenga la app abierta y el volumen arriba. Los navegadores pueden suspender los avisos en segundo plano. Pruebe el sonido al iniciar el turno.',
       html: '<p class="ayuda">Sonido: <b>' + (on ? 'activado' : 'silenciado') + '</b> · Notificación en pantalla: <b>' +
         (permiso === 'granted' ? 'activada' : permiso === 'denied' ? 'bloqueada (actívela en el candado 🔒 de la barra de dirección)' : permiso === 'no' ? 'este teléfono no la permite' : 'sin activar') + '</b></p>',
       botones: [
