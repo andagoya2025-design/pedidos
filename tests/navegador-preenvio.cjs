@@ -51,6 +51,7 @@ async function run(engine,device,label,url){
  await page.locator('#pe-tel').fill('0991234567');
  await page.locator('#form-entrega button[type=submit]').click();
  await page.locator('#form-pedido').waitFor();
+ if(!await page.locator('#pe-notas').isVisible())await page.locator('details').filter({has:page.locator('#pe-notas')}).locator('summary').click();
  await page.locator('#pe-notas').fill('Nota de prueba');
  await page.locator('#btn-mas-platos').click();
  await cart.waitFor();
@@ -58,6 +59,7 @@ async function run(engine,device,label,url){
  await page.locator('#btn-ver-pedido').click();
  await page.locator('#form-entrega button[type=submit]').click();
  await page.locator('#form-pedido').waitFor();
+ if(!await page.locator('#pe-notas').isVisible())await page.locator('details').filter({has:page.locator('#pe-notas')}).locator('summary').click();
  assert.equal(await page.locator('#pe-notas').inputValue(),'Nota de prueba');
  await page.locator('#btn-vaciar-preenvio').click();
  await cart.waitFor();
