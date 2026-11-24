@@ -1075,10 +1075,28 @@ function enlaceImagen_(url) {
 function limpiarMenuCache_() { CacheService.getScriptCache().remove('MENU_PUBLICO'); }
 
 /* Extras guardados como JSON: [{nombre, precio}] */
+function maxExtra_(e) {
+  var n=Number(e.max_cantidad);
+  return Number(e.precio)>0&&Number.isInteger(n)&&n>=1&&n<=10?n:1;
+}
+function validarExtrasPedido_(seleccion,disp) {
+  if(seleccion==null)seleccion=[];
+  if(!Array.isArray(seleccion)||seleccion.length>200)throw fallo_('Extras inválidos.','EXTRAS');
+  var vistos=Object.create(null),nombres=[],cent=0;
+  seleccion.forEach(function(nombre){
+    if(typeof nombre!=='string')throw fallo_('Extra inválido.','EXTRAS');
+    var k=claveComparar_(nombre),coinc=disp.filter(function(e){return claveComparar_(e.nombre)===k;});
+    if(!k||coinc.length!==1||!isFinite(Number(coinc[0].precio))||Number(coinc[0].precio)<0)throw fallo_('Extra inválido o no disponible.','EXTRAS');
+    var e=coinc[0];vistos[k]=(vistos[k]||0)+1;
+    if(vistos[k]>maxExtra_(e))throw fallo_('Extra inválido o repetido: supera la cantidad permitida.','EXTRAS');
+    nombres.push(String(e.nombre));cent+=Math.round(redondear_(e.precio)*100);
+  });
+  return {nombres:nombres.sort(),centavos:cent};
+}
 function leerExtras_(txt) {
   try {
     var a = JSON.parse(String(txt || '[]'));
-    return Array.isArray(a) ? a.map(function (x) { return { nombre: limpiarTexto_(x.nombre, 60), precio: redondear_(x.precio) }; }).filter(function (x) { return x.nombre; }) : [];
+    return Array.isArray(a) ? a.map(function (x) { return { nombre: limpiarTexto_(x.nombre, 60), precio: redondear_(x.precio), max_cantidad: maxExtra_(x) }; }).filter(function (x) { return x.nombre; }) : [];
   } catch (e) { return []; }
 }
 
@@ -1184,15 +1202,8 @@ function cotizarLineasCreacion_(items, platos, localId, sinInsumos) {
     if(!p||p.activo!==true||(String(p.local_id)!=='TODOS'&&String(p.local_id)!==String(localId)))throw fallo_('Un plato de su pedido ya no está disponible. Revise su pedido.','PLATO');
     if(p.agotado===true||sinInsumos[String(p.id)])throw fallo_('«'+p.nombre+'» se agotó. Quítelo de su pedido.','AGOTADO');
     if(!Number.isInteger(cant)||cant<1||cant>50)throw fallo_('Cantidad no válida en «'+p.nombre+'».','CANTIDAD');
-    var disp=leerExtras_(p.extras_json),seleccion=it.extras==null?[]:it.extras,vistos=Object.create(null),nombres=[],cent=Math.round(redondear_(p.precio)*100);
-    if(!Array.isArray(seleccion)||seleccion.length>20)throw fallo_('Extras inválidos.','EXTRAS');
     if(!isFinite(Number(p.precio))||Number(p.precio)<0)throw fallo_('Precio inválido.','PRECIO');
-    seleccion.forEach(function(nombre){
-      if(typeof nombre!=='string')throw fallo_('Extra inválido.','EXTRAS');
-      var k=claveComparar_(nombre),coinc=disp.filter(function(e){return claveComparar_(e.nombre)===k;});
-      if(!k||vistos[k]||coinc.length!==1||!isFinite(Number(coinc[0].precio))||Number(coinc[0].precio)<0)throw fallo_('Extra inválido, repetido o no disponible. Revise el plato.','EXTRAS');
-      vistos[k]=true;nombres.push(String(coinc[0].nombre));cent+=Math.round(redondear_(coinc[0].precio)*100);
-    });
+    var elegidos=validarExtrasPedido_(it.extras,leerExtras_(p.extras_json)),nombres=elegidos.nombres,cent=Math.round(redondear_(p.precio)*100)+elegidos.centavos;
     var key=JSON.stringify([String(p.id),nombres.map(claveComparar_).sort()]);
     variantes[key]=(variantes[key]||0)+cant;
     if(variantes[key]>50)throw fallo_('Máximo 50 unidades por variante.','CANTIDAD');
@@ -1488,9 +1499,8 @@ function seleccionSolicitud_(tipo, items, p) {
     if (!it || !Number.isInteger(it.cantidad) || it.cantidad < 1 || it.cantidad > 50) throw fallo_('Cantidad inválida.', 'CANTIDAD');
     var plato = platos.filter(function(v){return String(v.id)===String(it.plato_id);})[0];
     if (!plato || plato.activo !== true || plato.agotado === true || agotados[String(plato.id)] || (String(plato.local_id)!=='TODOS' && String(plato.local_id)!==String(p.local_id))) throw fallo_('Producto no disponible.', 'AGOTADO');
-    var disponibles = leerExtras_(plato.extras_json), vistos = Object.create(null);
-    if (!Array.isArray(it.extras) || it.extras.length>20) throw fallo_('Extras inválidos.', 'EXTRAS');
-    var extras = it.extras.map(function(n){var k=claveComparar_(n), ex=disponibles.filter(function(e){return claveComparar_(e.nombre)===k;})[0];if(!ex||vistos[k])throw fallo_('Extra inválido o repetido.', 'EXTRAS');vistos[k]=true;return String(ex.nombre);}).sort();
+    if(!Array.isArray(it.extras))throw fallo_('Extras inválidos.','EXTRAS');
+    var extras=validarExtrasPedido_(it.extras,leerExtras_(plato.extras_json)).nombres;
     var key=JSON.stringify([String(plato.id),extras]), linea=agrupados[key]||(agrupados[key]={plato_id:String(plato.id),cantidad:0,extras:extras});
     linea.cantidad+=it.cantidad;
     var existentes=originales.filter(function(v){return String(v.plato_id)===linea.plato_id && String(v.extras||'').split(',').map(function(n){return claveComparar_(n.trim());}).filter(Boolean).sort().join('|')===extras.map(claveComparar_).sort().join('|');});
@@ -1608,8 +1618,7 @@ function planCambioIntegral_(p,t,sel,filas,platos,cfg,agotados) {
   var variantes=Object.create(null);
   function clave(id,ex){return JSON.stringify([String(id),ex.map(claveComparar_).sort()]);}
   agregar.forEach(function(it){var n=Number(it.cantidad),pl=platos.filter(function(v){return String(v.id)===String(it.plato_id);})[0];if(!Number.isInteger(n)||n<1||n>50||!pl||pl.activo!==true||pl.agotado===true||agotados[String(pl.id)]||String(pl.local_id)!=='TODOS'&&String(pl.local_id)!==String(p.local_id))throw fallo_('Producto no disponible o cantidad inválida.');
-    var ex=Array.isArray(it.extras)?it.extras:[],disp=leerExtras_(pl.extras_json),nombres=[],precio=numero_(pl.precio),ve=Object.create(null);if(ex.length>20)throw fallo_('Demasiados extras.');
-    ex.forEach(function(e){var k=claveComparar_(e),x=disp.filter(function(v){return claveComparar_(v.nombre)===k;})[0];if(!x||ve[k])throw fallo_('Extra inválido o repetido.');ve[k]=true;nombres.push(String(x.nombre));precio+=numero_(x.precio);});
+    var ex=validarExtrasPedido_(it.extras,leerExtras_(pl.extras_json)),nombres=ex.nombres,precio=(Math.round(redondear_(pl.precio)*100)+ex.centavos)/100;
     var k=clave(pl.id,nombres),exist=despues.filter(function(v){return v.cantidad>0&&clave(v.plato_id,v.extras.split(',').map(function(x){return x.trim();}).filter(Boolean))===k;});
     if(variantes[k]||t==='aumentar'&&!exist.length||exist.reduce(function(a,v){return a+v.cantidad;},0)+n>50)throw fallo_('Variante duplicada, ajena al pedido o cantidad excesiva.');
     variantes[k]=true;precio=redondear_(precio);var alta={plato_id:String(pl.id),nombre:String(pl.nombre),cantidad:n,precio:precio,extras:nombres,total_linea:redondear_(precio*n)};altas.push(alta);
@@ -1707,20 +1716,7 @@ function accionPedidoCambioCotizar_(data, ctx) {
     if (!plato || plato.activo !== true || plato.agotado === true || agotados[String(plato.id)] ||
         (String(plato.local_id) !== 'TODOS' && String(plato.local_id) !== String(p.local_id)))
       throw fallo_('Un producto no está disponible.', 'AGOTADO');
-    var extras = Array.isArray(it.extras) ? it.extras : [];
-    var disponibles = leerExtras_(plato.extras_json);
-    if (extras.length > 20) throw fallo_('Demasiados extras.', 'EXTRAS');
-    var vistos = {};
-    var costoExtras = 0, nombres = [];
-    extras.forEach(function (nombre) {
-      var clave = claveComparar_(nombre);
-      if (vistos[clave]) throw fallo_('Extra repetido.', 'EXTRAS');
-      vistos[clave] = true;
-      var ex = disponibles.filter(function (v) { return claveComparar_(v.nombre) === clave; })[0];
-      if (!ex) throw fallo_('Un extra no está disponible.', 'EXTRAS');
-      costoExtras += numero_(ex.precio);
-      nombres.push(String(ex.nombre));
-    });
+    var extrasVal=validarExtrasPedido_(it.extras,leerExtras_(plato.extras_json)),costoExtras=extrasVal.centavos/100,nombres=extrasVal.nombres;
     var claveLinea = String(plato.id) + '|' + nombres.map(claveComparar_).sort().join('|');
     if (clavesCotizadas[claveLinea]) throw fallo_('Producto repetido en la cotización. Agrupa las cantidades.', 'DUPLICADO');
     clavesCotizadas[claveLinea] = true;
@@ -2093,8 +2089,12 @@ function accionPlatoGuardarBase_(data, ctx) {
   var extras = (Array.isArray(data.extras) ? data.extras : []).slice(0, 20).map(function (x) {
     var n = limpiarTexto_(x.nombre, 60), pr = Number(x.precio || 0);
     if (n && !(pr >= 0 && pr <= 1000)) throw fallo_('Precio del extra «' + n + '» no válido.');
-    return { nombre: n, precio: redondear_(pr) };
+    var max=x.max_cantidad==null||x.max_cantidad===''?1:Number(x.max_cantidad);
+    if(n&&(!Number.isInteger(max)||max<1||max>10))throw fallo_('Cantidad máxima de extra inválida.');
+    if(n&&n.indexOf(',')>=0)throw fallo_('El nombre del extra no debe contener comas.');
+    return { nombre: n, precio: redondear_(pr), max_cantidad: pr>0?max:1 };
   }).filter(function (x) { return x.nombre; });
+  var clavesExtra=Object.create(null);extras.forEach(function(x){var k=claveComparar_(x.nombre);if(clavesExtra[k])throw fallo_('No repita nombres de extras.','EXTRAS');clavesExtra[k]=true;});
   var cambios = {
     nombre: nombre, local_id: localId, categoria_id: catId, descripcion: limpiarTexto_(data.descripcion, 300), precio: redondear_(precio),
     foto_url: enlaceImagen_(data.foto_url), extras_json: JSON.stringify(extras), agotado: data.agotado === true, activo: data.activo !== false,
