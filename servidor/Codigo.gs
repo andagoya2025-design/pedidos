@@ -158,6 +158,7 @@ var ACCIONES = {
   pedidoPoliticaCambios: { tipo: 'publica', fn: accionPedidoPoliticaCambios_ },
   pedidoCambioSolicitar: { tipo: 'publica', fn: accionPedidoCambioSolicitar_ },
   pedidoCambiosConsultar: { tipo: 'publica', fn: accionPedidoCambiosConsultar_ },
+  pedidoCambioCotizar: { tipo: 'sesion', roles: ['dueno', 'cajero'], fn: accionPedidoCambioCotizar_ },
   pedidoCambiosListar: { tipo: 'sesion', roles: ['dueno', 'cajero'], fn: accionPedidoCambiosListar_ },
   pedidoCambioResolver: { tipo: 'sesion', roles: ['dueno', 'cajero'], fn: accionPedidoCambioResolver_ },
   menuListar:         { tipo: 'sesion',  roles: ['dueno', 'cajero'], fn: accionMenuListar_ },
@@ -1445,6 +1446,60 @@ function accionPedidoCambiosListar_(data, ctx) {
       detalle: String(x.detalle), estado: String(x.estado), pedido_estado: estados[String(x.pedido_id)] || '',
       creado: iso_(x.creado), respuesta: String(x.respuesta || ''), aplicado: false };
   }) } };
+}
+/* Cotización de adicionales: no cambia el pedido ni reserva inventario.
+ * Solo el personal autorizado puede consultar precios de platos activos. */
+function accionPedidoCambioCotizar_(data, ctx) {
+  var solicitudId = limpiarTexto_(data.id, 80);
+  var x = cambiosPedido_().filter(function (v) { return String(v.id) === solicitudId; })[0];
+  if (!x) throw fallo_('Solicitud no encontrada.', 'NO_EXISTE');
+  if (!puedeVerLocal_(ctx, String(x.local_id))) throw fallo_('Sin permiso para este local.', 'PERMISO');
+  if (String(x.estado) !== 'Pendiente') throw fallo_('La solicitud ya fue resuelta.', 'CAMBIO');
+  if (['agregar', 'aumentar'].indexOf(String(x.tipo)) < 0)
+    throw fallo_('Esta cotización solo admite productos adicionales o aumento de cantidades.', 'CAMBIO');
+  var p = leerTabla_('pedidos').filter(function (v) { return String(v.id) === String(x.pedido_id); })[0];
+  if (!p || !politicaCambiosPedido_(p.estado, x.tipo).permitido)
+    throw fallo_('El pedido ya no admite este cambio.', 'CAMBIO');
+  var items = Array.isArray(data.items) ? data.items : [];
+  if (!items.length || items.length > 30) throw fallo_('Elige entre 1 y 30 productos para cotizar.');
+  var platos = {};
+  leerTabla_('platos').forEach(function (v) { platos[String(v.id)] = v; });
+  var agotados = agotadosPorLocal_()[String(p.local_id)] || {};
+  var subtotal = 0, lineas = [];
+  items.forEach(function (it) {
+    var plato = platos[String(it.plato_id)];
+    var cantidad = Number(it.cantidad);
+    if (!Number.isInteger(cantidad) || cantidad < 1 || cantidad > 50)
+      throw fallo_('Cantidad no válida.', 'CANTIDAD');
+    if (!plato || plato.activo !== true || plato.agotado === true || agotados[String(plato.id)] ||
+        (String(plato.local_id) !== 'TODOS' && String(plato.local_id) !== String(p.local_id)))
+      throw fallo_('Un producto no está disponible.', 'AGOTADO');
+    var extras = Array.isArray(it.extras) ? it.extras : [];
+    var disponibles = leerExtras_(plato.extras_json);
+    if (extras.length > 20) throw fallo_('Demasiados extras.', 'EXTRAS');
+    var vistos = {};
+    var costoExtras = 0, nombres = [];
+    extras.forEach(function (nombre) {
+      var clave = claveComparar_(nombre);
+      if (vistos[clave]) throw fallo_('Extra repetido.', 'EXTRAS');
+      vistos[clave] = true;
+      var ex = disponibles.filter(function (v) { return claveComparar_(v.nombre) === clave; })[0];
+      if (!ex) throw fallo_('Un extra no está disponible.', 'EXTRAS');
+      costoExtras += numero_(ex.precio);
+      nombres.push(String(ex.nombre));
+    });
+    var unitario = redondear_(numero_(plato.precio) + costoExtras);
+    var total = redondear_(unitario * cantidad);
+    subtotal = redondear_(subtotal + total);
+    lineas.push({ plato_id: String(plato.id), nombre: String(plato.nombre), cantidad: cantidad,
+      extras: nombres, precio: unitario, total_linea: total });
+  });
+  return { ok: true, data: { solicitud_id: solicitudId, pedido: String(p.numero),
+    estado_pedido: String(p.estado), total_actual: redondear_(p.total),
+    adicional: subtotal, total_estimado: redondear_(numero_(p.total) + subtotal),
+    lineas: lineas, inventario_reservado: false, aplicado: false,
+    requiere_confirmacion_cliente: true, pago_adicional_pendiente: subtotal > 0,
+    aviso: 'Cotización provisional. Confirmar con el cliente, verificar stock y conciliar el pago antes de aplicar.' } };
 }
 function accionPedidoCambioResolver_(data, ctx) {
   var id = limpiarTexto_(data.id, 80), decision = limpiarTexto_(data.decision, 20);
