@@ -584,3 +584,9 @@ details.otras-fechas[open] summary { margin-bottom: 10px; }
 
 /* Respetar ocultación de extras hasta seleccionar cantidad. */
 .ux-cambio-extras[hidden]{display:none!important}
+
+/* 3.1.10: avisos y recepción de solicitudes */
+.aviso-flotante.aviso-premium{display:flex;align-items:flex-start;gap:12px;padding:14px 16px;border-radius:14px;line-height:1.4;box-shadow:0 8px 24px rgba(0,0,0,.16)}
+.aviso-premium-icono{flex:0 0 28px;display:grid;place-items:center}
+.aviso-premium-texto{display:flex;flex-direction:column;gap:3px;overflow-wrap:anywhere}.aviso-premium-texto strong{font-size:.88rem}.aviso-premium-texto>span{font-size:.85rem}
+#pd-solic-count{font-weight:700;border:1px solid currentColor;border-radius:999px;padding:0 7px;min-width:24px;text-align:center}#pd-conexion{margin:8px 0;font-size:.82rem}
