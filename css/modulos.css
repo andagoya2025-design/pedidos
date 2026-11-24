@@ -575,3 +575,9 @@ details.otras-fechas[open] summary { margin-bottom: 10px; }
 .pd-premium svg{flex:none}.pd-premium .btn.secundario{border:1px solid var(--borde);background:var(--superficie)}
 .pd-premium .columna{border:1px solid var(--borde);background:var(--superficie);padding:10px}.pd-premium .columna .vacio{padding:10px 8px}
 @media(min-width:700px){.pd-premium-acciones{grid-template-columns:minmax(160px,1fr) minmax(140px,1fr) 48px 48px}.pd-premium-acciones #btn-nuevo-pedido{grid-column:auto}}
+
+/* Editor de solicitudes del cliente: aislado de las demás ventanas. */
+.ux-cambio-lista{max-height:34vh;overflow:auto;overscroll-behavior:contain;margin:8px 0 14px;display:grid;gap:8px}
+.ux-cambio-fila{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;padding:10px;border:1px solid var(--borde);border-radius:12px;background:var(--superficie)}
+.ux-cambio-fila[hidden]{display:none}.ux-cambio-nombre{min-width:0;overflow-wrap:anywhere}.ux-cambio-nombre small{display:block;line-height:1.4}.ux-cambio-controles{display:flex;align-items:center;gap:4px}.ux-cambio-controles input{width:52px;min-width:0;padding:6px;text-align:center;font-size:16px}.ux-cambio-controles button{min-width:36px;min-height:40px;padding:4px 8px}.ux-cambio-extras{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:8px;font-size:.85rem}.ux-cambio-extras label{display:flex;align-items:center;gap:4px}.ux-cambio-extras input{width:auto}.ventana #ux-nota,.ventana [data-ux-buscar]{font-size:16px;width:100%}
+@media(max-width:360px){.ux-cambio-fila{grid-template-columns:1fr}.ux-cambio-controles{justify-content:flex-end}}
