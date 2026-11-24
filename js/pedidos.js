@@ -174,6 +174,38 @@
     function importe(t,v){return '<div class="ux-resumen-item"><span>'+UI.esc(t)+'</span><b>'+UI.esc(UI.dinero(v))+'</b></div>';}
     return '<section class="ux-detalle-pedido"><h3>Detalle de la solicitud</h3>'+filas.join('')+(pedido?importe('Total vigente',pedido.total):'')+(valido&&filas.length?importe('Diferencia orientativa',delta)+importe('Total estimado',Number(pedido.total)+delta)+'<small>Estimación no vinculante; impuestos, descuentos, disponibilidad y pago deben verificarse antes de aplicar.</small>':'<p class="ayuda">No se pudo reconstruir toda la selección con certeza. Revisa la descripción original. No se calcula un total incompleto.</p>')+'</section>';
   }
+  function respuestasSolicitud(tipo,decision) {
+    var nombre={agregar:'la incorporación de productos',aumentar:'el aumento de cantidades',cambiar:'la sustitución de productos',reducir:'la reducción de cantidades',quitar:'el retiro de productos',cancelar:'la cancelación del pedido'}[tipo]||'tu modificación';
+    if(decision==='Rechazada')return [
+      ['No disponible','Por el momento no podemos realizar '+nombre+'. Tu pedido vigente no cambia.'],
+      ['Pedido en preparación','Tu pedido ya está en preparación. No podemos realizar '+nombre+' en esta etapa. Tu pedido vigente se mantiene.'],
+      ['Consultar alternativa','No podemos realizar '+nombre+' tal como la solicitaste. Contáctanos para revisar una alternativa. Tu pedido vigente no cambia.']
+    ];
+    if(decision==='Cerrada sin aplicar')return [
+      ['Cerrar sin cambios','Cerramos la solicitud de '+nombre+' sin modificar tu pedido ni registrar un cobro adicional.'],
+      ['No se concretó','No se concretó '+nombre+'. Tu pedido vigente conserva sus productos e importe.']
+    ];
+    return [
+      ['En revisión','Recibimos tu solicitud de '+nombre+'. Confirmaremos disponibilidad y el importe correspondiente antes de aplicar cualquier cambio.'],
+      ['Revisar alternativa','Estamos revisando una alternativa para '+nombre+'. Te confirmaremos disponibilidad y precio antes de modificar el pedido.'],
+      ['Verificar pago','Revisaremos '+nombre+' y el importe correspondiente, incluido cualquier ajuste de pago. Tu pedido vigente no cambia todavía.']
+    ];
+  }
+  function respuestaSolicitudValida(v,decision) {
+    v=String(v||'').trim();
+    if(v.length<5||v.length>500)return 'Escribe una respuesta de 5 a 500 caracteres.';
+    if(decision==='Aprobada para coordinar'&&!/precio|importe|valor|total|cotiz|confirm|disponib/i.test(v))return 'Indica que se confirmarán precio y disponibilidad.';
+    return '';
+  }
+  async function responderSolicitud(x,decision) {
+    var opciones=respuestasSolicitud(x.tipo,decision),respuesta='';
+    var html='<div class="ux-respuesta-rapida"><label for="ux-plantilla">Respuesta rápida</label><select id="ux-plantilla">'+opciones.map(function(o,i){return '<option value="'+i+'">'+UI.esc(o[0])+'</option>';}).join('')+'<option value="personal">Escribir respuesta propia</option></select><label for="ux-respuesta">Mensaje editable</label><textarea id="ux-respuesta" rows="5" maxlength="500">'+UI.esc(opciones[0][1])+'</textarea><small data-ux-caracteres aria-live="polite"></small></div>';
+    var ok=await UI.ventana({titulo:'Respuesta al cliente · '+x.numero,texto:'Selecciona una respuesta y ajústala antes de enviarla.',html:html,
+      botones:[{texto:'Enviar respuesta',valor:true,antes:function(v){respuesta=v.querySelector('#ux-respuesta').value.trim();var error=respuestaSolicitudValida(respuesta,decision);if(error){UI.aviso(error,'error');return false;}return true;}},{texto:'Volver',valor:null,clase:'secundario'}],
+      alAbrir:function(v){v.querySelector('.ventana').classList.add('ux-gestion-modal');var sel=v.querySelector('#ux-plantilla'),ta=v.querySelector('#ux-respuesta'),cuenta=v.querySelector('[data-ux-caracteres]');function contar(){cuenta.textContent=ta.value.length+' / 500 caracteres';}sel.addEventListener('change',function(){ta.value=sel.value==='personal'?'':opciones[Number(sel.value)][1];contar();});ta.addEventListener('input',contar);contar();}
+    });
+    return ok?respuesta:null;
+  }
   async function verSolicitudes(pedidoId) {
     var datos;
     try { datos = await DATOS.pedir('pedidoCambiosListar', { local_id: APP.local }); }
@@ -198,8 +230,8 @@
     var puedeCotizar = ['agregar', 'aumentar'].indexOf(x.tipo) >= 0 &&
       ['Pendiente', 'Aprobada para coordinar', 'Cotizada'].indexOf(x.estado) >= 0;
     var decisiones = [{ texto: 'Volver', valor: null, clase: 'secundario' }];
-    if (puedeCotizar) decisiones.push({ texto: x.estado === 'Cotizada' ? 'Recotizar' : 'Cotizar adicionales', valor: 'cotizar' });
-    if (x.estado === 'Pendiente') decisiones.push({ texto: 'Coordinar', valor: 'Aprobada para coordinar' });
+    if (puedeCotizar) decisiones.push({ texto: x.estado === 'Cotizada' ? 'Editar y recotizar' : 'Revisar / editar y cotizar', valor: 'cotizar' });
+    if (x.estado === 'Pendiente') decisiones.push({ texto: 'Responder y coordinar', valor: 'Aprobada para coordinar' });
     if (x.estado === 'Confirmada cliente') decisiones.push({ texto: 'Aplicar adicional ' + UI.dinero(x.adicional), valor: 'aplicar' });
     if (['Aprobada para coordinar', 'Cotizada', 'Confirmada cliente'].indexOf(x.estado) >= 0)
       decisiones.push({ texto: 'Cerrar sin aplicar', valor: 'Cerrada sin aplicar' });
@@ -215,7 +247,8 @@
       texto: x.detalle + '. Estado: ' + x.estado +
         (x.estado === 'Aplicando' ? '. Atención: posible operación interrumpida. No despachar; requiere conciliación técnica.' :
           '. La aceptación del cliente todavía NO aplica el cambio. Solo el paso Aplicar modifica el pedido.'),
-      botones: decisiones
+      botones: decisiones.slice(1).concat(decisiones[0]),
+      alAbrir:function(v){v.querySelector('.ventana').classList.add('ux-gestion-modal');}
     });
     if (!decision) return;
     if (decision === 'cotizar') return cotizarSolicitud(x);
@@ -253,19 +286,7 @@
       }
       return;
     }
-    var respuesta = await UI.pedirDato({
-      titulo: 'Respuesta al cliente', etiqueta: 'Motivo o instrucciones', modo: 'text',
-      boton: 'Guardar respuesta', ph: 'Explica qué se acordó',
-      texto: decision === 'Rechazada' ? 'Explica el motivo del rechazo.' :
-        decision === 'Cerrada sin aplicar' ? 'Aclara que no se modificó ni cobró el pedido.' :
-        'La coordinación no significa modificación ni cobro.',
-      validar: function (v) {
-        if (v.trim().length < 5) return 'Escribe una respuesta de al menos 5 caracteres.';
-        if (decision === 'Aprobada para coordinar' && !/precio|importe|valor|total|cotiz|confirm|disponib/i.test(v))
-          return 'Indica que se confirmarán precio y disponibilidad.';
-        return '';
-      }
-    });
+    var respuesta = await responderSolicitud(x,decision);
     if (!respuesta) return;
     try {
       await DATOS.pedir('pedidoCambioResolver', { id: x.id, decision: decision, respuesta: respuesta }, { guardar: true });
