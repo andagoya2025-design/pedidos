@@ -1100,8 +1100,8 @@
         (sol.cotizacion ? '<div class="item-sub"><b>Productos cotizados:</b> ' +
           UI.esc((sol.cotizacion.lineas || []).map(function (l) { return l.cantidad + '× ' + l.nombre +
             (l.extras && l.extras.length ? ' (' + l.extras.join(', ') + ')' : ''); }).join('; ')) + '</div>' +
-          '<p><b>Adicional a confirmar: ' + UI.esc(UI.dinero(sol.cotizacion.adicional)) + '</b>' +
-          ' · Total estimado: ' + UI.esc(UI.dinero(sol.cotizacion.total_estimado)) + '</p>' +
+          '<p><b>' + (sol.aplicado ? 'Adicional aplicado: ' : sol.estado === 'Cotizada' ? 'Adicional a confirmar: ' : 'Adicional aceptado: ') + UI.esc(UI.dinero(sol.cotizacion.adicional)) + '</b>' +
+          (sol.aplicado ? ' · Total al aplicar: ' : ' · Total estimado: ') + UI.esc(UI.dinero(sol.cotizacion.total_estimado)) + '</p>' +
           (sol.estado === 'Cotizada'
             ? '<button class="btn chico" type="button" data-aceptar-cambio="' + UI.esc(sol.id) +
               '" data-numero-cambio="' + UI.esc(x.n) + '">Aceptar importe</button> ' +
@@ -1111,7 +1111,7 @@
               sol.estado === 'Aplicando' ? '<p><b>Aplicación en revisión.</b> El restaurante debe conciliarla antes de despachar.</p>' :
               '<p><b>Importe aceptado por ti.</b> Pendiente de gestión y verificación del pago en el restaurante.</p>'))
           : '') +
-        '<small>Esta solicitud no modifica el pedido ni autoriza un cobro automático.</small></div>';
+        (sol.aplicado ? '<small>El adicional ya forma parte de tu pedido.</small>' : '<small>Esta solicitud aún no modifica el pedido ni autoriza un cobro automático.</small>') + '</div>';
     }).join('') : '<div class="seg-caja"><b>' + UI.esc(x.n) + '</b><div class="item-sub">No se pudo actualizar el estado. Conservamos el último estado conocido: ' + UI.esc(x.e) + '.</div><button class="enlace" type="button" data-seg-act>Reintentar</button></div>'; }).join('') +
       (hist.length ? '<details class="seg-caja mis-pedidos"' + (act.length ? '' : ' open') + '><summary><b>🧾 Mis pedidos anteriores</b> <small>(' + hist.length + ')</small></summary>' +
         '<div class="lista">' + hist.map(function (x) {
