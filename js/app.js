@@ -300,22 +300,5 @@
     mostrarIngreso('');
   }
 
-  /* Service worker: la app abre rápido y se actualiza sola. */
-  if ('serviceWorker' in navigator) {
-    global.addEventListener('load', function () {
-      navigator.serviceWorker.register('sw.js').then(function (reg) {
-        reg.addEventListener('updatefound', function () {
-          var nuevo = reg.installing;
-          if (!nuevo) return;
-          nuevo.addEventListener('statechange', function () {
-            if (nuevo.state === 'installed' && navigator.serviceWorker.controller) {
-              UI.aviso('Hay una versión nueva. Se aplicará al volver a abrir la app.', '');
-            }
-          });
-        });
-      }).catch(function () { /* sin service worker la app igual funciona */ });
-    });
-  }
-
   document.addEventListener('DOMContentLoaded', arrancar);
 })(window);
