@@ -18,8 +18,8 @@
  * ============================================================
  */
 
-var APP_VERSION = '3.1.11';
-var APP_VERSION_NUM = 30111; // 3.1.0 -> 30100 (la pantalla compara con su mínimo)
+var APP_VERSION = '3.1.14';
+var APP_VERSION_NUM = 30114; // 3.1.0 -> 30100 (la pantalla compara con su mínimo)
 var SESION_SEGUNDOS = 21600;  // 6 h; se renueva con cada uso
 var ROLES = ['dueno', 'cajero', 'motorizado'];
 
@@ -1078,8 +1078,8 @@ function detallePorPedido_(ids) {
   ids.forEach(function (i) { set[i] = true; });
   leerTabla_('pedido_detalle').forEach(function (d) {
     var pid = String(d.pedido_id);
-    if (!set[pid]) return;
-    (mapa[pid] = mapa[pid] || []).push({ plato_id: String(d.plato_id), nombre: String(d.nombre), precio: redondear_(d.precio), cantidad: numero_(d.cantidad), extras: String(d.extras), total_linea: redondear_(d.total_linea) });
+    if (!set[pid] || numero_(d.cantidad)<=0) return;
+    (mapa[pid] = mapa[pid] || []).push({ id:String(d.id), plato_id: String(d.plato_id), nombre: String(d.nombre), precio: redondear_(d.precio), cantidad: numero_(d.cantidad), extras: String(d.extras), total_linea: redondear_(d.total_linea) });
   });
   return mapa;
 }
@@ -1532,12 +1532,82 @@ function accionPedidoCambiosListar_(data, ctx) {
 }
 /* Cotización de adicionales: no cambia el pedido ni reserva inventario.
  * Solo el personal autorizado puede consultar precios de platos activos. */
+/* 3.1.14: plan integral, precios y detalle calculados por servidor. */
+function planCambioIntegral_(p,t,sel,filas,platos,cfg,agotados) {
+  if(!politicaCambiosPedido_(p.estado,t).permitido||p.liquidacion_id)throw fallo_('El pedido no admite cambios en esta etapa.');
+  if(!sel||!Array.isArray(sel.retirar)||!Array.isArray(sel.agregar)||sel.retirar.length+sel.agregar.length>30)throw fallo_('Selección inválida.');
+  var retirar=sel.retirar,agregar=sel.agregar,antes=filas.map(function(d){return {id:String(d.id),plato_id:String(d.plato_id),nombre:String(d.nombre),cantidad:Number(d.cantidad),precio:redondear_(d.precio),extras:String(d.extras||''),total_linea:redondear_(d.total_linea)};}).filter(function(d){return d.cantidad>0;});
+  if(!antes.length)throw fallo_('No hay detalle vigente.');
+  if(t!=='cancelar'&&(numero_(p.descuento)||numero_(p.premio)||p.cupon))throw fallo_('Pedido con promoción: requiere revisión manual.');
+  if(t==='cancelar'?(retirar.length||agregar.length):(!retirar.length&&!agregar.length))throw fallo_('Selección vacía o inválida.');
+  if(t==='cambiar'&&(!retirar.length||!agregar.length))throw fallo_('Selecciona el original y el reemplazo.');
+  if(retirar.length&&['cambiar','reducir','quitar'].indexOf(t)<0||agregar.length&&['agregar','aumentar','cambiar'].indexOf(t)<0)throw fallo_('Operación incompatible.');
+  var despues=antes.map(function(d){return Object.assign({},d);}),bajas=[],altas=[],vistos=Object.create(null);
+  retirar.forEach(function(it){var d=despues.filter(function(v){return v.id===String(it.id);})[0],n=Number(it.cantidad);if(!d||vistos[d.id]||!Number.isInteger(n)||n<1||n>d.cantidad||t==='quitar'&&n!==d.cantidad||t==='reducir'&&n>=d.cantidad)throw fallo_('Retiro inválido.');vistos[d.id]=true;bajas.push(Object.assign({},d,{cantidad:n,total_linea:redondear_(n*d.precio)}));d.cantidad-=n;d.total_linea=redondear_(d.cantidad*d.precio);});
+  var variantes=Object.create(null);
+  function clave(id,ex){return JSON.stringify([String(id),ex.map(claveComparar_).sort()]);}
+  agregar.forEach(function(it){var n=Number(it.cantidad),pl=platos.filter(function(v){return String(v.id)===String(it.plato_id);})[0];if(!Number.isInteger(n)||n<1||n>50||!pl||pl.activo!==true||pl.agotado===true||agotados[String(pl.id)]||String(pl.local_id)!=='TODOS'&&String(pl.local_id)!==String(p.local_id))throw fallo_('Producto no disponible o cantidad inválida.');
+    var ex=Array.isArray(it.extras)?it.extras:[],disp=leerExtras_(pl.extras_json),nombres=[],precio=numero_(pl.precio),ve=Object.create(null);if(ex.length>20)throw fallo_('Demasiados extras.');
+    ex.forEach(function(e){var k=claveComparar_(e),x=disp.filter(function(v){return claveComparar_(v.nombre)===k;})[0];if(!x||ve[k])throw fallo_('Extra inválido o repetido.');ve[k]=true;nombres.push(String(x.nombre));precio+=numero_(x.precio);});
+    var k=clave(pl.id,nombres),exist=despues.filter(function(v){return v.cantidad>0&&clave(v.plato_id,v.extras.split(',').map(function(x){return x.trim();}).filter(Boolean))===k;});
+    if(variantes[k]||t==='aumentar'&&!exist.length||exist.reduce(function(a,v){return a+v.cantidad;},0)+n>50)throw fallo_('Variante duplicada, ajena al pedido o cantidad excesiva.');
+    variantes[k]=true;precio=redondear_(precio);var alta={plato_id:String(pl.id),nombre:String(pl.nombre),cantidad:n,precio:precio,extras:nombres,total_linea:redondear_(precio*n)};altas.push(alta);
+    despues.push({id:'',plato_id:alta.plato_id,nombre:alta.nombre,cantidad:n,precio:precio,extras:nombres.join(', '),total_linea:alta.total_linea});
+  });
+  if(t==='cancelar'){bajas=antes.slice();despues=[];}
+  if(t!=='cancelar'&&!despues.some(function(d){return d.cantidad>0;}))throw fallo_('Para retirar todos los productos, usa cancelar.');
+  var subtotal=redondear_(despues.reduce(function(a,d){return a+d.total_linea;},0)),pct=numero_(cfg.iva_porcentaje),incl=siNo_(cfg.precios_incluyen_iva),grav=t==='cancelar'?0:redondear_(subtotal+numero_(p.envio)),base=incl?redondear_(grav/(1+pct/100)):grav,iva=incl?redondear_(grav-base):redondear_(grav*pct/100),total=t==='cancelar'?0:redondear_(grav+numero_(p.propina)+(incl?0:iva)),delta=redondear_(total-numero_(p.total));
+  return {integral:true,tipo:t,seleccion:sel,antes:antes,despues:despues.filter(function(d){return d.cantidad>0;}),bajas:bajas,lineas:altas,total_actual:redondear_(p.total),total_estimado:total,adicional:delta,subtotal:subtotal,base_iva:base,iva:iva,subtotal_adicional:redondear_(subtotal-numero_(p.subtotal)),iva_adicional:redondear_(iva-numero_(p.iva)),estado_pedido:String(p.estado)};
+}
+function cotizarIntegral_(x,p,sel) {
+  return planCambioIntegral_(p,String(x.tipo),sel,leerTabla_('pedido_detalle').filter(function(d){return String(d.pedido_id)===String(p.id);}),leerTabla_('platos'),leerConfig_(),agotadosPorLocal_()[String(p.local_id)]||{});
+}
+function pagoCambioIntegral_(p,q,data) {
+  if(!esDigital_(p.forma_pago))return {verificado:false,ref:''};
+  var ref=limpiarTexto_(data.referencia_pago_extra,100);
+  if(p.pago_verificado===true){
+    if(q.adicional!==0&&(data.pago_adicional_verificado!==true||ref.length<4))throw fallo_('Verifica el ajuste bancario real e ingresa su referencia.');
+    return {verificado:true,ref:ref};
+  }
+  if(data.sin_pago_previo!==true)throw fallo_('Confirma que no existe ningún depósito previo antes de actualizar el total.');
+  return {verificado:false,ref:''};
+}
+function aplicarIntegral_(x,p,q,data,ctx) {
+  var nuevo=cotizarIntegral_(x,p,q.seleccion);
+  if(['antes','despues','bajas','lineas','total_estimado','adicional','subtotal','base_iva','iva'].some(function(k){return JSON.stringify(nuevo[k])!==JSON.stringify(q[k]);}))throw fallo_('El detalle, precio o impuesto cambió. Cierra sin aplicar y solicita una nueva propuesta.');
+  var pago=pagoCambioIntegral_(p,q,data),usuario=String(ctx.sesion.usuario);
+  validarStockAdicional_(String(p.local_id),q.lineas);
+  var rows=leerTabla_('pedido_detalle').filter(function(d){return String(d.pedido_id)===String(p.id);});
+  var nuevos=q.despues.filter(function(d){return !d.id;}).map(function(d,i){return Object.assign({},d,{id:'ADIC-'+String(q.id).replace(/[^A-Za-z0-9]/g,'')+'-'+i});});
+  var ids=Object.create(null);nuevos.forEach(function(d){ids[d.id]=true;});
+  if(leerTabla_('pedido_detalle').some(function(d){return ids[String(d.id)];}))throw fallo_('Detalle repetido; requiere conciliación.');
+  actualizarCampos_('pedido_cambios',x._fila,x,{estado:'Aplicando',respuesta:'Aplicación en curso. No despachar hasta completar.'});
+  if(q.tipo==='cancelar'){
+    actualizarCampos_('pedidos',p._fila,p,{estado:'Anulado',anulado:new Date(),motivo_anulacion:'Cancelación aceptada por cliente',anulado_por:usuario});
+    var c=leerTabla_('clientes').filter(function(v){return String(v.id)===String(p.cliente_id);})[0];
+    if(c){var patch={pedidos:Math.max(0,numero_(c.pedidos)-1)};if(numero_(p.premio)>0)patch.sellos=numero_(c.sellos)+numero_(leerConfig_().fidelidad_sellos);actualizarCampos_('clientes',c._fila,c,patch);}
+    if(p.cupon){var cu=leerTabla_('cupones').filter(function(v){return claveComparar_(v.codigo)===claveComparar_(p.cupon);})[0];if(cu)actualizarCampos_('cupones',cu._fila,cu,{usos:Math.max(0,numero_(cu.usos)-1)});}
+    if(p.inventario_descontado===true)descontarInventario_(String(p.id),String(p.numero),String(p.local_id),q.bajas,-1,usuario);
+  }else{
+    rows.forEach(function(d){var anterior=q.antes.filter(function(v){return v.id===String(d.id);})[0];if(!anterior)return;var fin=q.despues.filter(function(v){return v.id===String(d.id);})[0];var n=fin?fin.cantidad:0;if(n!==anterior.cantidad)actualizarCampos_('pedido_detalle',d._fila,d,{cantidad:n,total_linea:fin?fin.total_linea:0});});
+    if(nuevos.length)agregarFilas_('pedido_detalle',nuevos.map(function(d){return [d.id,p.id,d.plato_id,d.nombre,d.precio,d.cantidad,d.extras,d.total_linea];}));
+    if(p.inventario_descontado===true&&q.bajas.length)descontarInventario_(String(p.id),String(p.numero),String(p.local_id),q.bajas,-1,usuario);
+    var inv=q.lineas.length?descontarInventario_(String(p.id),String(p.numero),String(p.local_id),q.lineas,1,usuario):false;
+    actualizarCampos_('pedidos',p._fila,p,{subtotal:q.subtotal,base_iva:q.base_iva,iva:q.iva,total:q.total_estimado,pago_verificado:pago.verificado,pago_verificado_fecha:pago.verificado?new Date():'',inventario_descontado:p.inventario_descontado===true||inv});
+  }
+  actualizarCampos_('pedido_cambios',x._fila,x,{estado:'Aplicada',aplicado_fecha:new Date(),aplicado_por:usuario,adicional_final:q.adicional,referencia_pago_extra:pago.ref,resuelto:new Date(),resuelto_por:usuario,respuesta:q.tipo==='cancelar'?'Pedido cancelado.':'Modificación aplicada. '+(pago.verificado?'Pago conciliado.':'Consulta el total actualizado del pedido.')});
+  CacheService.getScriptCache().remove('POPULAR_30');limpiarMenuCache_();
+  bitacora_(ctx.sesion,'PEDIDOS','CAMBIO_INTEGRAL',p.numero+' · '+q.tipo+' · '+q.adicional,ctx.dispositivo);
+  return {ok:true,data:{id:String(x.id),estado:'Aplicada',aplicado:true,adicional:q.adicional,total_nuevo:q.total_estimado,pago_verificado:pago.verificado}};
+}
+
 function accionPedidoCambioCotizar_(data, ctx) {
   var solicitudId = limpiarTexto_(data.id, 80);
   var x = cambiosPedido_().filter(function (v) { return String(v.id) === solicitudId; })[0];
   if (!x) throw fallo_('Solicitud no encontrada.', 'NO_EXISTE');
   if (!puedeVerLocal_(ctx, String(x.local_id))) throw fallo_('Sin permiso para este local.', 'PERMISO');
   if (['Pendiente', 'Aprobada para coordinar', 'Cotizada', 'Confirmada cliente'].indexOf(String(x.estado)) < 0) throw fallo_('La solicitud ya fue resuelta.', 'CAMBIO');
+  if(data.integral===true){var pi=leerTabla_('pedidos').filter(function(v){return String(v.id)===String(x.pedido_id);})[0];if(!pi)throw fallo_('Pedido no encontrado.');return {ok:true,data:cotizarIntegral_(x,pi,data.seleccion)};}
   if (['agregar', 'aumentar'].indexOf(String(x.tipo)) < 0)
     throw fallo_('Esta cotización solo admite productos adicionales o aumento de cantidades.', 'CAMBIO');
   var p = leerTabla_('pedidos').filter(function (v) { return String(v.id) === String(x.pedido_id); })[0];
@@ -1617,8 +1687,8 @@ function accionPedidoCambioProponer_(data, ctx) {
     if (!x || !puedeVerLocal_(ctx, String(x.local_id))) throw fallo_('Solicitud no encontrada o sin permiso.', 'PERMISO');
     if (['Pendiente', 'Aprobada para coordinar', 'Cotizada'].indexOf(String(x.estado)) < 0)
       throw fallo_('No se puede cambiar una cotización ya confirmada o cerrada.', 'CAMBIO');
-    var r = accionPedidoCambioCotizar_({ id: id, items: data.items }, ctx).data;
-    if (!(r.adicional > 0)) throw fallo_('La cotización debe tener un importe adicional positivo.', 'CANTIDAD');
+    var r = accionPedidoCambioCotizar_({ id: id, items: data.items, integral:data.integral===true, seleccion:data.seleccion }, ctx).data;
+    if (!r.integral && !(r.adicional > 0)) throw fallo_('La cotización debe tener un importe adicional positivo.', 'CANTIDAD');
     var token = Utilities.getUuid();
     var ahora = new Date();
     var quote = {
@@ -1628,6 +1698,7 @@ function accionPedidoCambioProponer_(data, ctx) {
       total_estimado: r.total_estimado, lineas: r.lineas,
       vence: new Date(ahora.getTime() + 30 * 60000).toISOString()
     };
+    if(r.integral)quote=Object.assign({},r,{id:token,vence:quote.vence});
     actualizarCampos_('pedido_cambios', x._fila, x, {
       estado: 'Cotizada', cotizacion_id: token, cotizacion_json: JSON.stringify(quote),
       cotizacion_fecha: ahora, cliente_confirmo_fecha: '',
@@ -1727,6 +1798,7 @@ function accionPedidoCambioAplicar_(data, ctx) {
     if (p.liquidacion_id) throw fallo_('El pedido ya fue liquidado; no se permite modificar su importe.', 'CAJA');
     var quote;
     try { quote = JSON.parse(String(x.cotizacion_json)); } catch (e) { throw fallo_('Cotización dañada; no aplicar.', 'CAMBIO'); }
+    if(quote.integral===true){if(String(quote.id)!==token||redondear_(p.total)!==redondear_(quote.total_actual))throw fallo_('La propuesta cambió.');return aplicarIntegral_(x,p,quote,data,ctx);}
     if (String(quote.id) !== token || !Array.isArray(quote.lineas) || !quote.lineas.length ||
         !(numero_(quote.adicional) > 0)) throw fallo_('Cotización incompleta.', 'CAMBIO');
     if (redondear_(p.total) !== redondear_(quote.total_actual))
@@ -1741,8 +1813,8 @@ function accionPedidoCambioAplicar_(data, ctx) {
       throw fallo_('Cambió el precio, los productos o los impuestos. Es necesaria una nueva cotización aceptada.', 'PRECIO_CAMBIO');
     var refPago = limpiarTexto_(data.referencia_pago_extra, 100);
     if (esDigital_(p.forma_pago)) {
-      if (p.pago_verificado !== true) throw fallo_('Primero verifica el pago original.', 'PAGO_SIN_VERIFICAR');
-      if (data.pago_adicional_verificado !== true || refPago.length < 4)
+      if (p.pago_verificado !== true && data.sin_pago_previo !== true) throw fallo_('Primero verifica el pago original.', 'PAGO_SIN_VERIFICAR');
+      if (p.pago_verificado === true && (data.pago_adicional_verificado !== true || refPago.length < 4))
         throw fallo_('Confirma en el banco o Deuna el pago adicional e ingresa referencia (mínimo 4 caracteres).', 'PAGO_ADICIONAL');
     }
     var detalle = quote.lineas.map(function (v, i) {
@@ -1782,13 +1854,13 @@ function accionPedidoCambioAplicar_(data, ctx) {
       adicional_final: redondear_(quote.adicional), referencia_pago_extra: refPago,
       resuelto: new Date(), resuelto_por: String(ctx.sesion.usuario),
       respuesta: 'Adicional incorporado al pedido. ' + (esDigital_(p.forma_pago)
-        ? 'Personal verificó manualmente el pago adicional.' : 'Importe añadido al total pendiente de cobro en efectivo.')
+        ? (p.pago_verificado===true?'Personal verificó manualmente el pago adicional.':'Total actualizado; pago pendiente de verificar.') : 'Importe añadido al total pendiente de cobro en efectivo.')
     });
     CacheService.getScriptCache().remove('POPULAR_30');
     limpiarMenuCache_();
     resultado = { id: id, estado: 'Aplicada', aplicado: true, repetida: false,
       adicional: redondear_(quote.adicional), total_nuevo: totalNuevo,
-      pago_verificado: esDigital_(p.forma_pago) };
+      pago_verificado: esDigital_(p.forma_pago) && p.pago_verificado===true };
   } finally { lock.releaseLock(); }
   bitacora_(ctx.sesion, 'PEDIDOS', 'ADICIONAL_APLICADO', resultado.id + ' · ' + UI_dinero_(resultado.adicional), ctx.dispositivo);
   return { ok: true, data: resultado };
@@ -2288,14 +2360,14 @@ function accionPedidoEstado_(data, ctx) {
     if (a === 'En camino' && !p.motorizado_id) throw fallo_('Asigne un motorizado antes de despachar.');
     // Nunca enviar al motorizado mientras hay un cambio que aún requiere respuesta.
     // El personal debe resolverlo explícitamente; no se rechaza silenciosamente al despachar.
-    if (a === 'En camino' || a === 'Entregado') {
+    if (a === 'Preparando' || a === 'En camino' || a === 'Entregado') {
       var solicitudesAbiertas = SpreadsheetApp.getActive().getSheetByName('pedido_cambios')
         ? cambiosPedido_().filter(function (x) {
           return String(x.pedido_id) === String(p.id) && ['Pendiente', 'Aprobada para coordinar', 'Cotizada', 'Confirmada cliente', 'Aplicando'].indexOf(String(x.estado)) >= 0;
         }) : [];
       if (solicitudesAbiertas.length)
         throw fallo_('Este pedido tiene ' + solicitudesAbiertas.length +
-          ' solicitud(es) de cambio pendiente(s). Resuélvelas antes de despachar o entregar.', 'CAMBIO_PENDIENTE');
+          ' solicitud(es) de cambio pendiente(s). Resuélvelas antes de preparar, despachar o entregar.', 'CAMBIO_PENDIENTE');
     }
     if (a === 'Entregado' && String(p.estado) === 'Preparando' && (p.zona_id || p.motorizado_id)) throw fallo_('Este pedido es a domicilio: primero debe salir «En camino».');
     if (a === 'En camino' || (a === 'Entregado' && String(p.estado) === 'Preparando')) exigirPagoVerificado_(p);
