@@ -1259,6 +1259,7 @@ function accionPedidoCrear_(data, ctx, soloCotizar) {
   var forma = String(data.forma_pago || '');
   if (FORMAS_PAGO.indexOf(forma) < 0) throw fallo_('Elija la forma de pago.');
   if (forma === 'deuna' && !cfg.deuna_qr_url) throw fallo_('Este negocio aún no recibe pagos con Deuna. Elija otra forma de pago.');
+  if(siNo_(cfg.propinas)&&tipo==='domicilio'&&data.propina!=null&&data.propina!==''&&(!['number','string'].includes(typeof data.propina)||!isFinite(Number(data.propina))))throw fallo_('Propina no válida.');
   var propina = siNo_(cfg.propinas) && tipo === 'domicilio' ? redondear_(numero_(data.propina)) : 0;
   if (!(propina >= 0 && propina <= 50)) throw fallo_('Propina no válida.');
   var items = Array.isArray(data.items) ? data.items : [];
@@ -1345,7 +1346,10 @@ function accionPedidoCrear_(data, ctx, soloCotizar) {
       if (maxEf > 0 && total > maxEf) throw fallo_('En efectivo se aceptan pedidos de hasta ' + UI_dinero_(maxEf) + '. Elige transferencia' + (cfg.deuna_qr_url ? ' o Deuna.' : '.'), 'EFECTIVO');
     }
 
-    if(soloCotizar===true)return {ok:true,data:{subtotal:subtotal,envio:envio,descuento:descuento,premio:premio,propina:propina,iva:iva,total:total}};
+    var firmaImporte=JSON.stringify([detalleFilas,subtotal,envio,descuento,premio,propina,iva,total]);
+    if(soloCotizar===true)return {ok:true,data:{subtotal:subtotal,envio:envio,descuento:descuento,premio:premio,propina:propina,iva:iva,total:total,detalle:detalleFilas,firma: firmaImporte}};
+    if(Object.prototype.hasOwnProperty.call(data,'cotizacion_firma')&&data.cotizacion_firma!==firmaImporte)
+      throw fallo_('El detalle de precios cambió antes de guardar. Revisa la cotización actualizada.','PRECIO_CAMBIO');
     if(Object.prototype.hasOwnProperty.call(data,'total_esperado')&&
       (typeof data.total_esperado!=='number'||!isFinite(data.total_esperado)||redondear_(data.total_esperado)!==total))
       throw fallo_('El importe cambió antes de guardar. Revisa la cotización actualizada.','PRECIO_CAMBIO');
@@ -2086,7 +2090,8 @@ function accionPlatoGuardarBase_(data, ctx) {
   if (!nombre) throw fallo_('Escriba el nombre del plato.');
   if (!catId) throw fallo_('Elija la categoría.');
   if (!(precio >= 0 && precio <= 10000)) throw fallo_('Precio no válido.');
-  var extras = (Array.isArray(data.extras) ? data.extras : []).slice(0, 20).map(function (x) {
+  if(Array.isArray(data.extras)&&data.extras.length>20)throw fallo_('Máximo 20 tipos de extras por plato.','EXTRAS');
+  var extras = (Array.isArray(data.extras) ? data.extras : []).map(function (x) {
     var n = limpiarTexto_(x.nombre, 60), pr = Number(x.precio || 0);
     if (n && !(pr >= 0 && pr <= 1000)) throw fallo_('Precio del extra «' + n + '» no válido.');
     var max=x.max_cantidad==null||x.max_cantidad===''?1:Number(x.max_cantidad);
