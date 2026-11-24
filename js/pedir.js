@@ -1120,6 +1120,46 @@
         }).join('') + '</div>' +
         '<p class="ayuda" style="margin:8px 0 4px">Tu historial se guarda solo en este teléfono y se borra solo a los ' + diasHistorial() + ' días.</p>' +
         '<button class="btn borde chico" type="button" id="mp-borrar">🗑 Borrar mi historial</button></details>' : '');
+    // La confirmación del cliente se vincula a la cotización vigente y al pedido autenticado.
+    ['aceptar', 'rechazar'].forEach(function (accion) {
+      UI.$$('[data-' + accion + '-cambio]', cont).forEach(function (b) {
+        b.addEventListener('click', function () {
+          UI.trabajando(b, async function () {
+            var numero = b.getAttribute('data-numero-cambio');
+            var id = b.getAttribute('data-' + accion + '-cambio');
+            var x = lista.filter(function (p) { return p.n === numero; })[0];
+            var sol = (solicitudesPorPedido[numero] || []).filter(function (p) {
+              return p.id === id && p.cotizacion && p.estado === 'Cotizada';
+            })[0];
+            if (!x || !sol) return UI.aviso('La cotización cambió. Actualiza tu pedido.', 'error');
+            var acepta = accion === 'aceptar';
+            var texto = acepta
+              ? '¿Aceptas el adicional de ' + UI.dinero(sol.cotizacion.adicional) + ' para ' + numero +
+                '? Total estimado: ' + UI.dinero(sol.cotizacion.total_estimado) +
+                '. Esto no realiza un cargo ni modifica todavía el pedido.'
+              : '¿Rechazas el adicional de ' + UI.dinero(sol.cotizacion.adicional) + '? Tu pedido original no cambiará.';
+            var confirmado = await UI.confirmar(acepta ? 'Confirmar importe adicional' : 'Rechazar cotización',
+              texto, acepta ? 'Sí, acepto el importe' : 'Sí, rechazar');
+            if (!confirmado) return;
+            try {
+              var payload = x.s ? { s: x.s } : {
+                numero: x.n, telefono: x.tel || (MEM.leer('cliente') || {}).telefono || ''
+              };
+              payload.id = sol.id;
+              payload.cotizacion_id = sol.cotizacion.id;
+              payload.acepta = acepta;
+              var resultado = await DATOS.pedir('pedidoCambioConfirmar', payload);
+              UI.aviso(resultado.estado === 'Confirmada cliente'
+                ? 'Importe aceptado. Espera la verificación de pago y aplicación por el restaurante.'
+                : 'Cotización rechazada; el pedido original no cambia.', 'ok');
+              await pintarSeguimiento(false);
+            } catch (err) {
+              UI.aviso('No se registró la respuesta: ' + (err.message || 'intenta nuevamente'), 'error');
+            }
+          });
+        });
+      });
+    });
     UI.$$('[data-seg-act]', cont).forEach(function (b) { b.addEventListener('click', function (e) { UI.trabajando(e.currentTarget, function () { return pintarSeguimiento(true); }); }); });
     UI.$$('[data-calificar]', cont).forEach(function (b) { b.addEventListener('click', function () { var x = lista.filter(function (y) { return y.n === b.getAttribute('data-calificar'); })[0]; if (x) calificar({ numero: x.n, telefono: x.tel || (MEM.leer('cliente') || {}).telefono || '', s: x.s }); }); });
     UI.$$('[data-comprobante]', cont).forEach(function (b) { b.addEventListener('click', function () { var p = res[b.getAttribute('data-comprobante')]; if (p) UI.abrirWhatsApp(cfg().whatsapp, 'Hola, envío el comprobante del pedido *' + p.numero + '* por ' + UI.dinero(p.total) + (p.cuenta_pago ? ' (a ' + p.cuenta_pago + ')' : '') + '. 👇'); }); });
