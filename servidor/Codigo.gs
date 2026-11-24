@@ -60,7 +60,7 @@ var HOJAS = {
   bitacora: [['fecha', 'd'], ['usuario', 't'], ['rol', 't'], ['local_id', 't'], ['modulo', 't'], ['accion', 't'], ['detalle', 't'], ['dispositivo', 't']],
   zonas_envio: [['id', 't'], ['local_id', 't'], ['nombre', 't'], ['costo', 'm'], ['minutos', 'n'], ['activo', 'b'], ['creado', 'd'], /* 3.1.6 */ ['lat', 'n'], ['lng', 'n'], ['radio_km', 'n'], ['minimo_domicilio', 'm']],
   caja_movimientos: [['id', 't'], ['caja_id', 't'], ['fecha', 'd'], ['tipo', 't'], ['monto', 'm'], ['forma', 't'], ['motivo', 't'], ['pedido_id', 't'], ['motorizado_id', 't'], ['usuario', 't']],
-  liquidaciones_motorizado: [['id', 't'], ['caja_id', 't'], ['motorizado_id', 't'], ['fecha', 'd'], ['fondo', 'm'], ['efectivo_cobrado', 'm'], ['entregado', 'm'], ['diferencia', 'm'], ['recibido_por', 't'], ['pedidos_json','t'], ['estado','t']],
+  liquidaciones_motorizado: [['id', 't'], ['caja_id', 't'], ['motorizado_id', 't'], ['fecha', 'd'], ['fondo', 'm'], ['efectivo_cobrado', 'm'], ['entregado', 'm'], ['diferencia', 'm'], ['recibido_por', 't'], ['pedidos_json','t'], ['estado','t'], ['op_id','t']],
   cupones: [['id', 't'], ['codigo', 't'], ['tipo', 't'], ['valor', 'n'], ['vence', 'f'], ['usos_max', 'n'], ['usos', 'n'], ['activo', 'b'], ['creado', 'd'], /* 3.1.6 */ ['local_id', 't'], ['un_uso_cliente', 'b'], ['compra_minima', 'm']],
   /* 3.1: hojas nuevas (el instalador y asegurarHojas_ las crean solas) */
   turnos: [['id', 't'], ['motorizado_id', 't'], ['dia_trabajo', 'f'], ['inicio', 'd'], ['fin', 'd'], ['inicio_lat', 'n'], ['inicio_lng', 'n'], ['fin_lat', 'n'], ['fin_lng', 'n']],
@@ -2986,6 +2986,7 @@ function eventoEnCaja_(p,caja,cfg,campo,desde) {
   var fecha=p[campo];
   if(fecha instanceof Date&&isFinite(fecha.getTime())){
     if(desde instanceof Date)return fecha.getTime()>desde.getTime()&&(!(caja.cierre instanceof Date)||fecha.getTime()<=caja.cierre.getTime());
+    if(caja.apertura instanceof Date&&fecha>=caja.apertura)return !(caja.cierre instanceof Date)||fecha<=caja.cierre;
     return diaTrabajo_(fecha,cfg)===ymd_(caja.dia_trabajo,cfg);
   }
   return ymd_(p.dia_trabajo,cfg)===ymd_(caja.dia_trabajo,cfg);
@@ -3130,16 +3131,24 @@ function accionCajaFondoMotorizado_(data, ctx) {
 /* El motorizado entrega el dinero: se cuenta y queda la diferencia. */
 function accionCajaLiquidar_(data, ctx) {
   var local=localCaja_(data,ctx),entregado=dineroCaja_(data.entregado,100000,true),motoId=limpiarTexto_(data.motorizado_id,40);
-  var lock=candado_(),liq,m;
+  var lock=candado_(),liq,m,opId=limpiarTexto_(data.op_id,100),recId=limpiarTexto_(data.recuperar_id,100);
   try{
     var c=cajaAbierta_(local);if(!c)throw fallo_('No hay caja abierta en este local.','SIN_CAJA');
     var pedidos=leerTabla_('pedidos').filter(function(p){return String(p.local_id)===local;});
     m=leerTabla_('motorizados').filter(function(x){return String(x.id)===motoId;})[0]||{nombre:motoId};
     var abiertas=leerTabla_('liquidaciones_motorizado').filter(function(l){return String(l.caja_id)===String(c.id);});
+    var previo=abiertas.filter(function(l){return recId?String(l.id)===recId:opId&&String(l.op_id)===opId;})[0];
+    if(recId&&!previo)throw fallo_('La liquidación original no está en esta caja.','NO_EXISTE');
+    if(previo&&(String(previo.motorizado_id)!==motoId||redondear_(previo.entregado)!==entregado))throw fallo_('Los datos no coinciden con la liquidación original.','CAMBIO');
+    if(previo&&String(previo.estado)!=='Aplicando'){
+      var r0=accionCajaEstado_({local_id:local},ctx);
+      r0.data.liquidacion={fondo:redondear_(previo.fondo),efectivo:redondear_(previo.efectivo_cobrado),entregado:redondear_(previo.entregado),diferencia:redondear_(previo.diferencia),repetida:true};
+      return r0;
+    }
     var incompletas=liquidacionesIncompletas_(abiertas);
     if(incompletas.length>1)throw fallo_('Varias liquidaciones incompletas. Requiere conciliación manual.','REVISION_MANUAL');
     var reg=incompletas[0];
-    if(reg&&(String(reg.motorizado_id)!==motoId||redondear_(reg.entregado)!==entregado))throw fallo_('Hay una liquidación incompleta: recupera el mismo motorizado e importe contado.','REVISION_MANUAL');
+    if(reg&&((recId&&String(reg.id)!==recId)||(opId&&String(reg.op_id)!==opId)||String(reg.motorizado_id)!==motoId||redondear_(reg.entregado)!==entregado))throw fallo_('Hay una liquidación incompleta: recupera el mismo motorizado e importe contado.','REVISION_MANUAL');
     var ids,id,d;
     if(reg){
       try{ids=JSON.parse(String(reg.pedidos_json));}catch(e){throw fallo_('Registro de liquidación inválido.','REVISION_MANUAL');}
@@ -3150,10 +3159,10 @@ function accionCajaLiquidar_(data, ctx) {
       if(!(d.total>0))throw fallo_(m.nombre+' no tiene nada pendiente por entregar.');
       ids=d.pedidos.map(function(p){return String(p.id);}).sort();
       if(data.total_esperado!==undefined&&(typeof data.total_esperado!=='number'||redondear_(data.total_esperado)!==d.total))throw fallo_('La deuda cambió. Actualiza la caja antes de recibir.','CAMBIO');
-      if(data.pedidos_esperados!==undefined&&JSON.stringify(data.pedidos_esperados.slice().sort())!==JSON.stringify(d.pedidos.map(function(p){return String(p.numero);}).sort()))throw fallo_('La lista de pedidos cambió. Actualiza la caja.','CAMBIO');
+      if(data.pedidos_esperados!==undefined&&(!Array.isArray(data.pedidos_esperados)||JSON.stringify(data.pedidos_esperados.slice().sort())!==JSON.stringify(d.pedidos.map(function(p){return String(p.numero);}).sort())))throw fallo_('La lista de pedidos cambió. Actualiza la caja.','CAMBIO');
       id=nuevoId_('LIQ');
       reg={id:id,caja_id:c.id,motorizado_id:motoId,fondo:d.fondo,efectivo_cobrado:d.efectivo,entregado:entregado,diferencia:redondear_(entregado-d.total),pedidos_json:JSON.stringify(ids),estado:'Aplicando'};
-      agregarFilas_('liquidaciones_motorizado',[[id,c.id,motoId,new Date(),reg.fondo,reg.efectivo_cobrado,entregado,reg.diferencia,ctx.sesion.usuario,reg.pedidos_json,'Aplicando']]);
+      agregarFilas_('liquidaciones_motorizado',[[id,c.id,motoId,new Date(),reg.fondo,reg.efectivo_cobrado,entregado,reg.diferencia,ctx.sesion.usuario,reg.pedidos_json,'Aplicando',opId]]);
       reg=leerTabla_('liquidaciones_motorizado').filter(function(l){return String(l.id)===id;})[0];
       if(!reg)throw fallo_('No se encontró el registro de liquidación.','REVISION_MANUAL');
     }
@@ -3175,7 +3184,7 @@ function accionCajaPropinaDigital_(data,ctx){
   try{
     var p=leerTabla_('pedidos').filter(function(x){return String(x.id)===id&&String(x.local_id)===local;})[0];
     if(!p)throw fallo_('Pedido no encontrado.','NO_EXISTE');
-    if(p.propina_pago_json)return {ok:true,data:{repetido:true}};
+    if(p.propina_pago_json){var original;try{original=JSON.parse(String(p.propina_pago_json));}catch(e){throw fallo_('Registro previo no legible; concilia manualmente.','REVISION_MANUAL');}if(original.monto!==data.monto||String(original.motorizado_id)!==String(data.motorizado_id))throw fallo_('Propina ya conciliada con otros datos.','CAMBIO');return {ok:true,data:{repetido:true}};}
     if(!propinaDigitalPendiente_(p)||data.confirmacion_bancaria!==true||typeof data.monto!=='number'||redondear_(data.monto)!==redondear_(p.propina)||String(data.motorizado_id)!==String(p.motorizado_id))throw fallo_('Confirma el pago real de la propina, el importe y el motorizado.','PAGO');
     var ref=limpiarTexto_(data.referencia,100);if(ref.length<3)throw fallo_('Ingresa la referencia del pago realizado.','PAGO');
     actualizarCampos_('pedidos',p._fila,p,{propina_pago_json:JSON.stringify({monto:redondear_(p.propina),motorizado_id:String(p.motorizado_id),fecha:new Date().toISOString(),usuario:String(ctx.sesion.usuario),referencia:ref})});
