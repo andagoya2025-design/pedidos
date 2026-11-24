@@ -156,6 +156,9 @@ var ACCIONES = {
   pedidoConsultar:    { tipo: 'publica', fn: accionPedidoConsultar_ },
   pedidoRecuperar:     { tipo: 'publica', fn: accionPedidoRecuperar_ },
   pedidoPoliticaCambios: { tipo: 'publica', fn: accionPedidoPoliticaCambios_ },
+  pedidoCambioSolicitar: { tipo: 'publica', fn: accionPedidoCambioSolicitar_ },
+  pedidoCambiosListar: { tipo: 'sesion', roles: ['dueno', 'cajero'], fn: accionPedidoCambiosListar_ },
+  pedidoCambioResolver: { tipo: 'sesion', roles: ['dueno', 'cajero'], fn: accionPedidoCambioResolver_ },
   menuListar:         { tipo: 'sesion',  roles: ['dueno', 'cajero'], fn: accionMenuListar_ },
   categoriaGuardar:   { tipo: 'dueno',   fn: accionCategoriaGuardar_ },
   platoGuardar:       { tipo: 'dueno',   fn: accionPlatoGuardar_ },
@@ -1357,6 +1360,80 @@ function accionPedidoPoliticaCambios_(data) {
   var tipo = limpiarTexto_(data.tipo, 20);
   var politica = politicaCambiosPedido_(p.estado, tipo);
   return { ok: true, data: { numero: p.numero, estado: p.estado, tipo: tipo, permitido: politica.permitido, modalidad: politica.modalidad, mensaje: politica.mensaje, aplicado: false } };
+}
+
+
+/* Solicitudes auditables: nunca alteran automáticamente importes, stock ni detalle.
+ * La hoja se crea al primer uso para instalaciones existentes. */
+HOJAS.pedido_cambios = [
+  ['id','t'], ['pedido_id','t'], ['numero','t'], ['local_id','t'],
+  ['tipo','t'], ['detalle','t'], ['estado','t'], ['creado','d'],
+  ['resuelto','d'], ['resuelto_por','t'], ['respuesta','t']
+];
+function hojaCambios_() {
+  var ss = SpreadsheetApp.getActive();
+  return ss.getSheetByName('pedido_cambios') || prepararHoja_(ss, 'pedido_cambios');
+}
+function cambiosPedido_() {
+  hojaCambios_();
+  return leerTabla_('pedido_cambios');
+}
+function accionPedidoCambioSolicitar_(data) {
+  if (!estaInstalado_()) throw fallo_('Sistema no instalado.', 'NO_INSTALADO');
+  var tipo = limpiarTexto_(data.tipo, 20);
+  var detalle = limpiarTexto_(data.detalle, 500);
+  if (detalle.length < 5) throw fallo_('Describe qué productos y cantidades necesitas.');
+  var lock = candado_();
+  try {
+    var consulta = accionPedidoConsultar_({ s: data.s, numero: data.numero, telefono: data.telefono });
+    var numero = String(consulta.data.numero);
+    var p = leerTabla_('pedidos').filter(function (x) { return String(x.numero) === numero; })[0];
+    if (!p) throw fallo_('Pedido no encontrado.', 'NO_EXISTE');
+    var politica = politicaCambiosPedido_(String(p.estado), tipo);
+    if (!politica.permitido) throw fallo_(politica.mensaje, 'CAMBIO');
+    var pendientes = cambiosPedido_().filter(function (x) { return String(x.pedido_id) === String(p.id) && String(x.estado) === 'Pendiente'; });
+    if (pendientes.length) {
+      var igual = pendientes.filter(function (x) { return String(x.tipo) === tipo && String(x.detalle) === detalle; })[0];
+      if (igual) return { ok: true, data: { id: String(igual.id), estado: 'Pendiente', repetida: true, aplicado: false } };
+      throw fallo_('Ya tienes una solicitud pendiente. Espera la respuesta del restaurante.', 'PENDIENTE');
+    }
+    var id = Utilities.getUuid();
+    agregarFilas_('pedido_cambios', [[id, p.id, p.numero, p.local_id, tipo, detalle, 'Pendiente', new Date(), '', '', '']]);
+    return { ok: true, data: { id: id, estado: 'Pendiente', aplicado: false } };
+  } finally { lock.releaseLock(); }
+}
+function accionPedidoCambiosListar_(data, ctx) {
+  var local = localDeSesion_(ctx, data.local_id);
+  var pedidos = leerTabla_('pedidos');
+  var estados = {};
+  pedidos.forEach(function (p) { estados[String(p.id)] = String(p.estado); });
+  return { ok: true, data: { solicitudes: cambiosPedido_().filter(function (x) {
+    return local === 'TODOS' || String(x.local_id) === local;
+  }).slice(-200).map(function (x) {
+    return { id: String(x.id), numero: String(x.numero), local_id: String(x.local_id), tipo: String(x.tipo),
+      detalle: String(x.detalle), estado: String(x.estado), pedido_estado: estados[String(x.pedido_id)] || '',
+      creado: iso_(x.creado), respuesta: String(x.respuesta || ''), aplicado: false };
+  }) } };
+}
+function accionPedidoCambioResolver_(data, ctx) {
+  var id = limpiarTexto_(data.id, 80), decision = limpiarTexto_(data.decision, 20);
+  var respuesta = limpiarTexto_(data.respuesta, 500);
+  if (decision !== 'Aprobada para coordinar' && decision !== 'Rechazada') throw fallo_('Decisión no válida.');
+  if (respuesta.length < 5) throw fallo_('Indica al cliente el motivo o los siguientes pasos.');
+  var lock = candado_();
+  try {
+    var x = cambiosPedido_().filter(function (v) { return String(v.id) === id; })[0];
+    if (!x) throw fallo_('Solicitud no encontrada.', 'NO_EXISTE');
+    if (!puedeVerLocal_(ctx, String(x.local_id))) throw fallo_('Sin permiso para este local.', 'PERMISO');
+    if (String(x.estado) !== 'Pendiente') throw fallo_('Solicitud ya resuelta.', 'CAMBIO');
+    var p = leerTabla_('pedidos').filter(function (v) { return String(v.id) === String(x.pedido_id); })[0];
+    if (!p) throw fallo_('Pedido no encontrado.', 'NO_EXISTE');
+    if (decision !== 'Rechazada' && !politicaCambiosPedido_(p.estado, x.tipo).permitido)
+      throw fallo_('El pedido cambió de estado. No se puede aprobar esta solicitud.', 'CAMBIO');
+    actualizarCampos_('pedido_cambios', x._fila, x, { estado: decision, resuelto: new Date(),
+      resuelto_por: ctx.sesion.usuario, respuesta: respuesta });
+    return { ok: true, data: { id: id, estado: decision, aplicado: false } };
+  } finally { lock.releaseLock(); }
 }
 
 function accionPedidoRecuperar_(data) {
