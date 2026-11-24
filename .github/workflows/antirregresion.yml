@@ -1,0 +1,29 @@
+name: MiPedido - antirregresion
+on:
+  push:
+    branches:
+      - fix/antirregresion-pedidos-20261123
+  pull_request:
+    branches:
+      - main
+permissions:
+  contents: read
+jobs:
+  verificar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Obtener codigo
+        uses: actions/checkout@v4
+      - name: Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Sintaxis JavaScript cliente, restaurante y motorizados
+        run: |
+          node --check js/pedir.js
+          node --check js/pedidos.js
+          node --check js/motorizados.js
+      - name: Sintaxis Apps Script
+        run: node -e "new (require('vm').Script)(require('fs').readFileSync('servidor/Codigo.gs', 'utf8'))"
+      - name: Pruebas unitarias antirregresivas
+        run: node --test tests/*.test.js
