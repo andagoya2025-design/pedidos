@@ -373,13 +373,41 @@
         (p.agotado ? '<span class="etiqueta">Agotado</span>' :
           (cant && !p.extras.length ? '<div class="contador"><button type="button" data-menos="' + UI.esc(p.id) + '" aria-label="Quitar uno">−</button><input type="number" inputmode="numeric" min="0" max="1000" data-cant-plato="' + UI.esc(p.id) + '" aria-label="Cantidad de ' + UI.esc(p.nombre) + '" value="' + cant + '"><button type="button" data-mas="' + UI.esc(p.id) + '" aria-label="Agregar uno">＋</button></div>'
             : '<button class="btn chico btn-agregar" type="button" data-agregar="' + UI.esc(p.id) + '">' + (cant ? '＋ Otro' : '＋ Agregar') + '</button>')) +
-        '</div></div></article>';
+        '</div>' + (cant && p.extras.length && !envioPendiente ? '<button class="btn secundario chico plato-editar-seleccion" type="button" data-editar-plato="' + UI.esc(p.id) + '">Editar o quitar · ' + cant + ' en pedido</button>' : '') + '</div></article>';
     }).join('') : UI.vacio('🔎', q ? 'No encontramos «' + busqueda + '». Prueba con otra palabra.' : 'No hay platos en esta categoría.');
     UI.$$('[data-agregar]', cont).forEach(function (b) { b.addEventListener('click', function () { agregar(b.getAttribute('data-agregar'), b); }); });
     UI.$$('[data-mas]', cont).forEach(function (b) { b.addEventListener('click', function () { sumar(b.getAttribute('data-mas'), 1); }); });
     UI.$$('[data-menos]', cont).forEach(function (b) { b.addEventListener('click', function () { sumar(b.getAttribute('data-menos'), -1); }); });
     UI.$$('[data-cant-plato]',cont).forEach(function(el){el.addEventListener('change',function(){var pid=el.getAttribute('data-cant-plato'),n=Number(el.value),antes=cantidadPlato(pid);if(el.value===''||!Number.isSafeInteger(n)||n<0||n>1000){el.value=antes;UI.aviso('Cantidad inválida: use un entero de 0 a 1000.','error');return;}sumar(pid,n-antes);});});
     UI.$$('[data-ver]', cont).forEach(function (b) { b.addEventListener('click', function () { verPlato(b.getAttribute('data-ver')); }); });
+    UI.$$('[data-editar-plato]', cont).forEach(function (b) { b.addEventListener('click', function () { editarSeleccionPlato(b.getAttribute('data-editar-plato')); }); });
+  }
+
+  /* Solo carrito previo al envío. Cada combinación se edita por separado. */
+  async function editarSeleccionPlato(pid) {
+    var p = plato(pid), lista = items().filter(function(it){return it.plato.id===pid;});
+    if (!p || !lista.length || paso!==1 || envioPendiente) return;
+    var accion = await UI.ventana({
+      titulo: p.nombre, texto: 'Edita o quita una combinación de tu pedido.',
+      html: lista.map(function(it,i){
+        return '<div class="preenvio-linea"><b>'+it.cantidad+' × '+UI.esc(it.plato.nombre)+'</b>'+
+          '<div class="item-sub">'+UI.esc(resumenExtrasCantidad(it.extras)||'Sin extras')+'</div>'+
+          desgloseExtrasPreenvio(it)+
+          '<div class="preenvio-importe"><b>Subtotal</b><b>'+UI.dinero(unitario(it)*it.cantidad)+'</b></div>'+
+          '<div class="preenvio-acciones">'+(!p.agotado?'<button type="button" class="btn secundario chico" data-comb-editar="'+i+'">Editar</button>':'')+
+          '<button type="button" class="btn secundario chico" data-comb-quitar="'+i+'">Quitar</button></div></div>';
+      }).join(''),
+      botones:[{texto:'Volver al menú',valor:null,clase:'secundario'}],
+      alAbrir:function(v,cerrar){v.addEventListener('click',function(e){
+        var b=e.target.closest('[data-comb-editar],[data-comb-quitar]');if(!b)return;
+        var quitar=b.hasAttribute('data-comb-quitar');
+        cerrar({quitar:quitar,i:Number(b.getAttribute(quitar?'data-comb-quitar':'data-comb-editar'))});
+      });}
+    });
+    if (!accion || paso!==1 || envioPendiente) return;
+    var it=lista[accion.i];if(!it || carrito[claveItem(it.plato,it.extras)]!==it || it.cantidad<=0)return;
+    if (!accion.quitar) { if(!p.agotado) return agregar(pid,null,it); return; }
+    delete carrito[claveItem(it.plato,it.extras)];cambio();UI.vibrar(10);pintarPlatos();pintarBarra(false);
   }
 
   /* Foto grande + descripción + agregar. */
@@ -406,6 +434,27 @@
 
   function maxExtraUI(e){var n=Number(e.max_cantidad);return Number(e.precio)>0?(Number.isSafeInteger(n)&&n>=1&&n<=1000?n:1000):1;}
   function resumenExtrasCantidad(extras){var xs=Array.isArray(extras)?extras:String(extras||'').split(',').map(function(x){return x.trim();}).filter(Boolean),m=new Map();xs.forEach(function(x){m.set(x,(m.get(x)||0)+1);});return Array.from(m,function(par){return par[1]>1?par[1]+' × '+par[0]:par[0];}).join(', ');}
+  /* Importes visuales: mismos centavos por extra que unitario(), sin cambiar el motor. */
+  function importeExtraPreenvio(e,n){return Math.round(Number(e.precio)*100)*n/100;}
+  function desgloseExtrasPreenvio(it){
+    var grupos=new Map();it.extras.forEach(function(n){grupos.set(n,(grupos.get(n)||0)+1);});
+    return Array.from(grupos,function(par){
+      var e=it.plato.extras.find(function(x){return x.nombre===par[0];}),n=par[1]*it.cantidad;
+      return '<div class="preenvio-importe preenvio-extra"><span>'+n+' × '+UI.esc(par[0])+'</span><span>'+
+        (e?UI.dinero(importeExtraPreenvio(e,n)):'—')+'</span></div>';
+    }).join('');
+  }
+  function actualizarImportesExtrasPreenvio(extras,v,cantidad){
+    extras.forEach(function(e,i){
+      var a=v.querySelector('[data-extra-q="'+i+'"]'),out=v.querySelector('[data-extra-importe="'+i+'"]');
+      if(!a||!out)return;
+      var n=a.type==='checkbox'?(a.checked?1:0):a.value===''?NaN:Number(a.value);
+      var valido=Number.isSafeInteger(n)&&n>=0&&n<=maxExtraUI(e);
+      out.textContent=valido?UI.dinero(importeExtraPreenvio(e,n)):'—';
+      var acum=v.querySelector('[data-extra-acumulado="'+i+'"]');
+      if(acum){acum.hidden=!(valido&&Number.isSafeInteger(cantidad)&&cantidad>1&&cantidad<=1000&&n>0);acum.textContent=acum.hidden?'':UI.dinero(importeExtraPreenvio(e,n*cantidad))+' en '+cantidad+' platos';}
+    });
+  }
   function inputExtraUI(e,atributo,valor){
     var max=maxExtraUI(e),n=Math.max(0,Math.min(max,Number(valor)||0));
     return Number(e.precio)>0?'<span class="contador contador-extra"><button type="button" data-extra-paso="-1" aria-label="Menos '+UI.esc(e.nombre)+'">−</button><input type="number" inputmode="numeric" min="0" max="'+max+'" value="'+n+'" '+atributo+' aria-label="Porciones de '+UI.esc(e.nombre)+'"><button type="button" data-extra-paso="1" aria-label="Más '+UI.esc(e.nombre)+'">+</button></span>':'<input type="checkbox" '+atributo+(n?' checked':'')+'>';
@@ -420,12 +469,12 @@
     if(editar&&editar.extras.some(function(n){return !p.extras.some(function(e){return e.nombre===n;});}))return UI.aviso('Un adicional anterior ya no está disponible. Retira la línea y agrega nuevamente el producto.','error');
     var ok = await UI.ventana({
       icono: '🍽️', titulo: p.nombre, texto: 'Personaliza tu plato (opcional).',
-      html: '<div class="opciones"><b>Adicionales por plato</b>' + p.extras.map(function (x, i) {
-        var n=editar?editar.extras.filter(function(e){return e===x.nombre;}).length:0;var pagado=Number(x.precio)>0,tag=pagado?'div':'label';return '<'+tag+' class="opcion opcion-extra"><span>'+UI.esc(x.nombre)+(x.precio?' · '+UI.dinero(x.precio)+' c/u':' · Gratis')+'</span>'+inputExtraUI(x,'data-extra-q="'+i+'"',n)+'</'+tag+'>';
+      html: '<div class="plato-grande preenvio-foto" data-ico="'+iconoCategoria(p)+'">'+fotoHtml(p,true)+'</div><div class="opciones preenvio-opciones"><b>Adicionales por plato</b>' + p.extras.map(function (x, i) {
+        var n=editar?editar.extras.filter(function(e){return e===x.nombre;}).length:0;var pagado=Number(x.precio)>0,tag=pagado?'div':'label';return '<'+tag+' class="opcion opcion-extra preenvio-opcion"><span>'+UI.esc(x.nombre)+(x.precio?' · '+UI.dinero(x.precio)+' c/u':' · Gratis')+'</span>'+inputExtraUI(x,'data-extra-q="'+i+'"',n)+'<span class="preenvio-extra-precio"><small>Por plato</small><b data-extra-importe="'+i+'" aria-live="polite">'+UI.dinero(importeExtraPreenvio(x,n))+'</b><small data-extra-acumulado="'+i+'" hidden></small></span></'+tag+'>';
       }).join('')+'</div>'+
         '<div class="cantidad-fila"><span>Cantidad de platos</span><div class="contador"><button type="button" data-q="-1" aria-label="Menos platos">−</button><input id="q-num" type="number" min="1" max="1000" inputmode="numeric" value="'+cantidad+'" aria-label="Cantidad de platos"><button type="button" data-q="1" aria-label="Más platos">＋</button></div></div><p><b>Subtotal: <span id="q-precio">'+UI.dinero(p.precio)+'</span></b></p>',
       alAbrir:function(v){
-        function actualizar(){try{cantidad=Number(UI.$('#q-num',v).value);if(!Number.isSafeInteger(cantidad)||cantidad<1||cantidad>1000)throw Error('Cantidad inválida');var ex=leerExtrasUI(p.extras,v,function(i){return 'data-extra-q="'+i+'"';});UI.$('#q-precio',v).textContent=UI.dinero(unitario({plato:p,extras:ex})*cantidad);}catch(e){UI.$('#q-precio',v).textContent='Revisa las cantidades';}}
+        function actualizar(){cantidad=Number(UI.$('#q-num',v).value);actualizarImportesExtrasPreenvio(p.extras,v,cantidad);try{if(!Number.isSafeInteger(cantidad)||cantidad<1||cantidad>1000)throw Error('Cantidad inválida');var ex=leerExtrasUI(p.extras,v,function(i){return 'data-extra-q="'+i+'"';});UI.$('#q-precio',v).textContent=UI.dinero(unitario({plato:p,extras:ex})*cantidad);}catch(e){UI.$('#q-precio',v).textContent='Revisa las cantidades';}}
         v.addEventListener('click',function(e){var extra=e.target.closest('[data-extra-paso]');if(extra){var el=extra.parentNode.querySelector('input');el.value=Math.max(0,Math.min(Number(el.max),Number(el.value||0)+Number(extra.getAttribute('data-extra-paso'))));actualizar();return;}var b=e.target.closest('[data-q]');if(!b)return;cantidad=Math.max(1,Math.min(1000,Number(UI.$('#q-num',v).value||1)+Number(b.getAttribute('data-q'))));UI.$('#q-num',v).value=cantidad;actualizar();});
         v.addEventListener('input',actualizar);v.addEventListener('change',actualizar);actualizar();
       },
@@ -440,7 +489,7 @@
     carrito[k].cantidad += cantidad;
     cambio(); UI.vibrar();
     UI.aviso((editar?'Actualizado: ':'Agregado: ') + cantidad + ' × ' + p.nombre, 'ok');
-    if(editar&&paso===3){pintarItemsResumen();if(items().length)totales();}else{pintarPlatos();pintarBarra(true);}
+    if(editar&&paso===3){if($('#pe-cupon-estado'))$('#pe-cupon-estado').textContent='Carrito modificado: vuelve a aplicar el cupón.';pintarItemsResumen();if(items().length)totales();}else{pintarPlatos();pintarBarra(true);}
   }
 
   /* Pequeña animación: un punto vuela del botón al carrito. */
@@ -862,12 +911,21 @@
     var lista = items();
     if (!lista.length) return irA(1);
     $('#resumen-items').innerHTML = '<div class="resumen-cabeza"><h3 style="margin:0">Tu pedido</h3><button class="btn secundario chico" type="button" id="btn-mas-platos">＋ Agregar más</button></div>' + lista.map(function (it, i) {
-      return '<div class="resumen-linea" style="align-items:center"><div style="min-width:0"><b>' + UI.esc(it.plato.nombre) + '</b>' +
-        (it.extras.length ? '<div class="item-sub">' + UI.esc(resumenExtrasCantidad(it.extras)) + '</div>' : '') + '<div class="item-sub">' + UI.dinero(unitario(it)) + ' c/u · '+UI.dinero(unitario(it)*it.cantidad)+'</div>'+(it.plato.extras.length?'<button type="button" class="btn secundario chico" data-r-editar="'+i+'">Editar extras</button>':'')+'</div>' +
-        '<div class="contador"><button type="button" data-r-menos="' + i + '" aria-label="Quitar uno">' + (it.cantidad === 1 ? '🗑' : '−') + '</button><input type="number" min="0" max="1000" inputmode="numeric" data-r-cant="' + i + '" value="' + it.cantidad + '" aria-label="Cantidad de ' + UI.esc(it.plato.nombre) + '"><button type="button" data-r-mas="' + i + '" aria-label="Agregar uno">＋</button></div></div>';
+      return '<div class="preenvio-linea"><div class="preenvio-cabecera"><div class="preenvio-mini">'+fotoHtml(it.plato)+'</div><div><b>' + UI.esc(it.plato.nombre) + '</b><div class="item-sub">'+UI.dinero(unitario(it))+' c/u con extras</div></div></div>'+
+        '<div class="preenvio-importe"><span>'+it.cantidad+' × plato base</span><span>'+UI.dinero(Math.round(Number(it.plato.precio)*100)*it.cantidad/100)+'</span></div>'+desgloseExtrasPreenvio(it)+
+        '<div class="preenvio-importe preenvio-total"><b>Subtotal</b><b>'+UI.dinero(unitario(it)*it.cantidad)+'</b></div><div class="preenvio-acciones">'+
+        '<div class="contador"><button type="button" data-r-menos="' + i + '" aria-label="Quitar uno">' + (it.cantidad === 1 ? '🗑' : '−') + '</button><input type="number" min="0" max="1000" inputmode="numeric" data-r-cant="' + i + '" value="' + it.cantidad + '" aria-label="Cantidad de ' + UI.esc(it.plato.nombre) + '"><button type="button" data-r-mas="' + i + '" aria-label="Agregar uno">＋</button></div>'+
+        (it.plato.extras.length?'<button type="button" class="btn secundario chico" data-r-editar="'+i+'">Editar extras</button>':'')+'<button type="button" class="btn secundario chico" data-r-quitar="'+i+'">Quitar plato</button></div></div>';
     }).join('');
     $('#btn-mas-platos').addEventListener('click', function () { guardarNotas();irA(1); });
     UI.$$('[data-r-editar]', $('#resumen-items')).forEach(function(b){b.addEventListener('click',function(){var it=lista[Number(b.getAttribute('data-r-editar'))];guardarNotas();agregar(it.plato.id,null,it);});});
+    UI.$$('[data-r-quitar]', $('#resumen-items')).forEach(function(b){b.addEventListener('click',function(){
+      if(envioPendiente)return;
+      var it=lista[Number(b.getAttribute('data-r-quitar'))];if(!it)return;
+      guardarNotas();delete carrito[claveItem(it.plato,it.extras)];cambio();UI.vibrar(10);
+      if($('#pe-cupon-estado'))$('#pe-cupon-estado').textContent='Carrito modificado: vuelve a aplicar el cupón.';
+      pintarItemsResumen();if(items().length)totales();
+    });});
     UI.$$('[data-r-cant]', $('#resumen-items')).forEach(function(el){el.addEventListener('change',function(){var n=Number(el.value),it=lista[Number(el.getAttribute('data-r-cant'))];if(el.value===''||!Number.isSafeInteger(n)||n<0||n>1000){el.value=it.cantidad;UI.aviso('Cantidad inválida: use un entero entre 0 y 1000.','error');return;}it.cantidad=n;cambio();if($('#pe-cupon-estado'))$('#pe-cupon-estado').textContent='Carrito modificado: vuelve a aplicar el cupón.';if(!items().length)guardarNotas();pintarItemsResumen();if(items().length)totales();});});
     UI.$$('[data-r-mas],[data-r-menos]', $('#resumen-items')).forEach(function (b) {
       b.addEventListener('click', function () {
