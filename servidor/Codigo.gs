@@ -18,8 +18,10 @@
  * ============================================================
  */
 
-var APP_VERSION = '3.1.18';
-var APP_VERSION_NUM = 30118; // 3.1.0 -> 30100 (la pantalla compara con su mínimo)
+var APP_VERSION = '3.1.19';
+// Marcador opaco, sin datos de pedidos. Una ejecución de Apps Script tiene su propio estado.
+var syncPendiente_ = false;
+var APP_VERSION_NUM = 30119; // 3.1.0 -> 30100 (la pantalla compara con su mínimo)
 var SESION_SEGUNDOS = 21600;  // 6 h; se renueva con cada uso
 var ROLES = ['dueno', 'cajero', 'motorizado'];
 
@@ -137,6 +139,7 @@ var CONFIG_PUBLICA = ['minutos_alerta_pago', 'anos_limpieza_clientes', 'negocio_
 /* Acciones: quién puede usarlas. 'publica' = sin sesión. */
 var ACCIONES = {
   estado:            { tipo: 'publica', fn: accionEstado_ },
+  syncRevision:      { tipo: 'publica', fn: accionSyncRevision_ },
   instalar:          { tipo: 'publica', fn: accionInstalar_ },
   login:             { tipo: 'publica', fn: accionLogin_ },
   sesion:            { tipo: 'sesion',  fn: accionSesion_ },
@@ -256,7 +259,7 @@ function ejecutar_(accion, data, token, inicio, dispositivo) {
   if (!def) return responder_({ ok: false, codigo: 'ACCION', error: 'Acción no reconocida.' }, inicio);
   try {
     var ctx = { dispositivo: String(dispositivo || '').slice(0, 120), tokenPublico: def.tipo === 'publica' ? token : '' };
-    if (accion !== 'estado' && accion !== 'instalar') asegurarHojas_();
+    if (accion !== 'estado' && accion !== 'instalar' && accion !== 'syncRevision') asegurarHojas_();
     if (def.tipo !== 'publica') {
       if (!estaInstalado_()) return responder_({ ok: false, codigo: 'NO_INSTALADO', error: 'El sistema aún no está instalado.' }, inicio);
       var ses = leerSesion_(token);
@@ -274,6 +277,29 @@ function ejecutar_(accion, data, token, inicio, dispositivo) {
     var msg = (err && err.publico) ? err.message : 'No se pudo completar. Intente de nuevo.';
     if (!(err && err.publico)) console.error(accion + ': ' + (err && err.stack || err));
     return responder_({ ok: false, codigo: (err && err.codigo) || 'ERROR', error: msg }, inicio);
+  } finally {
+    if (syncPendiente_) publicarRevisionSync_();
+  }
+}
+
+// La señal no lee Sheets, ni contiene identidades, estados, importes o datos personales.
+function accionSyncRevision_() {
+  var revision = '';
+  try { revision = CacheService.getScriptCache().get('MIPEDIDO_SYNC_REV') || ''; } catch (e) {}
+  return { ok: true, data: { revision: revision } };
+}
+function marcarRevisionSync_(nombre) {
+  // No notificar escrituras de auditoría, sesiones ni otros registros ajenos a pedidos.
+  if (['pedidos','pedido_detalle','pedido_cambios','clientes','motorizados','caja','caja_movimientos','turnos','turnos_motorizados','rastreo','configuracion','zonas_envio','platos','locales'].indexOf(nombre) >= 0) syncPendiente_ = true;
+}
+function publicarRevisionSync_() {
+  syncPendiente_ = false;
+  try {
+    SpreadsheetApp.flush();
+    CacheService.getScriptCache().put('MIPEDIDO_SYNC_REV', Utilities.getUuid(), 21600);
+  } catch (e) {
+    // Una señal ausente fuerza la lectura periódica completa. No cambia la respuesta de guardado.
+    try { CacheService.getScriptCache().remove('MIPEDIDO_SYNC_REV'); } catch (ignorado) {}
   }
 }
 
@@ -433,6 +459,7 @@ function agregarFilas_(nombre, filas) {
   var formatos = datos.map(function () { return cols.map(function (c) { return formatoDe_(c[1]); }); });
   var r = sh.getRange(sh.getLastRow() + 1, 1, datos.length, cols.length);
   r.setNumberFormats(formatos);  // formato correcto antes de escribir (aunque la fila sea nueva)
+  marcarRevisionSync_(nombre);
   r.setValues(datos);
 }
 
@@ -455,6 +482,7 @@ function actualizarCampos_(nombre, filaNum, actual, cambios) {
     if (!(c[0] in cambios)) return;
     var nuevo = convertirFila_(nombre, cols.map(function (x, j) { return j === i ? cambios[c[0]] : ''; }))[i];
     if (iguales_(actual[c[0]], nuevo)) return;
+    marcarRevisionSync_(nombre);
     sh.getRange(filaNum, i + 1).setNumberFormat(formatoDe_(c[1])).setValue(nuevo);
     n++;
   });
