@@ -46,19 +46,18 @@
     catch (err) { return UI.aviso('No se pudieron cargar las solicitudes: ' + err.message, 'error'); }
     var lista = (datos.solicitudes || []).filter(function (x) { return x.estado === 'Pendiente'; });
     if (!lista.length) return UI.aviso('No hay solicitudes pendientes.', 'ok');
-    var html = '<div class="lista">' + lista.map(function (x) {
-      return '<div class="tarjeta" style="padding:12px;margin:8px 0"><b>' + UI.esc(x.numero) + '</b> · ' + UI.esc(x.tipo) +
-        '<div class="item-sub">Pedido: ' + UI.esc(x.pedido_estado) + '</div><p>' + UI.esc(x.detalle) + '</p>' +
-        '<small>La aprobación para coordinar NO modifica el pedido ni cobra diferencias.</small></div>';
-    }).join('') + '</div>';
+    var opciones = [{ texto: 'Cerrar', valor: null, clase: 'secundario' }];
+    lista.slice(0, 12).forEach(function (x, i) {
+      opciones.push({ texto: x.numero + ' · ' + x.tipo, valor: String(i) });
+    });
     var elegido = await UI.ventana({
       icono: '📝', titulo: 'Solicitudes pendientes (' + lista.length + ')',
-      html: html,
-      botones: [{ texto: 'Cerrar', valor: null, clase: 'secundario' },
-        { texto: 'Gestionar primera', valor: 'primera' }]
+      texto: 'Selecciona el pedido que deseas gestionar. Se muestran hasta 12 solicitudes por vez.',
+      botones: opciones
     });
-    if (elegido !== 'primera') return;
-    var x = lista[0];
+    if (elegido === null || elegido === undefined) return;
+    var x = lista[Number(elegido)];
+    if (!x) return;
     var decision = await UI.ventana({
       titulo: x.numero + ' · ' + x.tipo,
       texto: x.detalle + '. La aprobación solo indica que el restaurante coordinará el cambio; no altera los importes.',
