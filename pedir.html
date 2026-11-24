@@ -25,11 +25,12 @@
       <h1 data-marca-nombre>Haz tu pedido</h1>
       <p id="pedir-bienvenida">Cargando el menú…</p>
     </header>
+    <button type="button" class="btn secundario" id="btn-mi-pedido" hidden style="margin:8px auto">Mi pedido activo</button>
     <section class="seguimiento" id="seguimiento" hidden aria-live="polite"></section>
     <main class="pedir-cuerpo" id="pedir-cuerpo">
       <div class="lista" aria-busy="true"><div class="esqueleto" style="min-height:220px"></div><div class="esqueleto" style="min-height:220px"></div></div>
     </main>
-    <footer class="pedir-pie"><div style="margin-bottom:12px"><button type="button" class="btn secundario chico" id="instalar-pwa" hidden style="margin:8px auto">Instalar MiPedido</button></div><button class="enlace" type="button" id="pie-politicas">📋 Cómo funciona tu pedido</button> · <a href="privacidad.html" target="_blank" rel="noopener">🔒 Privacidad</a></footer>
+    <footer class="pedir-pie"><div style="margin-bottom:12px"><button type="button" class="btn secundario chico" id="instalar-pwa" hidden style="margin:8px auto">Instalar MiPedido</button></div><div style="margin:8px 0"><small id="pwa-version"></small> · <button type="button" class="enlace" id="pwa-actualizar">Buscar actualización</button><p id="pwa-estado" role="status"></p></div><button class="enlace" type="button" id="pie-politicas">📋 Cómo funciona tu pedido</button> · <a href="privacidad.html" target="_blank" rel="noopener">🔒 Privacidad</a></footer>
   </div>
   <div class="barra-pedido" id="barra-pedido" hidden>
     <button class="btn" id="btn-ver-pedido" type="button"></button>
