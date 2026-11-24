@@ -195,6 +195,8 @@
     if (!conMenu.length) return bloqueo('Menú en preparación', 'Aún no hay platos publicados. Vuelve pronto.', false, c.whatsapp);
     var pedido = params.get('local') || MEM.leer('pedir_local');
     localId = conMenu.some(function (l) { return l.id === pedido; }) ? pedido : (conMenu.length === 1 ? conMenu[0].id : '');
+    // Al recargar, priorizar el restaurante del envío incierto para permitir recuperarlo.
+    if (envioPendiente && conMenu.some(function (l) { return l.id === envioPendiente.local_id; })) localId = envioPendiente.local_id;
     if (entrega.mesa && mesasOn()) entrega.tipo = 'mesa';
     marcarAgotados();
     pintarRedes();
@@ -1103,6 +1105,7 @@
   /* Repetir un pedido del historial (solo platos que siguen disponibles en ese local). */
   function repetirDe(x) {
     if (!x || !x.i) return;
+    if (envioPendiente) return UI.aviso('Primero recupera o verifica el pedido pendiente antes de repetir otro.', 'error');
     if (x.l && x.l !== localId && M.locales.some(function (l) { return l.id === x.l; })) {
       // Nunca mezclar productos de dos restaurantes al repetir un pedido histórico.
       if (cantidadTotal()) return UI.aviso('Tu carrito tiene productos de otro local. Vacíalo antes de repetir este pedido.', 'error');
