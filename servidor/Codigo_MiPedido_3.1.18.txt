@@ -2505,6 +2505,7 @@ function accionPedidoPagoVerificar_(data, ctx) {
   try {
     p = buscarPedido_(data.id, ctx);
     if (!esDigital_(p.forma_pago)) throw fallo_('Este pedido no es por transferencia ni Deuna.');
+    if(data.total_esperado!==undefined&&(typeof data.total_esperado!=='number'||!isFinite(data.total_esperado)||redondear_(data.total_esperado)!==redondear_(p.total)))throw fallo_('El total cambió. Actualiza el pedido antes de verificar.');
     if(SpreadsheetApp.getActive().getSheetByName('pedido_cambios')&&cambiosPedido_().some(function(x){return String(x.pedido_id)===String(p.id)&&String(x.estado)==='Aplicando';}))throw fallo_('Conciliar la aplicación incompleta antes de verificar el pago.');
     actualizarCampos_('pedidos', p._fila, p, { pago_verificado: data.verificado !== false, pago_verificado_fecha: data.verificado !== false ? new Date() : '' }); // 3.1.5
     p = buscarPedido_(data.id, ctx);
