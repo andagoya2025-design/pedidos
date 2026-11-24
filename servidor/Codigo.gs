@@ -18,8 +18,8 @@
  * ============================================================
  */
 
-var APP_VERSION = '3.1.7';
-var APP_VERSION_NUM = 30107; // 3.1.0 -> 30100 (la pantalla compara con su mínimo)
+var APP_VERSION = '3.1.8';
+var APP_VERSION_NUM = 30108; // 3.1.0 -> 30100 (la pantalla compara con su mínimo)
 var SESION_SEGUNDOS = 21600;  // 6 h; se renueva con cada uso
 var ROLES = ['dueno', 'cajero', 'motorizado'];
 
@@ -1369,7 +1369,15 @@ function accionPedidoPoliticaCambios_(data) {
   var p = consulta.data;
   var tipo = limpiarTexto_(data.tipo, 20);
   var politica = politicaCambiosPedido_(p.estado, tipo);
-  return { ok: true, data: { numero: p.numero, estado: p.estado, tipo: tipo, permitido: politica.permitido, modalidad: politica.modalidad, mensaje: politica.mensaje, aplicado: false } };
+  var salida = { numero: p.numero, estado: p.estado, tipo: tipo, permitido: politica.permitido, modalidad: politica.modalidad, mensaje: politica.mensaje, aplicado: false };
+  if (politica.permitido) {
+    var original = leerTabla_('pedidos').filter(function (v) { return String(v.numero) === String(p.numero); })[0];
+    if (!original) throw fallo_('Pedido no encontrado.', 'NO_EXISTE');
+    salida.local_id = String(original.local_id);
+    salida.detalle = detallePorPedido_([String(original.id)])[String(original.id)] || [];
+    salida.total = redondear_(original.total);
+  }
+  return { ok: true, data: salida };
 }
 
 
@@ -3079,8 +3087,16 @@ function accionPedidoCalificar_(data) {
 }
 
 /* ---------- 12.4 Panel: aviso de pedidos nuevos (liviano: no lee la hoja) ---------- */
-function accionPedidosNuevos_() {
-  return { ok: true, data: { ultimo: Number(CacheService.getScriptCache().get('ULTIMO_PEDIDO') || 0) } };
+function accionPedidosNuevos_(data, ctx) {
+  var local = localDeSesion_(ctx, data.local_id);
+  function permitido(r) { return local === 'TODOS' || String(r.local_id) === local; }
+  var pedidos = leerTabla_('pedidos').filter(function (p) { return permitido(p) && String(p.estado) === 'Recibido'; });
+  var cambios = cambiosPedido_().filter(function (p) { return permitido(p) && String(p.estado) === 'Pendiente'; });
+  return { ok: true, data: {
+    ultimo: Number(CacheService.getScriptCache().get('ULTIMO_PEDIDO') || 0),
+    pedidos: pedidos.map(function (p) { return { id: String(p.id), numero: String(p.numero) }; }),
+    solicitudes: cambios.map(function (p) { return { id: String(p.id), numero: String(p.numero) }; })
+  } };
 }
 
 /* Al escanear el QR del pedido: lo busca por número. */

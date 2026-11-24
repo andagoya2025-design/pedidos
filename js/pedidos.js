@@ -10,6 +10,11 @@
   var UI = global.UI, DATOS = global.DATOS, APP = global.APP;
   var est = { datos: null, motos: [], cargadoEn: 0, verAnulados: false, diaEntregado: '', alertados: {} }; // 3.1.6
 
+  function iconoPedido(n) {
+    var paths = {plus:'<path d="M12 5v14M5 12h14"/>',list:'<rect x="5" y="4" width="14" height="16" rx="2"/><path d="M9 9h6M9 13h6M9 17h4"/>',search:'<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/>',refresh:'<path d="M20 11a8 8 0 1 0-2 6M20 4v7h-7"/>',bell:'<path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/>',mute:'<path d="m3 3 18 18M6 8c0 7-3 7-3 9h14M18 12V8a6 6 0 0 0-9-5M10 21h4"/>'};
+    return '<svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' + paths[n] + '</svg>';
+  }
+
   var COLUMNAS = ['Recibido', 'Preparando', 'En camino', 'Entregado'];
 
   APP.vistas.pedidos = {
@@ -17,12 +22,13 @@
     pintar: function (cont) {
       est = { datos: null, motos: [], cargadoEn: 0, verAnulados: false, diaEntregado: UI.hoy(), alertados: {} }; // 3.1.6
       var sonido = global.APP_MEMORIA.leer('sonido_pedidos') !== false;
-      cont.innerHTML = UI.encabezado('Pedidos', APP.nombreLocal(APP.local),
-        '<button class="btn secundario chico sonido-btn" type="button" id="btn-sonido" aria-pressed="' + sonido + '" title="Sonido de pedido nuevo">' + (sonido ? '🔔' : '🔕') + '</button>' +
-        '<button class="btn secundario chico" type="button" id="btn-buscar-pedido" aria-label="Buscar pedido">🔎</button>' +
-        '<button class="btn secundario chico" type="button" id="btn-cambios">📝 Solicitudes</button>' +
-        '<button class="btn chico" type="button" id="btn-nuevo-pedido">＋ Nuevo</button>') +
-        '<div id="pd-cuerpo">' + UI.esqueleto(4) + '</div>';
+      cont.innerHTML = '<section class="pd-premium"><div class="pd-premium-titulo"><div><h1>Pedidos</h1><p class="subtitulo">' + UI.esc(APP.nombreLocal(APP.local)) + '</p></div>' +
+        '<button class="btn secundario chico sonido-btn" type="button" id="btn-sonido" aria-pressed="' + sonido + '" aria-label="Sonido de pedido nuevo" title="Sonido de pedido nuevo">' + iconoPedido(sonido ? 'bell' : 'mute') + '</button></div>' +
+        '<div class="pd-premium-acciones"><button class="btn" type="button" id="btn-nuevo-pedido">' + iconoPedido('plus') + ' Crear pedido</button>' +
+        '<button class="btn secundario" type="button" id="btn-cambios">' + iconoPedido('list') + ' Solicitudes</button>' +
+        '<button class="btn secundario" type="button" id="btn-buscar-pedido" aria-label="Buscar pedido" title="Buscar pedido">' + iconoPedido('search') + '</button>' +
+        '<button class="btn secundario" type="button" data-actualizar aria-label="Actualizar pedidos" title="Actualizar pedidos">' + iconoPedido('refresh') + '</button></div>' +
+        '<div id="pd-cuerpo">' + UI.esqueleto(4) + '</div></section>';
       UI.$('[data-actualizar]', cont).addEventListener('click', function (e) { UI.trabajando(e.currentTarget, cargar); });
       UI.$('#btn-nuevo-pedido', cont).addEventListener('click', nuevoPedido);
       UI.$('#btn-buscar-pedido', cont).addEventListener('click', buscarPedido);
@@ -31,7 +37,7 @@
         var b = e.currentTarget;
         avisosVentana().then(function () {
           var on = global.APP_MEMORIA.leer('sonido_pedidos') !== false;
-          b.setAttribute('aria-pressed', String(on)); b.textContent = on ? '🔔' : '🔕';
+          b.setAttribute('aria-pressed', String(on)); b.innerHTML = iconoPedido(on ? 'bell' : 'mute');
         });
       });
       cargar().then(function () { var ver = (APP.parametros || {}).ver; if (ver) { APP.parametros = {}; abrirPorNumero(ver); } });
@@ -416,37 +422,48 @@
   /* ----- 3.1: AVISO DE PEDIDO NUEVO (sonido + notificación del sistema) -----
    * Vigila en TODA la app (no solo en el panel) para dueño y cajero, también con
    * la pestaña en segundo plano. Consulta liviana: solo una marca de tiempo. */
-  var vigia = null, ultimaMarca = 0;
+  var vigia = null, vigilando = false, ultimaMarca = 0, identidadAvisos = '', vistosAvisos = Object.create(null);
   function vigilar() {
-    if (vigia) return;
+    if (vigia || vigilando) return;
     async function revisar() {
       vigia = null;
+      if (vigilando) return;
       var s = APP.sesion;
-      if (!s || (s.rol !== 'dueno' && s.rol !== 'cajero')) return; // se detiene al salir
+      if (!s || (s.rol !== 'dueno' && s.rol !== 'cajero')) { identidadAvisos = ''; vistosAvisos = Object.create(null); ultimaMarca = 0; return; }
+      vigilando = true;
+      var local = APP.local || s.local_id || 'TODOS';
+      var identidad = String(s.usuario_id || s.usuario) + '|' + local;
+      if (identidad !== identidadAvisos) { identidadAvisos = identidad; vistosAvisos = Object.create(null); ultimaMarca = 0; }
       try {
-        var r = await DATOS.pedir('pedidosNuevos', {});
-        if (ultimaMarca && r.ultimo > ultimaMarca) avisarNuevo();
-        // La marca de pedido nuevo no cambia cuando solo cambia un estado.
-        // Actualizar el tablero desde el servidor sin generar una nueva notificación.
-        if (APP.vistaActual === 'pedidos' && est.datos && document.visibilityState === 'visible') {
-          try { await cargar(); } catch (e) { /* conservar tablero anterior si falla la red */ }
-        }
+        var r = await DATOS.pedir('pedidosNuevos', { local_id: local });
+        if (APP.sesion !== s || (APP.local || s.local_id || 'TODOS') !== local) return;
+        if (Array.isArray(r.pedidos) && Array.isArray(r.solicitudes)) {
+          var pedidos = [], solicitudes = [];
+          r.pedidos.forEach(function(p) { var k = 'p:' + p.id; if (!vistosAvisos[k]) { vistosAvisos[k] = true; pedidos.push(p); } });
+          r.solicitudes.forEach(function(p) { var k = 's:' + p.id; if (!vistosAvisos[k]) { vistosAvisos[k] = true; solicitudes.push(p); } });
+          if (pedidos.length) avisarNuevo(false, pedidos.length);
+          if (solicitudes.length) avisarNuevo(true, solicitudes.length, pedidos.length ? 2200 : 0);
+        } else if (r.ultimo > ultimaMarca && (ultimaMarca || Date.now() - r.ultimo < 120000)) avisarNuevo(false, 1);
         ultimaMarca = r.ultimo || ultimaMarca;
-      } catch (e) { /* sin red: se intenta en la próxima vuelta */ }
-      vigia = setTimeout(revisar, 25000);
+        if (APP.vistaActual === 'pedidos' && est.datos && document.visibilityState === 'visible') {
+          try { await cargar(); } catch (e) {}
+        }
+      } catch(e) { /* reintentar en siguiente vuelta */ }
+      finally { vigilando = false; vigia = setTimeout(revisar, 25000); }
     }
     vigia = setTimeout(revisar, 1500);
   }
-  async function avisarNuevo() {
-    if (global.APP_MEMORIA.leer('sonido_pedidos') !== false) { UI.sonar(); setTimeout(UI.sonar, 900); }
-    UI.vibrar([80, 60, 80, 60, 80]);
-    UI.notificar('🛎️ ¡Pedido nuevo!', 'Toque para abrir el panel de pedidos.');
+  function avisarNuevo(solicitud, cantidad, espera) {
+    var titulo = solicitud ? '📝 Nueva solicitud de cambio' : '🛎️ ¡Pedido nuevo!';
+    var mensaje = cantidad > 1 ? cantidad + (solicitud ? ' solicitudes pendientes.' : ' pedidos sin atender.') : (solicitud ? 'Revisa Solicitudes en Pedidos.' : 'Revisa el panel de pedidos.');
+    var usuario = APP.sesion;
+    [0, solicitud ? 250 : 850, solicitud ? 500 : 1700].forEach(function(ms) {
+      setTimeout(function() { if (APP.sesion === usuario && global.APP_MEMORIA.leer('sonido_pedidos') !== false) UI.sonar(); }, ms + (espera || 0));
+    });
+    UI.vibrar(solicitud ? [80,60,80] : [150,80,150,80,150]);
+    UI.notificar(titulo, mensaje);
     avisoTitulo(true);
-    if (APP.vistaActual === 'pedidos' && UI.$('#pd-cuerpo')) { await cargar(); UI.aviso('🛎️ ¡Pedido nuevo!', 'ok'); }
-    else {
-      var ir = await UI.ventana({ icono: '🛎️', titulo: '¡Pedido nuevo!', texto: 'Acaba de entrar un pedido.', botones: [{ texto: 'Luego', valor: false, clase: 'secundario' }, { texto: 'Ver pedidos', valor: true }] });
-      if (ir) APP.ir('pedidos');
-    }
+    UI.aviso(titulo + ' · ' + mensaje, 'ok');
   }
   function avisoTitulo(on) {
     var t = document.title.replace(/^🛎️ /, '');
@@ -459,8 +476,8 @@
     var on = global.APP_MEMORIA.leer('sonido_pedidos') !== false;
     var permiso = UI.permisoNotificaciones();
     var v = await UI.ventana({
-      icono: '🔔', titulo: 'Avisos de pedido nuevo',
-      texto: 'El panel revisa cada 25 segundos. Deje esta app abierta (puede estar en otra pestaña) y el volumen arriba.',
+      icono: '🔔', titulo: 'Avisos de pedidos y solicitudes',
+      texto: 'El panel revisa cada 25 segundos. Mantenga la app abierta y el volumen arriba. Los navegadores pueden suspender los avisos en segundo plano. Pruebe el sonido al iniciar el turno.',
       html: '<p class="ayuda">Sonido: <b>' + (on ? 'activado' : 'silenciado') + '</b> · Notificación en pantalla: <b>' +
         (permiso === 'granted' ? 'activada' : permiso === 'denied' ? 'bloqueada (actívela en el candado 🔒 de la barra de dirección)' : permiso === 'no' ? 'este teléfono no la permite' : 'sin activar') + '</b></p>',
       botones: [

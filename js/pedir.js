@@ -183,6 +183,7 @@
     try {
       M = await DATOS.pedir('menuPublico', {});
     } catch (err) {
+      pintarSeguimiento(false).catch(function(){});
       return bloqueo('No pudimos cargar el menú', err.message + ' Toque para intentar de nuevo.', true);
     }
     var c = cfg();
@@ -1031,17 +1032,37 @@
     var u = MEM.leer('ultimo_pedido'); // pedidos hechos antes de la 3.1.5
     if (u && u.numero && !l.some(function (x) { return x.n === u.numero; })) l.unshift({ n: u.numero, s: u.s || '', tel: u.telefono || '', f: u.fecha || Date.now(), t: 0, e: 'Recibido', i: [] });
     var corte = Date.now() - diasHistorial() * 86400000;
-    return l.filter(function (x) { return x && x.n && (x.f || 0) >= corte; }).slice(0, 30);
+    return l.filter(function (x) { return x && x.n && (FINALES.indexOf(x.e) < 0 || (x.f || 0) >= corte); }).sort(function(a,b){return Number(activo(b))-Number(activo(a)) || Number(b.f||0)-Number(a.f||0);}).slice(0, 30);
   }
   function guardarMisPedidos(l) { MEM.guardar('mis_pedidos', l.slice(0, 30)); }
   function guardarMiPedido(x) { var l = misPedidos().filter(function (y) { return y.n !== x.n; }); l.unshift(x); guardarMisPedidos(l); }
   function activo(x) { return FINALES.indexOf(x.e) < 0 || (x.e === 'Entregado' && !x.cal && Date.now() - (x.fe || x.f || 0) < 6 * 3600000); }
 
-  async function pintarSeguimiento(abrir) {
+  var segEnCurso = null, segPendiente = false, segAbrir = false, segTimer = null;
+  function pintarSeguimiento(abrir) {
+    if (segEnCurso) { segPendiente = true; segAbrir = segAbrir || !!abrir; return segEnCurso; }
+    segEnCurso = consultarSeguimiento(abrir).finally(function () {
+      segEnCurso = null;
+      if (segPendiente) { var a = segAbrir; segPendiente = false; segAbrir = false; pintarSeguimiento(a).catch(function(){}); }
+    });
+    return segEnCurso;
+  }
+  function refrescarSeguimiento() {
+    if (document.hidden || navigator.onLine === false || !misPedidos().some(activo) || segEnCurso || document.querySelector('.velo') || document.querySelector('#seguimiento [aria-busy="true"]')) return;
+    pintarSeguimiento(false).catch(function(){});
+  }
+  function iniciarSeguimientoAutomatico() {
+    if (segTimer !== null) return;
+    segTimer = setInterval(refrescarSeguimiento, 15000);
+    document.addEventListener('visibilitychange', refrescarSeguimiento);
+    global.addEventListener('pageshow', refrescarSeguimiento);
+    global.addEventListener('online', refrescarSeguimiento);
+  }
+  async function consultarSeguimiento(abrir) {
     var cont = $('#seguimiento');
     if (!cont) return;
     var lista = misPedidos();
-    if (!lista.length) { cont.hidden = true; cont.innerHTML = ''; return; }
+    if (!lista.length) { cont.hidden = true; cont.innerHTML = ''; var acceso = $('#btn-mi-pedido'); if(acceso) acceso.hidden=true; return; }
     cont.hidden = false;
     var act = lista.filter(activo), hist = lista.filter(function (x) { return !activo(x); });
     var res = {};
@@ -1081,7 +1102,11 @@
           if (p.seguimiento && !x.s) { x.s = p.seguimiento; cambio2 = true; }
           if (p.calificacion && !x.cal) { x.cal = p.calificacion; cambio2 = true; }
         });
-        if (cambio2) guardarMisPedidos(lista);
+        if (cambio2) {
+          var actual = misPedidos(), porNumero = Object.create(null);
+          lista.forEach(function(x){ porNumero[x.n]=x; });
+          guardarMisPedidos(actual.map(function(x){ return porNumero[x.n] ? Object.assign({},x,porNumero[x.n]) : x; }));
+        }
         act = lista.filter(activo); hist = lista.filter(function (x) { return !activo(x); });
       } catch (err) {
         cont.innerHTML = '<div class="seg-caja"><b>Mis pedidos</b><span class="item-sub">No se pudo consultar ahora. <button class="enlace" type="button" id="seg-act">Reintentar</button></span></div>';
@@ -1099,7 +1124,8 @@
         if (respuesta.numero === x.n) solicitudesPorPedido[x.n] = respuesta.solicitudes || [];
       } catch (e) { /* Seguimiento sigue funcionando si falla la consulta de solicitudes. */ }
     }));
-    cont.innerHTML = act.map(function (x) { return res[x.n] && !res[x.n].no_existe && !res[x.n].consulta_error ? tarjetaSeguimiento(res[x.n], x) + (solicitudesPorPedido[x.n] || []).slice(-3).map(function (sol) {
+    var acceso = $('#btn-mi-pedido'); if (acceso) { acceso.hidden = !act.length; acceso.textContent = 'Mi pedido activo (' + act.length + ')'; }
+    cont.innerHTML = (act.length ? '<p class="ayuda">Seguimiento automático cada 15 segundos mientras la app está abierta.</p>' : '') + act.map(function (x) { return res[x.n] && !res[x.n].no_existe && !res[x.n].consulta_error ? tarjetaSeguimiento(res[x.n], x) + (solicitudesPorPedido[x.n] || []).slice(-3).map(function (sol) {
       return '<div class="seg-caja"><b>📝 Solicitud: ' + UI.esc(sol.tipo) + '</b>' +
         '<div class="item-sub">Estado: ' + UI.esc(sol.estado) + '</div>' +
         '<p>' + UI.esc(sol.detalle) + '</p>' +
@@ -1187,7 +1213,7 @@
         { texto: '↔ Cambiar', valor: 'cambiar' },
         { texto: '− Quitar', valor: 'quitar' },
         { texto: '↓ Reducir', valor: 'reducir' },
-        { texto: 'Cancelar', valor: 'cancelar' }
+        { texto: 'Solicitar cancelación', valor: 'cancelar', clase: 'peligro' }
       ] : estado === 'Preparando' ? [
         { texto: 'Cerrar', valor: null, clase: 'secundario' },
         { texto: '＋ Agregar', valor: 'agregar' },
@@ -1210,20 +1236,13 @@
         b.disabled = true;
         politica = await DATOS.pedir('pedidoPoliticaCambios', x.s ? { s: x.s, tipo: tipo } : { numero: numero, telefono: x.tel || (checkoutMem['cliente'] || {}).telefono || '', tipo: tipo });
       } catch (err) {
-        UI.aviso('No se pudo verificar si el restaurante acepta cambios. Intenta nuevamente.', 'error');
+        UI.aviso(err.codigo === 'ACCION' || err.codigo === 'ACTUALIZANDO' ? 'El restaurante debe actualizar su sistema para recibir cambios.' : 'No se pudo verificar si el restaurante acepta cambios. Intenta nuevamente.', 'error');
         return;
       } finally { b.disabled = false; }
       if (politica.numero !== numero) return UI.aviso('No se pudo validar el pedido. Actualiza el seguimiento.', 'error');
       var nombres = { agregar: 'agregar productos', aumentar: 'aumentar cantidades', cambiar: 'cambiar productos', quitar: 'quitar productos', reducir: 'reducir cantidades', cancelar: 'cancelar el pedido' };
       if (politica.permitido) {
-        var detalle = await UI.pedirDato({
-          icono: '📝', titulo: 'Solicitar cambio',
-          etiqueta: 'Productos, cantidades y detalles',
-          ph: 'Ejemplo: agregar 2 jugos de naranja',
-          modo: 'text', boton: 'Enviar solicitud',
-          texto: 'El restaurante debe confirmar el cambio antes de aplicarlo.',
-          validar: function (v) { return v.trim().length >= 5 && v.length <= 500 ? '' : 'Describe el cambio entre 5 y 500 caracteres.'; }
-        });
+        var detalle = await editorCambio(tipo, politica);
         if (detalle === null || detalle === undefined) return;
         detalle = String(detalle).trim();
         if (detalle.length < 5 || detalle.length > 500) return UI.aviso('Describe el cambio entre 5 y 500 caracteres.', 'error');
@@ -1231,9 +1250,10 @@
           b.disabled = true;
           var solicitud = await DATOS.pedir('pedidoCambioSolicitar', x.s ?
             { s: x.s, tipo: tipo, detalle: detalle } :
-            { numero: numero, telefono: x.tel || (checkoutMem['cliente'] || {}).telefono || '', tipo: tipo, detalle: detalle });
-          if (solicitud.estado === 'Pendiente') {
+            { numero: numero, telefono: x.tel || (checkoutMem['cliente'] || {}).telefono || '', tipo: tipo, detalle: detalle }, { guardar: true });
+          if (solicitud.estado === 'Pendiente' || solicitud.repetida === true) {
             UI.aviso(solicitud.repetida ? 'Tu solicitud ya está pendiente de respuesta.' : 'Solicitud enviada al restaurante. Espera su confirmación; tu pedido no cambió todavía.', 'exito');
+            await pintarSeguimiento(false);
             return;
           }
         } catch (err) {
@@ -1264,6 +1284,78 @@
     return 'Consulta cualquier cambio directamente con el restaurante.';
   }
 
+  /* Editor de solicitudes: solo prepara una descripción; el servidor conserva
+   * la autoridad sobre permisos, precios, existencias y aplicación. */
+  async function editorCambio(tipo, politica) {
+    var titulos = { agregar: 'Agregar productos', aumentar: 'Aumentar cantidades', cambiar: 'Cambiar productos', quitar: 'Quitar productos', reducir: 'Reducir cantidades', cancelar: 'Solicitar cancelación' };
+    var original = Array.isArray(politica.detalle) ? politica.detalle : [];
+    var menu = [];
+    if (tipo === 'agregar' || tipo === 'cambiar') {
+      try {
+        var actualizado = await DATOS.pedir('menuPublico', {});
+        menu = (actualizado.platos || []).filter(function (p) {
+          return p.activo !== false && p.agotado !== true && (p.agotado_locales || []).indexOf(politica.local_id) < 0 && (p.local_id === 'TODOS' || p.local_id === politica.local_id);
+        });
+      } catch (e) { UI.aviso('No se pudo cargar el menú. Puedes describir tu solicitud.', 'error'); }
+    }
+    var filas = tipo === 'agregar' ? [] : original;
+    if (tipo === 'cancelar') filas = [];
+    var nuevos = tipo === 'agregar' || tipo === 'cambiar' ? menu : [];
+    function controles(lista, prefijo, limite) {
+      return lista.map(function (p, i) {
+        var max = limite ? Math.max(0, Math.floor(Number(p.cantidad) || 0) - (tipo === 'reducir' ? 1 : 0)) : 50;
+        if (tipo === 'aumentar' && prefijo === 'o') max = Math.max(0, 50 - Number(p.cantidad || 0));
+        return '<div class="ux-cambio-fila" data-busqueda="' + UI.esc(String(p.nombre || '').toLowerCase()) + '"><div class="ux-cambio-nombre"><b>' + UI.esc(p.nombre) + '</b><small>' + UI.esc(UI.dinero(p.precio)) + (prefijo === 'o' ? ' · En pedido: ' + UI.esc(p.cantidad) + (p.extras ? ' · ' + UI.esc(p.extras) : '') : '') + '</small></div><div class="ux-cambio-controles"><button type="button" class="btn secundario chico" data-ux-step="-1" aria-label="Disminuir">−</button><input aria-label="Cantidad de ' + UI.esc(p.nombre) + '" type="number" min="0" max="' + max + '" value="0" inputmode="numeric" data-ux-cant="' + prefijo + i + '"><button type="button" class="btn secundario chico" data-ux-step="1" aria-label="Aumentar">+</button></div>' +
+          (prefijo === 'n' && Array.isArray(p.extras) && p.extras.length ? '<div class="ux-cambio-extras">' + p.extras.map(function (e,j) { return '<label><input type="checkbox" data-ux-extra="' + i + '-' + j + '"> ' + UI.esc(e.nombre) + ' (+' + UI.esc(UI.dinero(e.precio)) + ')</label>'; }).join('') + '</div>' : '') + '</div>';
+      }).join('');
+    }
+    var html = (filas.length ? '<h3>Productos del pedido</h3><div class="ux-cambio-lista">' + controles(filas, 'o', tipo !== 'aumentar') + '</div>' : '') +
+      (nuevos.length ? '<h3>Menú disponible</h3><input type="search" data-ux-buscar placeholder="Buscar producto" aria-label="Buscar producto"><div class="ux-cambio-lista" data-ux-menu>' + controles(nuevos, 'n', false) + '</div>' : '') +
+      '<label for="ux-nota">' + (tipo === 'cancelar' ? 'Motivo de cancelación' : 'Notas o solicitud manual (opcional si seleccionas productos)') + '</label><textarea id="ux-nota" maxlength="500" rows="2" placeholder="' + (tipo === 'cancelar' ? 'Describe el motivo' : 'Ej. Sin cebolla') + '"></textarea><p class="ayuda" data-ux-resumen aria-live="polite"></p>';
+    var detalle = null;
+    function leer(velo) {
+      var partes = [], originales = 0, agregados = 0, estimado = 0;
+      function recoger(lista, prefijo) {
+        lista.forEach(function (p,i) {
+          var el = velo.querySelector('[data-ux-cant="' + prefijo + i + '"]');
+          if (!el) return;
+          var n = Number(el.value), max = Number(el.max);
+          if (!Number.isInteger(n) || n < 0 || n > max) throw Error('Revisa las cantidades.');
+          if (!n) return;
+          var extras = prefijo === 'o' ? String(p.extras || '') : '';
+          var precio = Number(p.precio) || 0;
+          if (prefijo === 'n') {
+            var elegidos = (p.extras || []).filter(function(e,j) { var check = velo.querySelector('[data-ux-extra="' + i + '-' + j + '"]'); return check && check.checked; });
+            extras = elegidos.map(function(e){ return e.nombre; }).join(', ');
+            precio += elegidos.reduce(function(s,e){ return s + Number(e.precio || 0); },0);
+            agregados += n;
+          } else { originales += n; }
+          estimado += n * precio * (prefijo === 'o' && tipo !== 'aumentar' ? -1 : 1);
+          partes.push((prefijo === 'n' ? 'Agregar ' : tipo === 'aumentar' ? 'Aumentar ' : tipo === 'cambiar' ? 'Sustituir ' : 'Retirar ') + n + ' × ' + p.nombre + (extras ? ' (' + extras + ')' : ''));
+        });
+      }
+      recoger(filas,'o'); recoger(nuevos,'n');
+      var nota = velo.querySelector('#ux-nota').value.trim();
+      if (nota) partes.push(nota);
+      return { texto: partes.join('; '), originales: originales, agregados: agregados, estimado: estimado };
+    }
+    var ok = await UI.ventana({ titulo: titulos[tipo] || 'Solicitar cambio', texto: 'Selecciona las cantidades o escribe tu solicitud. El restaurante debe aprobarla antes de modificar el pedido.', html: html,
+      botones: [{ texto: 'Volver', valor: null, clase: 'secundario' }, { texto: 'Enviar solicitud', valor: true, antes: function(velo) {
+        try { var v = leer(velo); if (tipo === 'cambiar' && (v.originales || v.agregados) && !(v.originales && v.agregados)) throw Error('Selecciona el producto original y su sustituto.');
+          if (v.texto.length < 5 || v.texto.length > 500) throw Error('Describe el cambio entre 5 y 500 caracteres.');
+          detalle = v.texto; return true;
+        } catch(e) { UI.aviso(e.message,'error'); return false; }
+      }}],
+      alAbrir: function(velo) {
+        function resumen() { try { var v = leer(velo); velo.querySelector('[data-ux-resumen]').textContent = (v.originales || v.agregados) ? 'Diferencia orientativa de productos: ' + UI.dinero(v.estimado) + '. No incluye ajustes de impuestos o descuentos.' : ''; } catch(e) {} }
+        velo.addEventListener('click',function(e){ var b=e.target.closest('[data-ux-step]'); if(!b)return; var el=b.parentNode.querySelector('input'); el.value=Math.max(0,Math.min(Number(el.max),Number(el.value||0)+Number(b.getAttribute('data-ux-step')))); el.dispatchEvent(new Event('input',{bubbles:true})); });
+        velo.addEventListener('input',function(e){ if(e.target.hasAttribute('data-ux-buscar')) { var q=e.target.value.toLowerCase(); UI.$('[data-ux-menu] [data-busqueda]',velo).forEach(function(f){ f.hidden=f.getAttribute('data-busqueda').indexOf(q)<0; }); } resumen(); });
+        velo.addEventListener('change',resumen);
+      }
+    });
+    return ok ? detalle : null;
+  }
+
   /* Tarjeta de seguimiento de un pedido en curso. */
   function tarjetaSeguimiento(r, x) {
     var tipo = r.tipo_entrega;
@@ -1288,7 +1380,7 @@
       (r.codigo_entrega ? '<div class="codigo-entrega"><span>🔢 Tu código de entrega</span><b>' + UI.esc(r.codigo_entrega) + '</b><small>Dáselo al motorizado solo cuando tengas tu pedido en la mano.</small></div>' : '') +
       (r.estado === 'Entregado' && !r.calificacion ? '<button class="btn chico bloque" type="button" data-calificar="' + UI.esc(r.numero) + '" style="margin-top:10px">⭐ ¿Cómo estuvo? Califícanos</button>' : '') +
       (r.sellos_meta ? '<div class="sellos" title="Tarjeta de sellos">' + sellosHtml(r.sellos, r.sellos_meta) + '</div>' : '') +
-      (FINALES.indexOf(r.estado) < 0 && UI.digitos(cfg().whatsapp) ? '<p class="ayuda" style="margin:8px 0 0">' + UI.esc(mensajeCambioPedido(r.estado)) + ' <button class="enlace" type="button" data-escribir="' + UI.esc(r.numero) + '">Consultar por WhatsApp</button></p>' : '') +
+      (FINALES.indexOf(r.estado) < 0 ? '<p class="ayuda" style="margin:8px 0 0">' + UI.esc(mensajeCambioPedido(r.estado)) + ' <button class="enlace" type="button" data-escribir="' + UI.esc(r.numero) + '">Solicitar cambio</button></p>' : '') +
       '</div>';
   }
 
@@ -1398,6 +1490,9 @@
       await sugerir();
       irA(2);
     });
+    var acceso = $('#btn-mi-pedido'); if(acceso) acceso.addEventListener('click',function(){ pintarSeguimiento(true).catch(function(){}); });
+    iniciarSeguimientoAutomatico();
+    if (misPedidos().some(activo)) pintarSeguimiento(false).catch(function(){});
     iniciar();
   });
 })(window);

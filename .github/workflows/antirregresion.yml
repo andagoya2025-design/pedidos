@@ -5,6 +5,7 @@ on:
       - fix/antirregresion-pedidos-20261123
       - desarrollo/fase1b-comercial-integral
       - fix/fase1b1-instalacion
+      - fix/pedidos-premium
   pull_request:
     branches:
       - main
