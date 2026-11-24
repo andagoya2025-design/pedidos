@@ -157,6 +157,7 @@ var ACCIONES = {
   pedidoRecuperar:     { tipo: 'publica', fn: accionPedidoRecuperar_ },
   pedidoPoliticaCambios: { tipo: 'publica', fn: accionPedidoPoliticaCambios_ },
   pedidoCambioSolicitar: { tipo: 'publica', fn: accionPedidoCambioSolicitar_ },
+  pedidoCambiosConsultar: { tipo: 'publica', fn: accionPedidoCambiosConsultar_ },
   pedidoCambiosListar: { tipo: 'sesion', roles: ['dueno', 'cajero'], fn: accionPedidoCambiosListar_ },
   pedidoCambioResolver: { tipo: 'sesion', roles: ['dueno', 'cajero'], fn: accionPedidoCambioResolver_ },
   menuListar:         { tipo: 'sesion',  roles: ['dueno', 'cajero'], fn: accionMenuListar_ },
@@ -1401,6 +1402,20 @@ function accionPedidoCambioSolicitar_(data) {
     agregarFilas_('pedido_cambios', [[id, p.id, p.numero, p.local_id, tipo, detalle, 'Pendiente', new Date(), '', '', '']]);
     return { ok: true, data: { id: id, estado: 'Pendiente', aplicado: false } };
   } finally { lock.releaseLock(); }
+}
+/* Consulta privada del cliente: exige la misma clave o teléfono que seguimiento.
+ * Nunca expone solicitudes de otro pedido ni identificadores internos. */
+function accionPedidoCambiosConsultar_(data) {
+  var consulta = accionPedidoConsultar_({ s: data.s, numero: data.numero, telefono: data.telefono });
+  var numero = String(consulta.data.numero);
+  var p = leerTabla_('pedidos').filter(function (x) { return String(x.numero) === numero; })[0];
+  if (!p) throw fallo_('Pedido no encontrado.', 'NO_EXISTE');
+  return { ok: true, data: { numero: numero, solicitudes: cambiosPedido_().filter(function (x) {
+    return String(x.pedido_id) === String(p.id);
+  }).slice(-10).map(function (x) {
+    return { tipo: String(x.tipo), detalle: String(x.detalle), estado: String(x.estado),
+      creado: iso_(x.creado), respuesta: String(x.respuesta || ''), aplicado: false };
+  }) } };
 }
 function accionPedidoCambiosListar_(data, ctx) {
   var local = localDeSesion_(ctx, data.local_id);
