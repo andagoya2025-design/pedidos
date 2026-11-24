@@ -10,6 +10,11 @@
   var UI = global.UI, DATOS = global.DATOS, APP = global.APP;
   var est = { datos: null, motos: [], cargadoEn: 0, verAnulados: false, diaEntregado: '', alertados: {} }; // 3.1.6
 
+  function iconoPedido(n) {
+    var paths = {plus:'<path d="M12 5v14M5 12h14"/>',list:'<rect x="5" y="4" width="14" height="16" rx="2"/><path d="M9 9h6M9 13h6M9 17h4"/>',search:'<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/>',refresh:'<path d="M20 11a8 8 0 1 0-2 6M20 4v7h-7"/>',bell:'<path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/>',mute:'<path d="m3 3 18 18M6 8c0 7-3 7-3 9h14M18 12V8a6 6 0 0 0-9-5M10 21h4"/>'};
+    return '<svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' + paths[n] + '</svg>';
+  }
+
   var COLUMNAS = ['Recibido', 'Preparando', 'En camino', 'Entregado'];
 
   APP.vistas.pedidos = {
