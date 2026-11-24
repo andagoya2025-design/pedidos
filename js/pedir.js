@@ -885,7 +885,7 @@
       try {
         var r = await DATOS.pedir('pedidoCrear', datos, { guardar: true });
         MEM.guardar('ultimo_carrito', { local: datos.local_id, items: datos.items });
-        guardarMiPedido({ n: r.pedido.numero, tel: datos.cliente.telefono, s: r.pedido.clave_seguimiento ? r.pedido.numero + '-' + r.pedido.clave_seguimiento : '', f: Date.now(), t: r.pedido.total, e: 'Recibido', l: localId,
+        guardarMiPedido({ n: r.pedido.numero, tel: datos.cliente.telefono, s: r.pedido.clave_seguimiento ? r.pedido.numero + '-' + r.pedido.clave_seguimiento : '', f: Date.now(), t: r.pedido.total, e: 'Recibido', l: datos.local_id,
           i: datos.items.map(function (x) { var pl = plato(x.plato_id); return { p: x.plato_id, c: x.cantidad, x: x.extras, n: pl ? pl.nombre : '' }; }) });
         var detalle = datos.items.map(function (x) { var pl = plato(x.plato_id); return { plato: pl, cantidad: x.cantidad, extras: x.extras }; });
         r.pedido.ubic_por_wa = !!(ubic && ubic.fuente === 'whatsapp'); // 3.1.1: solo entonces se pide la ubicación por WhatsApp
