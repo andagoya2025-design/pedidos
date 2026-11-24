@@ -1138,6 +1138,25 @@
       } finally { b.disabled = false; }
       if (politica.numero !== numero) return UI.aviso('No se pudo validar el pedido. Actualiza el seguimiento.', 'error');
       var nombres = { agregar: 'agregar productos', aumentar: 'aumentar cantidades', cambiar: 'cambiar productos', quitar: 'quitar productos', reducir: 'reducir cantidades', cancelar: 'cancelar el pedido' };
+      if (politica.permitido) {
+        var detalle = global.prompt('Describe los productos y cantidades para solicitar ' + (nombres[tipo] || tipo) + ':');
+        if (detalle === null) return;
+        detalle = String(detalle).trim();
+        if (detalle.length < 5 || detalle.length > 500) return UI.aviso('Describe el cambio entre 5 y 500 caracteres.', 'error');
+        try {
+          b.disabled = true;
+          var solicitud = await DATOS.pedir('pedidoCambioSolicitar', x.s ?
+            { s: x.s, tipo: tipo, detalle: detalle } :
+            { numero: numero, telefono: x.tel || (MEM.leer('cliente') || {}).telefono || '', tipo: tipo, detalle: detalle });
+          if (solicitud.estado === 'Pendiente') {
+            UI.aviso(solicitud.repetida ? 'Tu solicitud ya está pendiente de respuesta.' : 'Solicitud enviada al restaurante. Espera su confirmación; tu pedido no cambió todavía.', 'exito');
+            return;
+          }
+        } catch (err) {
+          UI.aviso('No pudimos registrar la solicitud: ' + (err.message || 'intenta nuevamente'), 'error');
+          return;
+        } finally { b.disabled = false; }
+      }
       var texto = 'Quisiera ' + (nombres[tipo] || 'consultar opciones') + '. ' + politica.mensaje +
         (politica.permitido ? ' Por favor, confirmen disponibilidad, importe y horario antes de aplicar cualquier modificación.' : ' Quisiera conocer las opciones disponibles.');
       var telefonoLocal = cfg().whatsapp;
