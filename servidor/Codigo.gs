@@ -159,6 +159,8 @@ var ACCIONES = {
   pedidoCambioSolicitar: { tipo: 'publica', fn: accionPedidoCambioSolicitar_ },
   pedidoCambiosConsultar: { tipo: 'publica', fn: accionPedidoCambiosConsultar_ },
   pedidoCambioCotizar: { tipo: 'sesion', roles: ['dueno', 'cajero'], fn: accionPedidoCambioCotizar_ },
+  pedidoCambioProponer: { tipo: 'sesion', roles: ['dueno', 'cajero'], fn: accionPedidoCambioProponer_ },
+  pedidoCambioConfirmar: { tipo: 'publica', fn: accionPedidoCambioConfirmar_ },
   pedidoCambiosListar: { tipo: 'sesion', roles: ['dueno', 'cajero'], fn: accionPedidoCambiosListar_ },
   pedidoCambioResolver: { tipo: 'sesion', roles: ['dueno', 'cajero'], fn: accionPedidoCambioResolver_ },
   menuListar:         { tipo: 'sesion',  roles: ['dueno', 'cajero'], fn: accionMenuListar_ },
@@ -1370,11 +1372,33 @@ function accionPedidoPoliticaCambios_(data) {
 HOJAS.pedido_cambios = [
   ['id','t'], ['pedido_id','t'], ['numero','t'], ['local_id','t'],
   ['tipo','t'], ['detalle','t'], ['estado','t'], ['creado','d'],
-  ['resuelto','d'], ['resuelto_por','t'], ['respuesta','t']
+  ['resuelto','d'], ['resuelto_por','t'], ['respuesta','t'],
+  ['cotizacion_id','t'], ['cotizacion_json','t'], ['cotizacion_fecha','d'], ['cliente_confirmo_fecha','d']
 ];
 function hojaCambios_() {
   var ss = SpreadsheetApp.getActive();
-  return ss.getSheetByName('pedido_cambios') || prepararHoja_(ss, 'pedido_cambios');
+  var sh = ss.getSheetByName('pedido_cambios');
+  if (!sh) return prepararHoja_(ss, 'pedido_cambios');
+  // Migración aditiva: no alterar columnas ni datos existentes, solo añadir campos nuevos.
+  var cols = HOJAS.pedido_cambios, anterior = 11;
+  var encabezados = sh.getRange(1, 1, 1, anterior).getValues()[0];
+  for (var i = 0; i < anterior; i++) {
+    if (String(encabezados[i]) !== cols[i][0]) throw fallo_('La estructura de solicitudes no coincide; revise los encabezados antes de continuar.', 'ESQUEMA');
+  }
+  var disponibles = sh.getLastColumn();
+  if (disponibles < cols.length) {
+    if (sh.getMaxColumns() < cols.length) sh.insertColumnsAfter(sh.getMaxColumns(), cols.length - sh.getMaxColumns());
+    var faltantes = cols.slice(disponibles);
+    sh.getRange(1, disponibles + 1, 1, faltantes.length).setValues([faltantes.map(function (c) { return c[0]; })]);
+    faltantes.forEach(function (c, j) {
+      sh.getRange(2, disponibles + j + 1, Math.max(sh.getMaxRows() - 1, 1), 1).setNumberFormat(formatoDe_(c[1]));
+    });
+  }
+  var cabeceras = sh.getRange(1, 1, 1, cols.length).getValues()[0];
+  for (var k = 0; k < cols.length; k++) {
+    if (String(cabeceras[k]) !== cols[k][0]) throw fallo_('La hoja de solicitudes contiene columnas incompatibles.', 'ESQUEMA');
+  }
+  return sh;
 }
 function cambiosPedido_() {
   hojaCambios_();
@@ -1393,10 +1417,10 @@ function accionPedidoCambioSolicitar_(data) {
     if (!p) throw fallo_('Pedido no encontrado.', 'NO_EXISTE');
     var politica = politicaCambiosPedido_(String(p.estado), tipo);
     if (!politica.permitido) throw fallo_(politica.mensaje, 'CAMBIO');
-    var pendientes = cambiosPedido_().filter(function (x) { return String(x.pedido_id) === String(p.id) && ['Pendiente', 'Aprobada para coordinar'].indexOf(String(x.estado)) >= 0; });
+    var pendientes = cambiosPedido_().filter(function (x) { return String(x.pedido_id) === String(p.id) && ['Pendiente', 'Aprobada para coordinar', 'Cotizada', 'Confirmada cliente'].indexOf(String(x.estado)) >= 0; });
     if (pendientes.length) {
       var igual = pendientes.filter(function (x) { return String(x.tipo) === tipo && String(x.detalle) === detalle; })[0];
-      if (igual) return { ok: true, data: { id: String(igual.id), estado: 'Pendiente', repetida: true, aplicado: false } };
+      if (igual) return { ok: true, data: { id: String(igual.id), estado: String(igual.estado), repetida: true, aplicado: false } };
       throw fallo_('Ya tienes una solicitud pendiente. Espera la respuesta del restaurante.', 'PENDIENTE');
     }
     var id = Utilities.getUuid();
@@ -1414,8 +1438,17 @@ function accionPedidoCambiosConsultar_(data) {
   return { ok: true, data: { numero: numero, solicitudes: cambiosPedido_().filter(function (x) {
     return String(x.pedido_id) === String(p.id);
   }).slice(-10).map(function (x) {
-    return { tipo: String(x.tipo), detalle: String(x.detalle), estado: String(x.estado),
-      creado: iso_(x.creado), respuesta: String(x.respuesta || ''), aplicado: false };
+    var quote = null;
+    if (['Cotizada', 'Confirmada cliente'].indexOf(String(x.estado)) >= 0 && x.cotizacion_json) {
+      try { var guardada = JSON.parse(String(x.cotizacion_json));
+        quote = { id: String(x.cotizacion_id), lineas: guardada.lineas, total_actual: guardada.total_actual,
+          adicional: guardada.adicional, subtotal_adicional: guardada.subtotal_adicional,
+          iva_adicional: guardada.iva_adicional, total_estimado: guardada.total_estimado,
+          vence: guardada.vence, inventario_reservado: false, cobro_autorizado: false };
+      } catch (e) { quote = null; }
+    }
+    return { id: String(x.id), tipo: String(x.tipo), detalle: String(x.detalle), estado: String(x.estado),
+      creado: iso_(x.creado), respuesta: String(x.respuesta || ''), cotizacion: quote, aplicado: false };
   }) } };
 }
 /* Al avanzar el pedido, cerrar solicitudes que la nueva etapa prohíbe.
@@ -1424,7 +1457,7 @@ function cerrarCambiosIncompatibles_(p, nuevoEstado, usuario) {
   if (!SpreadsheetApp.getActive().getSheetByName('pedido_cambios')) return 0;
   var n = 0;
   cambiosPedido_().forEach(function (x) {
-    if (String(x.pedido_id) !== String(p.id) || ['Pendiente', 'Aprobada para coordinar'].indexOf(String(x.estado)) < 0) return;
+    if (String(x.pedido_id) !== String(p.id) || ['Pendiente', 'Aprobada para coordinar', 'Cotizada', 'Confirmada cliente'].indexOf(String(x.estado)) < 0) return;
     if (politicaCambiosPedido_(nuevoEstado, String(x.tipo)).permitido) return;
     actualizarCampos_('pedido_cambios', x._fila, x, {
       estado: 'Rechazada', resuelto: new Date(), resuelto_por: usuario,
@@ -1444,7 +1477,7 @@ function accionPedidoCambiosListar_(data, ctx) {
   }).slice(-200).map(function (x) {
     return { id: String(x.id), numero: String(x.numero), local_id: String(x.local_id), tipo: String(x.tipo),
       detalle: String(x.detalle), estado: String(x.estado), pedido_estado: estados[String(x.pedido_id)] || '',
-      creado: iso_(x.creado), respuesta: String(x.respuesta || ''), aplicado: false };
+      creado: iso_(x.creado), respuesta: String(x.respuesta || ''), cotizacion_id: String(x.cotizacion_id || ''), aplicado: false };
   }) } };
 }
 /* Cotización de adicionales: no cambia el pedido ni reserva inventario.
@@ -1454,7 +1487,7 @@ function accionPedidoCambioCotizar_(data, ctx) {
   var x = cambiosPedido_().filter(function (v) { return String(v.id) === solicitudId; })[0];
   if (!x) throw fallo_('Solicitud no encontrada.', 'NO_EXISTE');
   if (!puedeVerLocal_(ctx, String(x.local_id))) throw fallo_('Sin permiso para este local.', 'PERMISO');
-  if (String(x.estado) !== 'Pendiente') throw fallo_('La solicitud ya fue resuelta.', 'CAMBIO');
+  if (['Pendiente', 'Aprobada para coordinar', 'Cotizada'].indexOf(String(x.estado)) < 0) throw fallo_('La solicitud ya fue resuelta.', 'CAMBIO');
   if (['agregar', 'aumentar'].indexOf(String(x.tipo)) < 0)
     throw fallo_('Esta cotización solo admite productos adicionales o aumento de cantidades.', 'CAMBIO');
   var p = leerTabla_('pedidos').filter(function (v) { return String(v.id) === String(x.pedido_id); })[0];
@@ -1510,15 +1543,89 @@ function accionPedidoCambioCotizar_(data, ctx) {
     lineas.push({ plato_id: String(plato.id), nombre: String(plato.nombre), cantidad: cantidad,
       extras: nombres, precio: unitario, total_linea: total });
   });
+  var cfgCambio = leerConfig_();
+  var ivaExtra = siNo_(cfgCambio.precios_incluyen_iva) ? 0 : redondear_(subtotal * numero_(cfgCambio.iva_porcentaje) / 100);
+  var adicionalFinal = redondear_(subtotal + ivaExtra);
   return { ok: true, data: { solicitud_id: solicitudId, pedido: String(p.numero),
     estado_pedido: String(p.estado), total_actual: redondear_(p.total),
-    adicional: subtotal, total_estimado: redondear_(numero_(p.total) + subtotal),
+    subtotal_adicional: subtotal, iva_adicional: ivaExtra,
+    adicional: adicionalFinal, total_estimado: redondear_(numero_(p.total) + adicionalFinal),
     lineas: lineas, inventario_reservado: false, aplicado: false,
-    requiere_confirmacion_cliente: true, pago_adicional_pendiente: subtotal > 0,
+    requiere_confirmacion_cliente: true, pago_adicional_pendiente: adicionalFinal > 0,
     // El total estimado NO incluye una eventual nueva comisión, promoción o recálculo de impuestos.
     total_definitivo: false, cobro_autorizado: false,
     aviso: 'Cotización provisional, no es un cobro. Confirmar con el cliente el importe final, impuestos, promociones, disponibilidad y forma de pago antes de aplicar.' } };
 }
+/* Publicación formal de la cotización: snapshot calculado por servidor y token
+ * rotativo, sin mutar detalle, pedido, inventario ni pagos. */
+function accionPedidoCambioProponer_(data, ctx) {
+  var lock = candado_();
+  try {
+    var id = limpiarTexto_(data.id, 80);
+    var solicitudes = cambiosPedido_();
+    var x = solicitudes.filter(function (v) { return String(v.id) === id; })[0];
+    if (!x || !puedeVerLocal_(ctx, String(x.local_id))) throw fallo_('Solicitud no encontrada o sin permiso.', 'PERMISO');
+    if (['Pendiente', 'Aprobada para coordinar', 'Cotizada'].indexOf(String(x.estado)) < 0)
+      throw fallo_('No se puede cambiar una cotización ya confirmada o cerrada.', 'CAMBIO');
+    var r = accionPedidoCambioCotizar_({ id: id, items: data.items }, ctx).data;
+    if (!(r.adicional > 0)) throw fallo_('La cotización debe tener un importe adicional positivo.', 'CANTIDAD');
+    var token = Utilities.getUuid();
+    var ahora = new Date();
+    var quote = {
+      id: token, pedido: r.pedido, estado_pedido: r.estado_pedido,
+      total_actual: r.total_actual, subtotal_adicional: r.subtotal_adicional,
+      iva_adicional: r.iva_adicional, adicional: r.adicional,
+      total_estimado: r.total_estimado, lineas: r.lineas,
+      vence: new Date(ahora.getTime() + 30 * 60000).toISOString()
+    };
+    actualizarCampos_('pedido_cambios', x._fila, x, {
+      estado: 'Cotizada', cotizacion_id: token, cotizacion_json: JSON.stringify(quote),
+      cotizacion_fecha: ahora, cliente_confirmo_fecha: '',
+      respuesta: 'Cotización disponible: confirma el importe en Mis pedidos. No se ha cobrado ni aplicado ningún adicional.'
+    });
+    return { ok: true, data: { id: id, estado: 'Cotizada', cotizacion: quote, aplicado: false, inventario_reservado: false } };
+  } finally { lock.releaseLock(); }
+}
+
+/* Confirmación explícita del titular del pedido. No equivale al pago.
+ * El token cambia cuando el restaurante vuelve a cotizar. */
+function accionPedidoCambioConfirmar_(data) {
+  var lock = candado_();
+  try {
+    var consulta = accionPedidoConsultar_({ s: data.s, numero: data.numero, telefono: data.telefono });
+    var numero = String(consulta.data.numero);
+    var id = limpiarTexto_(data.id, 80);
+    var token = limpiarTexto_(data.cotizacion_id, 80);
+    var x = cambiosPedido_().filter(function (v) { return String(v.id) === id && String(v.numero) === numero; })[0];
+    if (!x || !token || String(x.cotizacion_id) !== token) throw fallo_('Cotización inexistente o reemplazada. Actualiza el seguimiento.', 'CAMBIO');
+    if (String(x.estado) === 'Confirmada cliente' && data.acepta === true)
+      return { ok: true, data: { estado: 'Confirmada cliente', repetida: true, aplicado: false, pago_verificado: false } };
+    if (String(x.estado) !== 'Cotizada') throw fallo_('Esta cotización ya no está vigente.', 'CAMBIO');
+    var p = leerTabla_('pedidos').filter(function (v) { return String(v.id) === String(x.pedido_id); })[0];
+    if (!p || !politicaCambiosPedido_(String(p.estado), String(x.tipo)).permitido)
+      throw fallo_('El pedido ya no admite este cambio.', 'CAMBIO');
+    var quote;
+    try { quote = JSON.parse(String(x.cotizacion_json)); }
+    catch (e) { throw fallo_('Cotización dañada; pide una nueva.', 'CAMBIO'); }
+    if (String(quote.id) !== token || !quote.vence || Date.now() > new Date(quote.vence).getTime())
+      throw fallo_('La cotización venció; solicita una nueva.', 'VENCIDA');
+    if (redondear_(p.total) !== redondear_(quote.total_actual))
+      throw fallo_('El importe original cambió; solicita una cotización nueva.', 'CAMBIO');
+    if (data.acepta !== true && data.acepta !== false) throw fallo_('Confirma expresamente si aceptas el importe.', 'CONFIRMACION');
+    var aceptada = data.acepta === true;
+    actualizarCampos_('pedido_cambios', x._fila, x, {
+      estado: aceptada ? 'Confirmada cliente' : 'Rechazada',
+      cliente_confirmo_fecha: aceptada ? new Date() : '',
+      respuesta: aceptada
+        ? 'Cliente aceptó el importe cotizado. El adicional aún NO está cobrado ni aplicado; el restaurante debe verificar disponibilidad y pago.'
+        : 'El cliente rechazó la cotización; no se modificó ni cobró el pedido.',
+      resuelto: aceptada ? '' : new Date(), resuelto_por: aceptada ? '' : 'cliente'
+    });
+    return { ok: true, data: { estado: aceptada ? 'Confirmada cliente' : 'Rechazada',
+      repetida: false, aplicado: false, pago_verificado: false } };
+  } finally { lock.releaseLock(); }
+}
+
 function accionPedidoCambioResolver_(data, ctx) {
   var id = limpiarTexto_(data.id, 80), decision = limpiarTexto_(data.decision, 40);
   var respuesta = limpiarTexto_(data.respuesta, 500);
@@ -1529,11 +1636,11 @@ function accionPedidoCambioResolver_(data, ctx) {
     var x = cambiosPedido_().filter(function (v) { return String(v.id) === id; })[0];
     if (!x) throw fallo_('Solicitud no encontrada.', 'NO_EXISTE');
     if (!puedeVerLocal_(ctx, String(x.local_id))) throw fallo_('Sin permiso para este local.', 'PERMISO');
-    if (String(x.estado) !== 'Pendiente' && !(String(x.estado) === 'Aprobada para coordinar' && ['Rechazada', 'Cerrada sin aplicar'].indexOf(decision) >= 0))
+    if (String(x.estado) !== 'Pendiente' && !(['Aprobada para coordinar', 'Cotizada', 'Confirmada cliente'].indexOf(String(x.estado)) >= 0 && ['Rechazada', 'Cerrada sin aplicar'].indexOf(decision) >= 0))
       throw fallo_('Solicitud ya resuelta o transición no permitida.', 'CAMBIO');
     var p = leerTabla_('pedidos').filter(function (v) { return String(v.id) === String(x.pedido_id); })[0];
     if (!p) throw fallo_('Pedido no encontrado.', 'NO_EXISTE');
-    if (decision !== 'Rechazada' && !politicaCambiosPedido_(p.estado, x.tipo).permitido)
+    if (decision === 'Aprobada para coordinar' && !politicaCambiosPedido_(p.estado, x.tipo).permitido)
       throw fallo_('El pedido cambió de estado. No se puede aprobar esta solicitud.', 'CAMBIO');
     // Una aceptación de coordinación NO equivale a una aprobación económica.
     // Impedir que se interprete como modificación efectiva o cobro autorizado.
@@ -2006,7 +2113,7 @@ function accionPedidoEstado_(data, ctx) {
     if (a === 'En camino' || a === 'Entregado') {
       var solicitudesAbiertas = SpreadsheetApp.getActive().getSheetByName('pedido_cambios')
         ? cambiosPedido_().filter(function (x) {
-          return String(x.pedido_id) === String(p.id) && ['Pendiente', 'Aprobada para coordinar'].indexOf(String(x.estado)) >= 0;
+          return String(x.pedido_id) === String(p.id) && ['Pendiente', 'Aprobada para coordinar', 'Cotizada', 'Confirmada cliente'].indexOf(String(x.estado)) >= 0;
         }) : [];
       if (solicitudesAbiertas.length)
         throw fallo_('Este pedido tiene ' + solicitudesAbiertas.length +
