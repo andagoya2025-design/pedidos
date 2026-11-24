@@ -44,7 +44,7 @@
     var datos;
     try { datos = await DATOS.pedir('pedidoCambiosListar', { local_id: APP.local }); }
     catch (err) { return UI.aviso('No se pudieron cargar las solicitudes: ' + err.message, 'error'); }
-    var lista = (datos.solicitudes || []).filter(function (x) { return x.estado === 'Pendiente'; })
+    var lista = (datos.solicitudes || []).filter(function (x) { return x.estado === 'Pendiente' || x.estado === 'Aprobada para coordinar'; })
       .sort(function (a, b) { return String(a.creado).localeCompare(String(b.creado)); });
     if (!lista.length) return UI.aviso('No hay solicitudes pendientes.', 'ok');
     var opciones = [{ texto: 'Cerrar', valor: null, clase: 'secundario' }];
@@ -61,10 +61,14 @@
     if (!x) return;
     var decision = await UI.ventana({
       titulo: x.numero + ' · ' + x.tipo,
-      texto: x.detalle + '. La aprobación solo indica que el restaurante coordinará el cambio; no altera los importes.',
-      botones: [{ texto: 'Volver', valor: null, clase: 'secundario' },
-        { texto: 'Rechazar', valor: 'Rechazada' },
-        { texto: 'Coordinar', valor: 'Aprobada para coordinar' }]
+      texto: x.detalle + '. Estado: ' + x.estado + '. Coordinar no modifica importes. Antes de despachar, debes cerrar la solicitud; si hay adicionales reales, tramítalos y confirma el cobro por separado.',
+      botones: x.estado === 'Aprobada para coordinar'
+        ? [{ texto: 'Volver', valor: null, clase: 'secundario' },
+          { texto: 'Rechazar', valor: 'Rechazada' },
+          { texto: 'Cerrar sin aplicar', valor: 'Cerrada sin aplicar' }]
+        : [{ texto: 'Volver', valor: null, clase: 'secundario' },
+          { texto: 'Rechazar', valor: 'Rechazada' },
+          { texto: 'Coordinar', valor: 'Aprobada para coordinar' }]
     });
     if (!decision) return;
     var respuesta = await UI.pedirDato({
