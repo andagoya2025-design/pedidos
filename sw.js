@@ -8,7 +8,7 @@
  * - Nunca guarda datos del negocio: los pedidos van siempre al servidor.
  * ============================================================
  */
-var VERSION = 'app-3.1.15-fase1b';
+var VERSION = 'app-3.1.16-fase1b1';
 var FOTOS = 'fotos-1';      // 3.1: fotos de platos y mapas (sobrevive a las actualizaciones)
 var MAX_FOTOS = 150;
 
@@ -105,10 +105,11 @@ self.addEventListener('fetch', function (e) {
   }
 
   if (url.origin !== self.location.origin) return;
+  if (!ARCHIVOS.some(function (p) { return new URL(p, self.registration.scope).pathname === url.pathname; })) return;
 
   // Pantalla de la app: primero la copia guardada (rápido); si no está, internet.
   e.respondWith(
-    caches.match(req, { ignoreSearch: true }).then(function (r) {
+    caches.open(VERSION).then(function(c){return c.match(req, { ignoreSearch: true });}).then(function (r) {
       return r || fetch(req).then(function (resp) {
         if (resp.ok && resp.type === 'basic') {
           var copia = resp.clone();
@@ -129,7 +130,7 @@ self.addEventListener('notificationclick', function (e) {
   e.notification.close();
   e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (lista) {
     for (var i = 0; i < lista.length; i++) {
-      if (lista[i].url.indexOf('pedir.html') < 0 && 'focus' in lista[i]) { lista[i].navigate(self.registration.scope + '#pedidos'); return lista[i].focus(); }
+      if (lista[i].url.indexOf('pedir.html') < 0 && lista[i].url.indexOf('driver.html') < 0 && 'focus' in lista[i]) { lista[i].navigate(self.registration.scope + '#pedidos'); return lista[i].focus(); }
     }
     return self.clients.openWindow(self.registration.scope + '#pedidos');
   }));
