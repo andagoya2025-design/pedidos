@@ -1101,7 +1101,33 @@
       var x = lista.filter(function (y) { return y.n === numero; })[0];
       if (!x || !pedido || pedido.consulta_error || pedido.no_existe) return UI.aviso('Actualiza el estado antes de solicitar cambios.', 'error');
       var estado = pedido.estado;
-      var tipo = estado === 'Preparando' ? 'agregar' : estado === 'Recibido' ? 'cambiar' : 'agregar';
+      // Preguntar qué desea hacer, en vez de suponer que toda solicitud
+      // es una sustitución. Cada opción tiene restricciones distintas.
+      var opciones = estado === 'Recibido' ? [
+        { texto: 'Cerrar', valor: null, clase: 'secundario' },
+        { texto: '＋ Agregar', valor: 'agregar' },
+        { texto: '↑ Aumentar', valor: 'aumentar' },
+        { texto: '↔ Cambiar', valor: 'cambiar' },
+        { texto: '− Quitar', valor: 'quitar' },
+        { texto: '↓ Reducir', valor: 'reducir' },
+        { texto: 'Cancelar', valor: 'cancelar' }
+      ] : estado === 'Preparando' ? [
+        { texto: 'Cerrar', valor: null, clase: 'secundario' },
+        { texto: '＋ Agregar', valor: 'agregar' },
+        { texto: '↑ Aumentar', valor: 'aumentar' }
+      ] : [
+        { texto: 'Cerrar', valor: null, clase: 'secundario' },
+        { texto: 'Consultar opciones', valor: 'agregar' }
+      ];
+      var tipo = await UI.ventana({
+        icono: '📝', titulo: '¿Qué necesitas hacer?',
+        texto: estado === 'En camino' ? 'El motorizado ya salió. Los adicionales necesitan otro envío o retiro.' :
+          estado === 'Preparando' ? 'Ya están preparando tu pedido. Solo puedes consultar adicionales o aumentar cantidades.' :
+          estado === 'Recibido' ? 'Selecciona la modificación que quieres solicitar. Ningún cambio se aplica sin aprobación del restaurante.' :
+          'Este pedido ya no admite cambios. Puedes consultar las alternativas.',
+        botones: opciones
+      });
+      if (!tipo) return;
       var politica;
       try {
         b.disabled = true;
@@ -1111,7 +1137,9 @@
         return;
       } finally { b.disabled = false; }
       if (politica.numero !== numero) return UI.aviso('No se pudo validar el pedido. Actualiza el seguimiento.', 'error');
-      var texto = politica.mensaje + (politica.permitido ? ' Solicito que me confirmen disponibilidad, importe y horario antes de aplicar cualquier modificación.' : ' Quisiera conocer las opciones disponibles.');
+      var nombres = { agregar: 'agregar productos', aumentar: 'aumentar cantidades', cambiar: 'cambiar productos', quitar: 'quitar productos', reducir: 'reducir cantidades', cancelar: 'cancelar el pedido' };
+      var texto = 'Quisiera ' + (nombres[tipo] || 'consultar opciones') + '. ' + politica.mensaje +
+        (politica.permitido ? ' Por favor, confirmen disponibilidad, importe y horario antes de aplicar cualquier modificación.' : ' Quisiera conocer las opciones disponibles.');
       var telefonoLocal = cfg().whatsapp;
       if (!UI.digitos(telefonoLocal)) return UI.aviso('Este restaurante no tiene WhatsApp configurado para solicitudes.', 'error');
       UI.abrirWhatsApp(telefonoLocal, 'Hola, sobre mi pedido *' + numero + '* (' + politica.estado + '): ' + texto + ' Entiendo que este mensaje no modifica el pedido ni autoriza cobros.');
