@@ -58,7 +58,7 @@
       var ps=platos.filter(function(p){return normal(p.nombre)===normal(m[2]);});
       if(ps.length!==1)return [];
       var p=ps[0], extras=[], nombres=m[3]?m[3].split(','):[], disponibles=Array.isArray(p.extras)?p.extras:[];
-      for(var j=0;j<nombres.length;j++){var es=disponibles.filter(function(e){return normal(e.nombre)===normal(nombres[j]);});if(es.length!==1||extras.indexOf(es[0].nombre)>=0)return [];extras.push(es[0].nombre);}
+      for(var j=0;j<nombres.length;j++){var es=disponibles.filter(function(e){return normal(e.nombre)===normal(nombres[j]);});if(es.length!==1)return [];var mx=Number(es[0].max_cantidad);if(!(Number(es[0].precio)>0&&Number.isInteger(mx)&&mx>=1&&mx<=10))mx=1;if(extras.filter(function(n){return n===es[0].nombre;}).length>=mx)return [];extras.push(es[0].nombre);}
       var k=JSON.stringify([String(p.id),extras.slice().sort()]);if(claves[k])return [];claves[k]=true;
       items.push({plato_id:p.id,cantidad:Number(m[1]),extras:extras});
     }
@@ -128,7 +128,7 @@
       if(posibles.length!==1){valido=false;return;}
       var a=posibles[0], precio=Number(a.precio), k=JSON.stringify([nuevo,String(a.id||a.plato_id),ex]);
       if(!Number.isFinite(precio)||usados[k]||(!nuevo&&negativo&&n>Number(a.cantidad))||(!nuevo&&x.tipo==='quitar'&&n!==Number(a.cantidad))||(!nuevo&&x.tipo==='reducir'&&n>=Number(a.cantidad))){valido=false;return;}usados[k]=true;
-      if(nuevo){var vistos=Object.create(null);ex.forEach(function(e){var match=(Array.isArray(a.extras)?a.extras:[]).filter(function(z){return norma(z.nombre)===e;});if(match.length!==1||vistos[e]||!Number.isFinite(Number(match[0].precio))){valido=false;return;}vistos[e]=true;precio+=Number(match[0].precio);});if(a.activo!==true||a.agotado===true)valido=false;entradas+=n;}
+      if(nuevo){var vistos=Object.create(null);ex.forEach(function(e){var match=(Array.isArray(a.extras)?a.extras:[]).filter(function(z){return norma(z.nombre)===e;});if(match.length!==1||!Number.isFinite(Number(match[0].precio))){valido=false;return;}var mx=Number(match[0].max_cantidad);if(!(Number(match[0].precio)>0&&Number.isInteger(mx)&&mx>=1&&mx<=10))mx=1;vistos[e]=(vistos[e]||0)+1;if(vistos[e]>mx){valido=false;return;}precio+=Number(match[0].precio);});if(a.activo!==true||a.agotado===true)valido=false;entradas+=n;}
       if(negativo)retiros+=n;
       var total=Math.round(precio*n*100)/100;delta+=negativo?-total:total;
       filas.push('<div class="ux-seleccion-grupo '+(negativo?'actual':'nuevo')+'"><small>'+UI.esc(negativo?'Producto actual · retiro solicitado':nuevo?'Producto nuevo solicitado':'Unidades adicionales')+'</small><div class="ux-resumen-item"><span><b>'+UI.esc(n+' × '+a.nombre)+'</b>'+(m[4]?'<small>'+UI.esc(m[4])+'</small>':'')+'</span><b>'+UI.esc(UI.dinero(total))+'</b></div></div>');
