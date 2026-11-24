@@ -23,6 +23,16 @@
   var busqueda = '';
   var carrito = {};             // clave -> { plato, extras:[nombres], cantidad }
   var codigoEnvio = '';         // se crea al confirmar y se reusa hasta que el pedido entra
+  var envioPendiente = null;    // carga original inmutable para reintentos tras una respuesta incierta
+  var recuperacionEnCurso = false; // impedir consultas y reintentos simultáneos
+  // Solo esta pestaña: recuperar un envío incierto al recargar, con caducidad de 24 h.
+  try {
+    var recuperado = JSON.parse(global.sessionStorage.getItem('mipedido_envio_pendiente') || 'null');
+    if (recuperado && recuperado.fecha && Date.now() - recuperado.fecha < 86400000 && recuperado.datos && recuperado.datos.op_id) {
+      envioPendiente = recuperado.datos;
+      codigoEnvio = envioPendiente.op_id;
+    } else global.sessionStorage.removeItem('mipedido_envio_pendiente');
+  } catch (e) { /* almacenamiento bloqueado: continuar sin persistencia */ }
   var ubic = null;              // { lat, lng, precision, fuente:'gps'|'enlace', enlace }
   var mapa = null;
   var paso = 1;
@@ -66,7 +76,7 @@
   function zonaElegida() { return entrega.tipo === 'domicilio' ? M.zonas.filter(function (z) { return z.id === entrega.zona; })[0] || null : null; }
   function envio() { var z = zonaElegida(); return z ? z.costo : 0; }
   function propina() { return entrega.tipo === 'domicilio' && cfg().propinas !== 'NO' ? pago.propina : 0; }
-  function cambio() { codigoEnvio = ''; cuponAplicado = null; }
+  function cambio() { if (!envioPendiente) codigoEnvio = ''; cuponAplicado = null; }
   function puntoValido(x) { return x && x.lat !== '' && x.lng !== '' && x.lat != null && x.lng != null && isFinite(Number(x.lat)) && isFinite(Number(x.lng)); }
   function distanciaLocal() { return puntoValido(local()) && puntoValido(ubic) ? UI.haversineKm(local(), ubic) : null; }
   function minimoZona() { var z = zonaElegida(), l = local(); return z && z.minimo_domicilio !== '' && z.minimo_domicilio != null ? Number(z.minimo_domicilio) || 0 : Number(l.minimo_domicilio) || 0; }
@@ -186,6 +196,8 @@
     if (!conMenu.length) return bloqueo('Menú en preparación', 'Aún no hay platos publicados. Vuelve pronto.', false, c.whatsapp);
     var pedido = params.get('local') || MEM.leer('pedir_local');
     localId = conMenu.some(function (l) { return l.id === pedido; }) ? pedido : (conMenu.length === 1 ? conMenu[0].id : '');
+    // Al recargar, priorizar el restaurante del envío incierto para permitir recuperarlo.
+    if (envioPendiente && conMenu.some(function (l) { return l.id === envioPendiente.local_id; })) localId = envioPendiente.local_id;
     if (entrega.mesa && mesasOn()) entrega.tipo = 'mesa';
     marcarAgotados();
     pintarRedes();
@@ -246,8 +258,12 @@
   }
 
   function cambiarLocal(id) {
-    if (id !== localId && cantidadTotal()) carrito = {}; // el carrito es por local
-    localId = id; categoria = ''; cambio(); entrega.zona = ''; marcarAgotados();
+    if (id === localId) return irA(1);
+    if (!localesConMenu().some(function (l) { return l.id === id; })) return UI.aviso('Este restaurante no está disponible.', 'error');
+    if (envioPendiente) return UI.aviso('Hay un envío sin confirmar. Verifica primero ese pedido antes de cambiar de restaurante.', 'error');
+    if (cantidadTotal() && !global.confirm('Cambiar de restaurante vaciará los productos de tu carrito actual. ¿Quieres continuar?')) return;
+    carrito = {}; // los productos pertenecen exclusivamente al restaurante anterior
+    localId = id; categoria = ''; busqueda = ''; cambio(); entrega.zona = ''; entrega.hora = ''; ubic = null; marcarAgotados();
     MEM.guardar('pedir_local', id);
     irA(1);
   }
@@ -266,13 +282,15 @@
     var hayVendidos = platosDe(localId).some(function (p) { return (M.populares || []).indexOf(p.id) >= 0; });
     if (categoria !== '_top' && (!categoria || !cats.some(function (c) { return c.id === categoria; }))) categoria = hayVendidos ? '_top' : (cats.length ? cats[0].id : '');
     var varios = localesConMenu().length > 1;
-    var rep = ultimoCarrito();
+    var rep = envioPendiente ? null : ultimoCarrito();
     cuerpo().innerHTML = pasos() +
+      (envioPendiente ? '<div class="banda aviso-cerrado" role="alert">⚠️ <span><b>Pedido anterior sin confirmar.</b> No hagas otro pedido hasta verificar si llegó al restaurante. El reintento conserva los productos y el código originales.</span></div>' : '') +
+      (envioPendiente ? '<button class="btn" type="button" id="btn-recuperar-envio" style="margin-bottom:12px">↻ Recuperar pedido anterior</button>' : '') +
       (varios ? '<button class="btn secundario chico" type="button" id="btn-cambiar-local" style="margin-bottom:8px">📍 ' + UI.esc(local().nombre) + ' · cambiar</button>' : '<p class="subtitulo" style="margin:0 0 6px">📍 ' + UI.esc(local().nombre) + '</p>') +
       (entrega.tipo === 'mesa' && entrega.mesa ? '<div class="banda" style="margin:0 0 10px">🍽️ <span>Estás en la <b>mesa ' + UI.esc(entrega.mesa) + '</b>. Pide aquí y te lo llevamos.</span></div>' : '') +
       (local().pausado ? '<div class="banda aviso-cerrado" style="margin:0 0 10px">⏸ <span>' + UI.esc(local().mensaje_pausa || 'Este local pausó los pedidos por hoy.') + '</span></div>' : '') +
       (!abierto() ? '<div class="banda aviso-cerrado" style="margin:0 0 10px">🌙 <span>' + UI.esc(M.abierto.mensaje || 'Estamos cerrados.') + (cfg().recibir_cerrado !== 'NO' ? ' Puedes dejarnos tu pedido y lo atenderemos cuando abramos.' : '') + '</span></div>' : '') +
-      (rep && !cantidadTotal() ? '<button class="tarjeta repetir" type="button" id="btn-repetir"><span class="repetir-ico">🔁</span><span><b>Repetir mi último pedido</b><small>' + UI.esc(rep.map(function (i) { return i.cantidad + '× ' + plato(i.plato_id).nombre; }).join(', ')) + '</small></span><span aria-hidden="true">›</span></button>' : '') +
+      (rep && !cantidadTotal() ? '<button class="tarjeta repetir" type="button" id="btn-repetir"><span class="repetir-ico">🔁</span><span><b>Repetir mi último pedido</b><small>' + UI.esc(rep.map(function (i) { var p = plato(i.plato_id); return i.cantidad + '× ' + (p ? p.nombre : 'Producto no disponible'); }).join(', ')) + '</small></span><span aria-hidden="true">›</span></button>' : '') +
       '<div class="buscador"><span aria-hidden="true">🔎</span><input class="entrada" id="buscar" type="search" placeholder="Buscar un plato…" autocomplete="off" value="' + UI.esc(busqueda) + '" aria-label="Buscar un plato"></div>' +
       '<div class="categorias-barra"><div class="pestanas" role="tablist" style="padding-bottom:0;margin-bottom:0">' +
       (hayVendidos ? '<button class="pestana" role="tab" type="button" data-cat="_top" aria-selected="' + (categoria === '_top') + '">🔥 Lo más pedido</button>' : '') +
@@ -280,6 +298,7 @@
         return '<button class="pestana" role="tab" type="button" data-cat="' + UI.esc(c.id) + '" aria-selected="' + (c.id === categoria) + '">' + UI.esc(c.nombre) + '</button>';
       }).join('') + '</div></div>' +
       '<div class="platos" id="lista-platos"></div>';
+    var re = $('#btn-recuperar-envio'); if (re) re.addEventListener('click', function () { recuperarEnvio(re); });
     var cl = $('#btn-cambiar-local'); if (cl) cl.addEventListener('click', pintarLocales);
     var br = $('#btn-repetir'); if (br) br.addEventListener('click', function () { repetir(rep); });
     $('#buscar').addEventListener('input', function (e) { busqueda = e.target.value; pintarPlatos(); });
@@ -295,13 +314,22 @@
   }
 
   function repetir(lista) {
+    var agregados = 0, omitidos = 0;
     lista.forEach(function (i) {
       var p = plato(i.plato_id);
-      var extras = (i.extras || []).filter(function (n) { return p.extras.some(function (x) { return x.nombre === n; }); });
+      var cantidad = Math.floor(Number(i.cantidad));
+      if (!p || p.agotado || (p.local_id !== 'TODOS' && p.local_id !== localId) || !isFinite(cantidad) || cantidad < 1) { omitidos++; return; }
+      var extras = (Array.isArray(i.extras) ? i.extras : []).filter(function (n) {
+        return (p.extras || []).some(function (x) { return x.nombre === n; });
+      });
       var k = claveItem(p, extras);
-      carrito[k] = { plato: p, extras: extras, cantidad: Math.min(50, i.cantidad) };
+      var anterior = carrito[k] ? Number(carrito[k].cantidad) || 0 : 0;
+      carrito[k] = { plato: p, extras: extras, cantidad: Math.min(50, anterior + cantidad) };
+      agregados++;
     });
-    cambio(); UI.vibrar(); UI.aviso('Listo: tu último pedido está en el carrito.', 'ok');
+    if (!agregados) return UI.aviso('Los productos de ese pedido ya no están disponibles.', 'error');
+    cambio(); UI.vibrar();
+    UI.aviso(omitidos ? 'Agregamos los productos disponibles; algunos ya no están en el menú.' : 'Listo: los productos están en tu carrito.', 'ok');
     pintarPlatos(); pintarBarra(true);
   }
 
@@ -700,7 +728,13 @@
   /* ---------------- Paso 3: confirmar y pagar ---------------- */
   function pintarConfirmar() {
     $('#barra-pedido').hidden = true;
-    if (!items().length) return irA(1);
+    if (!items().length && !envioPendiente) return irA(1);
+    if (envioPendiente) {
+      cuerpo().innerHTML = '<div class="tarjeta" role="alert"><h2>Pedido anterior pendiente de confirmación</h2><p>Primero comprobaremos si el restaurante recibió tu pedido. No necesitas volver a llenar tus datos ni crear otro carrito.</p><button class="btn bloque" type="button" id="btn-recuperar-confirmar">↻ Comprobar y recuperar pedido</button><button class="btn secundario bloque" type="button" id="btn-volver-menu" style="margin-top:8px">Volver al menú</button></div>';
+      $('#btn-recuperar-confirmar').addEventListener('click', function (ev) { recuperarEnvio(ev.currentTarget); });
+      $('#btn-volver-menu').addEventListener('click', function () { irA(1); });
+      return;
+    }
     var c = cfg(), cli = MEM.leer('cliente') || {};
     var z = zonaElegida();
     /* 3.1.3: efectivo solo si el dueño lo permite y hasta su monto máximo */
@@ -715,6 +749,7 @@
       : entrega.tipo === 'mesa' ? '🍽️ Mesa ' + UI.esc(entrega.mesa) : '🏪 Retiro en ' + UI.esc(local().nombre);
     cuerpo().innerHTML = pasos() +
       '<h2 class="paso-titulo">Revisa y confirma</h2>' +
+      (envioPendiente ? '<div class="banda aviso-cerrado" role="alert">⚠️ <span><b>Envío anterior sin confirmar.</b> Al pulsar enviar se reintentará exactamente el pedido original, no los cambios posteriores del carrito. No hagas otro pedido hasta verificar el resultado.</span></div>' : '') +
       '<div class="tarjeta" id="resumen-items"></div>' +
       (mensajeMinimo() ? '<div class="banda">⚠️ <span>' + UI.esc(mensajeMinimo()) + '</span></div>' : '') +
       (mensajeCobertura() ? '<div class="banda">⚠️ <span>' + UI.esc(mensajeCobertura()) + ' Puedes corregirla o seguir con tu pedido.</span></div>' : '') +
@@ -824,6 +859,7 @@
   async function enviar(ev) {
     ev.preventDefault();
     var f = ev.target, boton = f.querySelector('button[type=submit]');
+    if (envioPendiente) return recuperarEnvio(boton);
     var d = UI.leerFormulario(f);
     var cli = MEM.leer('cliente') || {};
     var priv = $('#pe-privacidad'), promos = f.querySelector('[name=acepta_promos]');
@@ -836,7 +872,7 @@
     if (pago.forma === 'transferencia' && cuentasBanco().length > 1 && !pago.cuenta) { UI.aviso('Elige a qué cuenta vas a pagar.', 'error'); var cb = UI.$('.cuentas'); if (cb) cb.scrollIntoView({ block: 'center' }); return; }
     MEM.guardar('acepta_politicas', true);
     MEM.guardar('acepta_privacidad', true); MEM.guardar('acepta_promos', !!(promos && promos.checked));
-    if (!codigoEnvio) codigoEnvio = UI.codigoEnvio();
+    if (!codigoEnvio) codigoEnvio = envioPendiente ? envioPendiente.op_id : UI.codigoEnvio();
     var dom = entrega.tipo === 'domicilio';
     var datos = {
       op_id: codigoEnvio, local_id: localId, tipo_entrega: entrega.tipo, zona_id: dom ? entrega.zona : '', mesa: entrega.tipo === 'mesa' ? entrega.mesa : '',
@@ -847,22 +883,81 @@
         lat: dom && ubic && ubic.lat !== '' ? ubic.lat : '', lng: dom && ubic && ubic.lng !== '' ? ubic.lng : '',
         ubicacion_fuente: dom && ubic ? ubic.fuente : '', ubicacion_enlace: dom && ubic && ubic.enlace ? ubic.enlace : '' }
     };
+    // Si la respuesta anterior se perdió, reintentar exactamente la misma carga.
+    // Nunca reutilizar un op_id con platos, importes o dirección distintos.
+    if (envioPendiente) datos = envioPendiente;
+    else {
+      envioPendiente = JSON.parse(JSON.stringify(datos));
+      try { global.sessionStorage.setItem('mipedido_envio_pendiente', JSON.stringify({ fecha: Date.now(), datos: envioPendiente })); } catch (e) { /* sin almacenamiento */ }
+    }
+    await procesarEnvio(datos, boton);
+  }
+
+  async function procesarEnvio(datos, boton) {
     await UI.trabajando(boton, async function () {
       try {
         var r = await DATOS.pedir('pedidoCrear', datos, { guardar: true });
-        MEM.guardar('ultimo_carrito', { local: localId, items: datos.items });
-        guardarMiPedido({ n: r.pedido.numero, tel: cli.telefono, s: r.pedido.clave_seguimiento ? r.pedido.numero + '-' + r.pedido.clave_seguimiento : '', f: Date.now(), t: r.pedido.total, e: 'Recibido', l: localId,
+        MEM.guardar('ultimo_carrito', { local: datos.local_id, items: datos.items });
+        guardarMiPedido({ n: r.pedido.numero, tel: datos.cliente.telefono, s: r.pedido.clave_seguimiento ? r.pedido.numero + '-' + r.pedido.clave_seguimiento : '', f: Date.now(), t: r.pedido.total, e: 'Recibido', l: datos.local_id,
           i: datos.items.map(function (x) { var pl = plato(x.plato_id); return { p: x.plato_id, c: x.cantidad, x: x.extras, n: pl ? pl.nombre : '' }; }) });
-        var detalle = items();
+        var detalle = datos.items.map(function (x) { var pl = plato(x.plato_id); return { plato: pl, cantidad: x.cantidad, extras: x.extras }; });
         r.pedido.ubic_por_wa = !!(ubic && ubic.fuente === 'whatsapp'); // 3.1.1: solo entonces se pide la ubicación por WhatsApp
-        carrito = {}; codigoEnvio = ''; ubic = null; pago.propina = 0;
+        carrito = {}; codigoEnvio = ''; envioPendiente = null; ubic = null; pago.propina = 0;
+        try { global.sessionStorage.removeItem('mipedido_envio_pendiente'); } catch (e) { /* sin almacenamiento */ }
         UI.vibrar([30, 40, 30]);
         pintarExito(r.pedido, detalle);
       } catch (err) {
         // El código de envío se conserva: si vuelve a intentar, no se duplica.
-        UI.ventana({ icono: '⚠️', titulo: 'Tu pedido no se envió', texto: err.message, botones: [{ texto: 'Entendido', valor: true }] });
+        var decision = await UI.ventana({ icono: '⚠️', titulo: 'No pudimos confirmar el envío', texto: 'Comprueba el pedido original antes de crear otro. No se duplicará el envío.', botones: [{ texto: 'Cerrar', valor: null, clase: 'secundario' }, { texto: 'Comprobar pedido', valor: 'comprobar' }] });
+        if (decision === 'comprobar' && !recuperacionEnCurso) await recuperarEnvio(boton);
       }
     });
+  }
+
+  async function recuperarEnvio(boton) {
+    if (!envioPendiente) return UI.aviso('No hay ningún envío pendiente de recuperación.', 'error');
+    if (envioPendiente.local_id !== localId) return UI.aviso('El envío pendiente pertenece a otro local. No se puede reintentar desde este menú.', 'error');
+    if (recuperacionEnCurso) return;
+    recuperacionEnCurso = true;
+    if (boton) boton.disabled = true;
+    var original = envioPendiente;
+    try {
+    try {
+      var consulta = await DATOS.pedir('pedidoRecuperar', { op_id: original.op_id, telefono: original.cliente.telefono });
+      if (consulta.encontrado && consulta.pedido) {
+        var p = consulta.pedido;
+        guardarMiPedido({ n: p.numero, tel: original.cliente.telefono, s: p.clave_seguimiento ? p.numero + '-' + p.clave_seguimiento : '', f: Date.now(), t: p.total, e: p.estado || 'Recibido', l: original.local_id,
+          i: original.items.map(function (x) { var pl = plato(x.plato_id); return { p: x.plato_id, c: x.cantidad, x: x.extras, n: pl ? pl.nombre : '' }; }) });
+        // Recuperar el pedido no significa que el carrito actual sea el original.
+        // Solo vaciarlo cuando sus artículos coinciden con el envío recuperado;
+        // de lo contrario preservar el nuevo pedido que el cliente esté armando.
+        var firmaItems = function (items) { return JSON.stringify((items || []).map(function (x) {
+          return { p: String(x.plato_id || x.p || ''), c: Number(x.cantidad || x.c || 0), e: (Array.isArray(x.extras || x.x) ? (x.extras || x.x).slice() : String(x.extras || x.x || '').split(',')).map(function (v) { return String(v).trim(); }).filter(Boolean).sort() };
+        }).sort(function (a, b) { return JSON.stringify(a).localeCompare(JSON.stringify(b)); })); };
+        var carritoActual = Object.keys(carrito).map(function (k) { var x = carrito[k]; return { plato_id: (x.plato && x.plato.id) || x.plato_id || x.p || k, cantidad: x.cantidad || x.c, extras: x.extras || x.x || '' }; });
+        var esMismoCarrito = firmaItems(carritoActual) === firmaItems(original.items);
+        MEM.guardar('ultimo_carrito', { local: original.local_id, items: original.items });
+        if (esMismoCarrito) { carrito = {}; ubic = null; pago.propina = 0; }
+        codigoEnvio = ''; envioPendiente = null;
+        try { global.sessionStorage.removeItem('mipedido_envio_pendiente'); } catch (e) { /* sin almacenamiento */ }
+        UI.aviso('Pedido ' + p.numero + ' localizado. No se ha creado otro.', 'exito');
+        if (esMismoCarrito) {
+          // Recuperación: no mostrar instrucciones de pago nuevas para un pedido ya existente.
+          pintarMenu(); pintarSeguimiento(true);
+        }
+        else { pintarMenu(); pintarSeguimiento(true); }
+        return;
+      }
+    } catch (err) {
+      // La consulta también puede fallar por mala conexión: NO crear otro pedido con otro código.
+      return UI.aviso('No se pudo comprobar el pedido. Revisa tu conexión y vuelve a intentarlo; no hagas otro pedido.', 'error');
+    }
+    // El servidor no encontró el código: reintentar la carga ORIGINAL, protegida por op_id.
+    await procesarEnvio(original, boton);
+    } finally {
+      recuperacionEnCurso = false;
+      if (boton && boton.isConnected) boton.disabled = false;
+    }
   }
 
   function textoWhatsApp(p) {
@@ -951,18 +1046,35 @@
       if (!cont.innerHTML) cont.innerHTML = '<div class="seg-caja"><b>Mis pedidos</b><span class="item-sub">Consultando…</span></div>';
       try {
         var conClave = act.filter(function (x) { return x.s; });
-        var r = conClave.length ? await DATOS.pedir('pedidosSeguir', { s: conClave.map(function (x) { return x.s; }) }) : { pedidos: [] };
-        r.pedidos.forEach(function (p, k) { res[conClave[k].n] = p; });
+        // El servidor admite máximo diez claves por consulta: procesar por lotes.
+        for (var lote = 0; lote < conClave.length; lote += 10) {
+          var grupo = conClave.slice(lote, lote + 10);
+          try {
+            var r = await DATOS.pedir('pedidosSeguir', { s: grupo.map(function (x) { return x.s; }) });
+            // Asociar por clave y no por posición: una respuesta parcial no puede
+            // mostrar el pedido de otro cliente en esta pantalla.
+            var porClave = {};
+            (Array.isArray(r.pedidos) ? r.pedidos : []).forEach(function (p) {
+              if (p && p.seguimiento) porClave[String(p.seguimiento)] = p;
+            });
+            grupo.forEach(function (x) {
+              var encontrado = porClave[String(x.s)];
+              res[x.n] = encontrado && String(encontrado.numero) === String(x.n) ? encontrado : { consulta_error: true };
+            });
+          } catch (e) {
+            grupo.forEach(function (x) { res[x.n] = { consulta_error: true }; });
+          }
+        }
         for (var j = 0; j < act.length; j++) { // pedidos viejos sin clave: número + celular
           var x = act[j]; if (x.s || res[x.n]) continue;
-          try { res[x.n] = await DATOS.pedir('pedidoConsultar', { numero: x.n, telefono: x.tel || (MEM.leer('cliente') || {}).telefono || '' }); } catch (e) { res[x.n] = { no_existe: true }; }
+          try { res[x.n] = await DATOS.pedir('pedidoConsultar', { numero: x.n, telefono: x.tel || (MEM.leer('cliente') || {}).telefono || '' }); } catch (e) { res[x.n] = { consulta_error: true }; }
         }
         var cambio2 = false;
         lista.forEach(function (x) {
           var p = res[x.n]; if (!p) return;
-          if (p.no_existe) { x.e = 'Anulado'; cambio2 = true; return; }
+          if (p.no_existe || p.consulta_error) { return; }
           if (p.estado !== x.e) { x.e = p.estado; if (p.estado === 'Entregado') x.fe = Date.now(); cambio2 = true; }
-          if (p.total && !x.t) { x.t = p.total; cambio2 = true; }
+          if (p.total != null && Number.isFinite(Number(p.total)) && Number(p.total) !== Number(x.t)) { x.t = p.total; cambio2 = true; }
           if (p.seguimiento && !x.s) { x.s = p.seguimiento; cambio2 = true; }
           if (p.calificacion && !x.cal) { x.cal = p.calificacion; cambio2 = true; }
         });
@@ -974,7 +1086,37 @@
         return;
       }
     }
-    cont.innerHTML = act.map(function (x) { return res[x.n] && !res[x.n].no_existe ? tarjetaSeguimiento(res[x.n], x) : ''; }).join('') +
+    // Consultar respuestas sin bloquear el seguimiento ni ocultar el último estado
+    // válido cuando la bandeja de solicitudes no está disponible.
+    var solicitudesPorPedido = {};
+    await Promise.all(act.filter(function (x) { return res[x.n] && !res[x.n].consulta_error && !res[x.n].no_existe; }).map(async function (x) {
+      try {
+        var respuesta = await DATOS.pedir('pedidoCambiosConsultar', x.s ? { s: x.s } :
+          { numero: x.n, telefono: x.tel || (MEM.leer('cliente') || {}).telefono || '' });
+        if (respuesta.numero === x.n) solicitudesPorPedido[x.n] = respuesta.solicitudes || [];
+      } catch (e) { /* Seguimiento sigue funcionando si falla la consulta de solicitudes. */ }
+    }));
+    cont.innerHTML = act.map(function (x) { return res[x.n] && !res[x.n].no_existe && !res[x.n].consulta_error ? tarjetaSeguimiento(res[x.n], x) + (solicitudesPorPedido[x.n] || []).slice(-3).map(function (sol) {
+      return '<div class="seg-caja"><b>📝 Solicitud: ' + UI.esc(sol.tipo) + '</b>' +
+        '<div class="item-sub">Estado: ' + UI.esc(sol.estado) + '</div>' +
+        '<p>' + UI.esc(sol.detalle) + '</p>' +
+        (sol.respuesta ? '<p><b>Respuesta del restaurante:</b> ' + UI.esc(sol.respuesta) + '</p>' : '') +
+        (sol.cotizacion ? '<div class="item-sub"><b>Productos cotizados:</b> ' +
+          UI.esc((sol.cotizacion.lineas || []).map(function (l) { return l.cantidad + '× ' + l.nombre +
+            (l.extras && l.extras.length ? ' (' + l.extras.join(', ') + ')' : ''); }).join('; ')) + '</div>' +
+          '<p><b>' + (sol.aplicado ? 'Adicional aplicado: ' : sol.estado === 'Cotizada' ? 'Adicional a confirmar: ' : 'Adicional aceptado: ') + UI.esc(UI.dinero(sol.cotizacion.adicional)) + '</b>' +
+          (sol.aplicado ? ' · Total al aplicar: ' : ' · Total estimado: ') + UI.esc(UI.dinero(sol.cotizacion.total_estimado)) + '</p>' +
+          (sol.estado === 'Cotizada'
+            ? '<button class="btn chico" type="button" data-aceptar-cambio="' + UI.esc(sol.id) +
+              '" data-numero-cambio="' + UI.esc(x.n) + '">Aceptar importe</button> ' +
+              '<button class="btn secundario chico" type="button" data-rechazar-cambio="' + UI.esc(sol.id) +
+              '" data-numero-cambio="' + UI.esc(x.n) + '">Rechazar</button>'
+            : (sol.aplicado ? '<p><b>Adicional aplicado al pedido.</b> El total actualizado aparece en el seguimiento.</p>' :
+              sol.estado === 'Aplicando' ? '<p><b>Aplicación en revisión.</b> El restaurante debe conciliarla antes de despachar.</p>' :
+              '<p><b>Importe aceptado por ti.</b> Pendiente de gestión y verificación del pago en el restaurante.</p>'))
+          : '') +
+        (sol.aplicado ? '<small>El adicional ya forma parte de tu pedido.</small>' : '<small>Esta solicitud aún no modifica el pedido ni autoriza un cobro automático.</small>') + '</div>';
+    }).join('') : '<div class="seg-caja"><b>' + UI.esc(x.n) + '</b><div class="item-sub">No se pudo actualizar el estado. Conservamos el último estado conocido: ' + UI.esc(x.e) + '.</div><button class="enlace" type="button" data-seg-act>Reintentar</button></div>'; }).join('') +
       (hist.length ? '<details class="seg-caja mis-pedidos"' + (act.length ? '' : ' open') + '><summary><b>🧾 Mis pedidos anteriores</b> <small>(' + hist.length + ')</small></summary>' +
         '<div class="lista">' + hist.map(function (x) {
           var fecha = new Date(x.f || Date.now());
@@ -984,10 +1126,124 @@
         }).join('') + '</div>' +
         '<p class="ayuda" style="margin:8px 0 4px">Tu historial se guarda solo en este teléfono y se borra solo a los ' + diasHistorial() + ' días.</p>' +
         '<button class="btn borde chico" type="button" id="mp-borrar">🗑 Borrar mi historial</button></details>' : '');
+    // La confirmación del cliente se vincula a la cotización vigente y al pedido autenticado.
+    ['aceptar', 'rechazar'].forEach(function (accion) {
+      UI.$$('[data-' + accion + '-cambio]', cont).forEach(function (b) {
+        b.addEventListener('click', function () {
+          UI.trabajando(b, async function () {
+            var numero = b.getAttribute('data-numero-cambio');
+            var id = b.getAttribute('data-' + accion + '-cambio');
+            var x = lista.filter(function (p) { return p.n === numero; })[0];
+            var sol = (solicitudesPorPedido[numero] || []).filter(function (p) {
+              return p.id === id && p.cotizacion && p.estado === 'Cotizada';
+            })[0];
+            if (!x || !sol) return UI.aviso('La cotización cambió. Actualiza tu pedido.', 'error');
+            var acepta = accion === 'aceptar';
+            var texto = acepta
+              ? '¿Aceptas el adicional de ' + UI.dinero(sol.cotizacion.adicional) + ' para ' + numero +
+                '? Total estimado: ' + UI.dinero(sol.cotizacion.total_estimado) +
+                '. Esto no realiza un cargo ni modifica todavía el pedido.'
+              : '¿Rechazas el adicional de ' + UI.dinero(sol.cotizacion.adicional) + '? Tu pedido original no cambiará.';
+            var confirmado = await UI.confirmar(acepta ? 'Confirmar importe adicional' : 'Rechazar cotización',
+              texto, acepta ? 'Sí, acepto el importe' : 'Sí, rechazar');
+            if (!confirmado) return;
+            try {
+              var payload = x.s ? { s: x.s } : {
+                numero: x.n, telefono: x.tel || (MEM.leer('cliente') || {}).telefono || ''
+              };
+              payload.id = sol.id;
+              payload.cotizacion_id = sol.cotizacion.id;
+              payload.acepta = acepta;
+              var resultado = await DATOS.pedir('pedidoCambioConfirmar', payload);
+              UI.aviso(resultado.estado === 'Confirmada cliente'
+                ? 'Importe aceptado. Espera la verificación de pago y aplicación por el restaurante.'
+                : 'Cotización rechazada; el pedido original no cambia.', 'ok');
+              await pintarSeguimiento(false);
+            } catch (err) {
+              UI.aviso('No se registró la respuesta: ' + (err.message || 'intenta nuevamente'), 'error');
+            }
+          });
+        });
+      });
+    });
     UI.$$('[data-seg-act]', cont).forEach(function (b) { b.addEventListener('click', function (e) { UI.trabajando(e.currentTarget, function () { return pintarSeguimiento(true); }); }); });
     UI.$$('[data-calificar]', cont).forEach(function (b) { b.addEventListener('click', function () { var x = lista.filter(function (y) { return y.n === b.getAttribute('data-calificar'); })[0]; if (x) calificar({ numero: x.n, telefono: x.tel || (MEM.leer('cliente') || {}).telefono || '', s: x.s }); }); });
     UI.$$('[data-comprobante]', cont).forEach(function (b) { b.addEventListener('click', function () { var p = res[b.getAttribute('data-comprobante')]; if (p) UI.abrirWhatsApp(cfg().whatsapp, 'Hola, envío el comprobante del pedido *' + p.numero + '* por ' + UI.dinero(p.total) + (p.cuenta_pago ? ' (a ' + p.cuenta_pago + ')' : '') + '. 👇'); }); });
-    UI.$$('[data-escribir]', cont).forEach(function (b) { b.addEventListener('click', function () { UI.abrirWhatsApp(cfg().whatsapp, 'Hola, sobre mi pedido *' + b.getAttribute('data-escribir') + '*: '); }); });
+    UI.$$('[data-escribir]', cont).forEach(function (b) { b.addEventListener('click', async function () {
+      var numero = b.getAttribute('data-escribir');
+      var pedido = res[numero];
+      var x = lista.filter(function (y) { return y.n === numero; })[0];
+      if (!x || !pedido || pedido.consulta_error || pedido.no_existe) return UI.aviso('Actualiza el estado antes de solicitar cambios.', 'error');
+      var estado = pedido.estado;
+      // Preguntar qué desea hacer, en vez de suponer que toda solicitud
+      // es una sustitución. Cada opción tiene restricciones distintas.
+      var opciones = estado === 'Recibido' ? [
+        { texto: 'Cerrar', valor: null, clase: 'secundario' },
+        { texto: '＋ Agregar', valor: 'agregar' },
+        { texto: '↑ Aumentar', valor: 'aumentar' },
+        { texto: '↔ Cambiar', valor: 'cambiar' },
+        { texto: '− Quitar', valor: 'quitar' },
+        { texto: '↓ Reducir', valor: 'reducir' },
+        { texto: 'Cancelar', valor: 'cancelar' }
+      ] : estado === 'Preparando' ? [
+        { texto: 'Cerrar', valor: null, clase: 'secundario' },
+        { texto: '＋ Agregar', valor: 'agregar' },
+        { texto: '↑ Aumentar', valor: 'aumentar' }
+      ] : [
+        { texto: 'Cerrar', valor: null, clase: 'secundario' },
+        { texto: 'Consultar opciones', valor: 'agregar' }
+      ];
+      var tipo = await UI.ventana({
+        icono: '📝', titulo: '¿Qué necesitas hacer?',
+        texto: estado === 'En camino' ? 'El motorizado ya salió. Los adicionales necesitan otro envío o retiro.' :
+          estado === 'Preparando' ? 'Ya están preparando tu pedido. Solo puedes consultar adicionales o aumentar cantidades.' :
+          estado === 'Recibido' ? 'Selecciona la modificación que quieres solicitar. Ningún cambio se aplica sin aprobación del restaurante.' :
+          'Este pedido ya no admite cambios. Puedes consultar las alternativas.',
+        botones: opciones
+      });
+      if (!tipo) return;
+      var politica;
+      try {
+        b.disabled = true;
+        politica = await DATOS.pedir('pedidoPoliticaCambios', x.s ? { s: x.s, tipo: tipo } : { numero: numero, telefono: x.tel || (MEM.leer('cliente') || {}).telefono || '', tipo: tipo });
+      } catch (err) {
+        UI.aviso('No se pudo verificar si el restaurante acepta cambios. Intenta nuevamente.', 'error');
+        return;
+      } finally { b.disabled = false; }
+      if (politica.numero !== numero) return UI.aviso('No se pudo validar el pedido. Actualiza el seguimiento.', 'error');
+      var nombres = { agregar: 'agregar productos', aumentar: 'aumentar cantidades', cambiar: 'cambiar productos', quitar: 'quitar productos', reducir: 'reducir cantidades', cancelar: 'cancelar el pedido' };
+      if (politica.permitido) {
+        var detalle = await UI.pedirDato({
+          icono: '📝', titulo: 'Solicitar cambio',
+          etiqueta: 'Productos, cantidades y detalles',
+          ph: 'Ejemplo: agregar 2 jugos de naranja',
+          modo: 'text', boton: 'Enviar solicitud',
+          texto: 'El restaurante debe confirmar el cambio antes de aplicarlo.',
+          validar: function (v) { return v.trim().length >= 5 && v.length <= 500 ? '' : 'Describe el cambio entre 5 y 500 caracteres.'; }
+        });
+        if (detalle === null || detalle === undefined) return;
+        detalle = String(detalle).trim();
+        if (detalle.length < 5 || detalle.length > 500) return UI.aviso('Describe el cambio entre 5 y 500 caracteres.', 'error');
+        try {
+          b.disabled = true;
+          var solicitud = await DATOS.pedir('pedidoCambioSolicitar', x.s ?
+            { s: x.s, tipo: tipo, detalle: detalle } :
+            { numero: numero, telefono: x.tel || (MEM.leer('cliente') || {}).telefono || '', tipo: tipo, detalle: detalle });
+          if (solicitud.estado === 'Pendiente') {
+            UI.aviso(solicitud.repetida ? 'Tu solicitud ya está pendiente de respuesta.' : 'Solicitud enviada al restaurante. Espera su confirmación; tu pedido no cambió todavía.', 'exito');
+            return;
+          }
+        } catch (err) {
+          UI.aviso('No pudimos registrar la solicitud: ' + (err.message || 'intenta nuevamente'), 'error');
+          return;
+        } finally { b.disabled = false; }
+      }
+      var texto = 'Quisiera ' + (nombres[tipo] || 'consultar opciones') + '. ' + politica.mensaje +
+        (politica.permitido ? ' Por favor, confirmen disponibilidad, importe y horario antes de aplicar cualquier modificación.' : ' Quisiera conocer las opciones disponibles.');
+      var telefonoLocal = cfg().whatsapp;
+      if (!UI.digitos(telefonoLocal)) return UI.aviso('Este restaurante no tiene WhatsApp configurado para solicitudes.', 'error');
+      UI.abrirWhatsApp(telefonoLocal, 'Hola, sobre mi pedido *' + numero + '* (' + politica.estado + '): ' + texto + ' Entiendo que este mensaje no modifica el pedido ni autoriza cobros.');
+    }); });
     UI.$$('[data-repetir]', cont).forEach(function (b) { b.addEventListener('click', function () { var x = lista.filter(function (y) { return y.n === b.getAttribute('data-repetir'); })[0]; repetirDe(x); }); });
     var bb = $('#mp-borrar'); if (bb) bb.addEventListener('click', async function () {
       var ok = await UI.confirmar('¿Borrar tu historial?', 'Se borra la lista de pedidos de este teléfono. Tus pedidos ya hechos no se cancelan.', 'Sí, borrar', true);
@@ -995,6 +1251,14 @@
       guardarMisPedidos(misPedidos().filter(activo)); MEM.guardar('ultimo_pedido', null); UI.aviso('Historial borrado.', 'ok'); pintarSeguimiento();
     });
     if (abrir) cont.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  // Orientación honesta mientras no exista una operación de cambios autorizada en el servidor.
+  function mensajeCambioPedido(estado) {
+    if (estado === 'Recibido') return '¿Quieres modificar tu pedido? Solicítalo antes de que el restaurante empiece a prepararlo. El cambio requiere confirmación.';
+    if (estado === 'Preparando') return '¿Quieres agregar productos? Consulta su disponibilidad y precio. No se pueden quitar productos que ya están en preparación.';
+    if (estado === 'En camino') return 'Tu pedido ya salió. El motorizado no debe regresar por productos adicionales; consulta un nuevo envío o retiro.';
+    return 'Consulta cualquier cambio directamente con el restaurante.';
   }
 
   /* Tarjeta de seguimiento de un pedido en curso. */
@@ -1013,7 +1277,7 @@
             r.estado === 'En camino' ? (r.eta_moto ? '<b>Llega en unos ' + r.eta_moto.desde + ' a ' + r.eta_moto.hasta + ' min.</b> Tiempo orientativo; puede variar.' : (r.en_camino ? 'Salió hace ' + UI.minutosDesde(r.en_camino) + ' min. ' + (UI.minutosDesde(r.en_camino) > (Number(cfg().minutos_preparacion) || 20) + 30 ? 'Hay más tráfico de lo normal; seguimos atentos a tu entrega.' : 'Te avisaremos si hay cambios.') : 'Pronto estará en camino.')) :
             'Tiempo aproximado: <b>' + ((Number(r.tiempo_preparacion) || 20) + (Number(r.tiempo_zona) || 0)) + ' a ' + ((Number(r.tiempo_preparacion) || 20) + (Number(r.tiempo_zona) || 0) + 10) + ' min.</b> Puede variar') + '</p>' : '')) +
       (digital ? (r.pago_verificado
-        ? '<div class="pago-estado ok">✅ <span><b>Pago confirmado en nuestra cuenta.</b>' + (r.estado === 'Recibido' ? ' Ya preparamos tu pedido.' : '') + '</span></div>'
+        ? '<div class="pago-estado ok">✅ <span><b>Pago confirmado en nuestra cuenta.</b>' + (r.estado === 'Recibido' ? ' El restaurante ya puede revisar tu pedido.' : '') + '</span></div>'
         : '<div class="pago-estado espera">⏳ <span><b>Pago por confirmar.</b> Tu pedido se prepara cuando confirmemos el pago de <b>' + UI.esc(UI.dinero(r.total)) + '</b> en nuestra cuenta' + (r.cuenta_pago ? ' (' + UI.esc(r.cuenta_pago) + ')' : '') + '. Si pagaste desde otro banco puede tardar un poco.</span></div>' +
           (r.forma_pago === 'transferencia' ? tarjetasCuentasSolo(r) : '') +
           (UI.digitos(cfg().whatsapp) ? '<button class="btn chico bloque" type="button" data-comprobante="' + UI.esc(r.numero) + '" style="margin-top:8px">💬 Enviar comprobante por WhatsApp</button>' : '')) : '') +
@@ -1021,19 +1285,26 @@
       (r.codigo_entrega ? '<div class="codigo-entrega"><span>🔢 Tu código de entrega</span><b>' + UI.esc(r.codigo_entrega) + '</b><small>Dáselo al motorizado solo cuando tengas tu pedido en la mano.</small></div>' : '') +
       (r.estado === 'Entregado' && !r.calificacion ? '<button class="btn chico bloque" type="button" data-calificar="' + UI.esc(r.numero) + '" style="margin-top:10px">⭐ ¿Cómo estuvo? Califícanos</button>' : '') +
       (r.sellos_meta ? '<div class="sellos" title="Tarjeta de sellos">' + sellosHtml(r.sellos, r.sellos_meta) + '</div>' : '') +
-      (FINALES.indexOf(r.estado) < 0 && UI.digitos(cfg().whatsapp) ? '<p class="ayuda" style="margin:8px 0 0">¿Necesitas cambiar algo? <button class="enlace" type="button" data-escribir="' + UI.esc(r.numero) + '">Escríbenos por WhatsApp</button> (un pedido enviado ya no se edita aquí).</p>' : '') +
+      (FINALES.indexOf(r.estado) < 0 && UI.digitos(cfg().whatsapp) ? '<p class="ayuda" style="margin:8px 0 0">' + UI.esc(mensajeCambioPedido(r.estado)) + ' <button class="enlace" type="button" data-escribir="' + UI.esc(r.numero) + '">Consultar por WhatsApp</button></p>' : '') +
       '</div>';
   }
 
   /* Repetir un pedido del historial (solo platos que siguen disponibles en ese local). */
   function repetirDe(x) {
     if (!x || !x.i) return;
-    if (x.l && x.l !== localId && M.locales.some(function (l) { return l.id === x.l; })) { localId = x.l; MEM.guardar('pedir_local', localId); marcarAgotados(); }
+    if (envioPendiente) return UI.aviso('Primero recupera o verifica el pedido pendiente antes de repetir otro.', 'error');
+    if (x.l && x.l !== localId && M.locales.some(function (l) { return l.id === x.l; })) {
+      // Nunca mezclar productos de dos restaurantes al repetir un pedido histórico.
+      if (cantidadTotal()) return UI.aviso('Tu carrito tiene productos de otro local. Vacíalo antes de repetir este pedido.', 'error');
+      if (!localesConMenu().some(function (l) { return l.id === x.l; })) return UI.aviso('El restaurante de ese pedido ya no recibe pedidos.', 'error');
+      localId = x.l; categoria = ''; busqueda = ''; entrega.zona = ''; entrega.hora = ''; ubic = null;
+      MEM.guardar('pedir_local', localId); marcarAgotados();
+    }
     var lista = x.i.map(function (y) { return { plato_id: y.p, cantidad: y.c, extras: y.x || [] }; }).filter(function (y) { var p = plato(y.plato_id); return p && !p.agotado && (p.local_id === 'TODOS' || p.local_id === localId); });
     if (!lista.length) return UI.aviso('Esos platos ya no están disponibles.', 'error');
     if (paso !== 1) { paso = 1; pintarMenu(); }
     repetir(lista);
-    if (lista.length < x.i.length) UI.aviso('Algunos platos ya no están disponibles; agregamos los demás.', '');
+    // repetir() ya informa si algún producto fue omitido; evitar avisos duplicados.
   }
 
   /* 3.1.5: enlace personal «Mis pedidos» (?c=…): trae el historial a este teléfono. */

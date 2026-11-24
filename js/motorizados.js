@@ -229,6 +229,16 @@
 
   /* =================== Mis entregas (motorizado) =================== */
   var mias = null;
+  var timerEntregas = null, consultandoEntregas = false;
+  function programarActualizacionEntregas() {
+    if (timerEntregas) clearTimeout(timerEntregas);
+    timerEntregas = setTimeout(function () {
+      timerEntregas = null;
+      if (APP.vistaActual !== 'entregas' || !APP.sesion || APP.sesion.rol !== 'motorizado') return;
+      if (document.visibilityState === 'visible') cargarMias(true);
+      programarActualizacionEntregas();
+    }, 30000);
+  }
 
   APP.vistas.entregas = {
     titulo: 'Mis entregas', icono: '📍', orden: 10, roles: ['motorizado'],
@@ -236,15 +246,24 @@
       cont.innerHTML = UI.encabezado('Mis entregas', 'Toque «Salí» al salir y «Entregado» al entregar') + '<div id="en-cuerpo">' + UI.esqueleto(3) + '</div>';
       UI.$('[data-actualizar]', cont).addEventListener('click', function (e) { UI.trabajando(e.currentTarget, cargarMias); });
       cargarMias();
+      programarActualizacionEntregas();
     }
   };
 
-  async function cargarMias() {
+  async function cargarMias(silencioso) {
+    if (consultandoEntregas) return;
+    consultandoEntregas = true;
     try {
-      mias = await DATOS.pedir('misEntregas', {});
-      pintarMias();
+      var nuevos = await DATOS.pedir('misEntregas', {});
+      if (APP.vistaActual !== 'entregas') return;
+      if (!silencioso || !mias || JSON.stringify(nuevos) !== JSON.stringify(mias)) {
+        mias = nuevos;
+        pintarMias();
+      }
     } catch (err) {
-      if (UI.$('#en-cuerpo')) UI.$('#en-cuerpo').innerHTML = '<div class="banda error">⚠️ <span>' + UI.esc(err.message) + '</span></div>';
+      if (!silencioso && !mias && UI.$('#en-cuerpo')) UI.$('#en-cuerpo').innerHTML = '<div class="banda error">⚠️ <span>' + UI.esc(err.message) + '</span></div>';
+    } finally {
+      consultandoEntregas = false;
     }
   }
 
@@ -311,6 +330,7 @@
     var bloqueadoPago = digital && !p.pago_verificado && (!global.APP.publico || global.APP.publico.verificar_antes_salir !== 'NO');
     var principal;
     if (p.estado === 'En camino') principal = '<p class="ayuda" style="margin:10px 0 6px;text-align:center">Tócalo cuando el cliente ya tenga su pedido en la mano.</p><button class="btn entrega-principal" type="button" data-e="entregado" data-id="' + id + '">📦 Marcar como entregado</button>';
+    else if (p.cambios_pendientes) principal = '<div class="esperando">⏳ El restaurante está resolviendo cambios del pedido. Espera antes de salir.</div>';
     else if (bloqueadoPago) principal = '<div class="esperando">⏳ Esperando que el local verifique el pago</div>';
     else if (p.estado === 'Recibido') principal = '<div class="esperando">🧾 La cocina aún no empieza</div><button class="btn borde bloque" type="button" data-e="sali" data-id="' + id + '" style="margin-top:8px">🛵 Ya lo tengo, salí</button>';
     else principal = '<div class="esperando">👨‍🍳 Cocina preparando…</div><button class="btn entrega-principal" type="button" data-e="sali" data-id="' + id + '">🛵 Ya lo tengo, salí</button>';
@@ -369,7 +389,7 @@
           await cargarMias();
           var ofrecer = await UI.confirmar('¿Avisar al cliente que ya saliste?', 'Se abre WhatsApp con el mensaje listo.', '💬 Sí, avisar');
           if (ofrecer) accionEntrega(null, 'wa_sali', id);
-        } catch (err) { UI.error('No se guardó', err.message); if (err.codigo === 'CAMBIO') cargarMias(); }
+        } catch (err) { UI.error('No se guardó', err.message); if (err.codigo === 'CAMBIO' || err.codigo === 'CAMBIO_PENDIENTE') await cargarMias(); }
       });
     }
     if (que === 'wa_sali') {

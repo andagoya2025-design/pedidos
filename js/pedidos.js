@@ -20,11 +20,13 @@
       cont.innerHTML = UI.encabezado('Pedidos', APP.nombreLocal(APP.local),
         '<button class="btn secundario chico sonido-btn" type="button" id="btn-sonido" aria-pressed="' + sonido + '" title="Sonido de pedido nuevo">' + (sonido ? '🔔' : '🔕') + '</button>' +
         '<button class="btn secundario chico" type="button" id="btn-buscar-pedido" aria-label="Buscar pedido">🔎</button>' +
+        '<button class="btn secundario chico" type="button" id="btn-cambios">📝 Solicitudes</button>' +
         '<button class="btn chico" type="button" id="btn-nuevo-pedido">＋ Nuevo</button>') +
         '<div id="pd-cuerpo">' + UI.esqueleto(4) + '</div>';
       UI.$('[data-actualizar]', cont).addEventListener('click', function (e) { UI.trabajando(e.currentTarget, cargar); });
       UI.$('#btn-nuevo-pedido', cont).addEventListener('click', nuevoPedido);
       UI.$('#btn-buscar-pedido', cont).addEventListener('click', buscarPedido);
+      UI.$('#btn-cambios', cont).addEventListener('click', verSolicitudes);
       UI.$('#btn-sonido', cont).addEventListener('click', function (e) {
         var b = e.currentTarget;
         avisosVentana().then(function () {
@@ -37,6 +39,183 @@
     }
   };
 
+
+  /* El restaurante selecciona productos REALES del menú, sin cambiar aún el pedido.
+   * Permite varios productos y extras; el servidor recalcula todos los precios. */
+  async function cotizarSolicitud(x) {
+    var menu;
+    try { menu = await DATOS.pedir('menuListar', { local_id: x.local_id }); }
+    catch (err) { return UI.aviso('No se pudo cargar el menú: ' + err.message, 'error'); }
+    var platos = (menu.platos || []).filter(function (p) {
+      return p.activo === true && p.agotado !== true &&
+        (String(p.local_id) === String(x.local_id) || String(p.local_id) === 'TODOS');
+    });
+    if (!platos.length) return UI.aviso('No hay productos disponibles para cotizar.', 'error');
+    var items = [];
+    var otro = true;
+    while (otro && items.length < 12) {
+      var busqueda = await UI.pedirDato({
+        titulo: 'Buscar producto para ' + x.numero, etiqueta: 'Nombre del producto',
+        modo: 'text', ph: 'Escribe parte del nombre', boton: 'Buscar',
+        texto: 'Los precios y extras se verifican nuevamente en el servidor.'
+      });
+      if (busqueda === null || busqueda === undefined) return;
+      var termino = String(busqueda).trim().toLowerCase();
+      var encontrados = platos.filter(function (p) { return String(p.nombre).toLowerCase().indexOf(termino) >= 0; });
+      if (!encontrados.length) { UI.aviso('No se encontraron productos. Inténtalo otra vez.', 'error'); continue; }
+      var opciones = [{ texto: 'Cancelar', valor: null, clase: 'secundario' }];
+      encontrados.slice(0, 12).forEach(function (p, i) {
+        opciones.push({ texto: p.nombre + ' · ' + UI.dinero(p.precio), valor: String(i) });
+      });
+      var seleccionado = await UI.ventana({
+        titulo: 'Selecciona el producto', texto: encontrados.length > 12
+          ? 'Hay más de 12 resultados; afina la búsqueda si el producto no aparece.' : 'Elige un producto.',
+        botones: opciones
+      });
+      if (seleccionado === null || seleccionado === undefined) return;
+      var plato = encontrados[Number(seleccionado)];
+      if (!plato) return;
+      var cantidadTexto = await UI.pedirDato({
+        titulo: 'Cantidad de ' + plato.nombre, etiqueta: 'Cantidad adicional (1 a 50)',
+        modo: 'text', ph: '1', boton: 'Continuar',
+        validar: function (v) { return /^[1-9][0-9]?$/.test(String(v).trim()) && Number(v) <= 50 ? '' : 'Ingresa una cantidad entre 1 y 50.'; }
+      });
+      if (cantidadTexto === null || cantidadTexto === undefined) return;
+      var cantidad = Number(String(cantidadTexto).trim());
+      if (!Number.isInteger(cantidad) || cantidad < 1 || cantidad > 50) { UI.aviso('Cantidad no válida.', 'error'); continue; }
+      var extras = [], restantes = (plato.extras || []).slice(0, 20);
+      while (restantes.length) {
+        var opcionesExtras = [{ texto: 'Continuar sin más extras', valor: null, clase: 'secundario' }];
+        restantes.slice(0, 12).forEach(function (e, i) {
+          opcionesExtras.push({ texto: '＋ ' + e.nombre + ' · ' + UI.dinero(e.precio), valor: String(i) });
+        });
+        var elegidoExtra = await UI.ventana({
+          titulo: 'Extras de ' + plato.nombre,
+          texto: extras.length ? 'Seleccionados: ' + extras.join(', ') : 'Opcional: selecciona extras o continúa.',
+          botones: opcionesExtras
+        });
+        if (elegidoExtra === null || elegidoExtra === undefined) break;
+        extras.push(restantes.splice(Number(elegidoExtra), 1)[0].nombre);
+      }
+      items.push({ plato_id: plato.id, cantidad: cantidad, extras: extras });
+      otro = items.length < 12 && await UI.confirmar('Productos seleccionados: ' + items.length,
+        '¿Deseas cotizar otro producto además de ' + plato.nombre + '?', 'Agregar otro');
+    }
+    if (!items.length) return;
+    try {
+      var preliminar = await DATOS.pedir('pedidoCambioCotizar', { id: x.id, items: items });
+      var detalle = (preliminar.lineas || []).map(function (l) {
+        return l.cantidad + '× ' + l.nombre + (l.extras.length ? ' (' + l.extras.join(', ') + ')' : '');
+      }).join('; ');
+      var confirmar = await UI.confirmar('Revisar cotización de ' + x.numero,
+        detalle + '. Subtotal: ' + UI.dinero(preliminar.subtotal_adicional) +
+        '; IVA adicional: ' + UI.dinero(preliminar.iva_adicional) +
+        '; adicional a confirmar: ' + UI.dinero(preliminar.adicional) +
+        '; total estimado del pedido: ' + UI.dinero(preliminar.total_estimado) +
+        '. Aún no se cobra, no se reserva inventario ni se cambia el pedido.',
+        'Enviar al cliente');
+      if (!confirmar) return;
+      var resultado = await DATOS.pedir('pedidoCambioProponer', { id: x.id, items: items }, { guardar: true });
+      UI.aviso('Cotización enviada al seguimiento del cliente. Espera su aceptación; aún no se ha cobrado ni modificado el pedido.', 'ok');
+      return resultado;
+    } catch (err) {
+      UI.aviso('No se pudo emitir la cotización: ' + (err.message || 'Error'), 'error');
+    }
+  }
+
+  async function verSolicitudes(pedidoId) {
+    var datos;
+    try { datos = await DATOS.pedir('pedidoCambiosListar', { local_id: APP.local }); }
+    catch (err) { return UI.aviso('No se pudieron cargar las solicitudes: ' + err.message, 'error'); }
+    var abiertas = ['Pendiente', 'Aprobada para coordinar', 'Cotizada', 'Confirmada cliente', 'Aplicando'];
+    var lista = (datos.solicitudes || []).filter(function (x) { return abiertas.indexOf(x.estado) >= 0; })
+      .sort(function (a, b) { return String(a.creado).localeCompare(String(b.creado)); });
+    if (typeof pedidoId === 'string' && est.datos) { var seleccionado = est.datos.pedidos.filter(function (p) { return String(p.id) === pedidoId; })[0]; if (seleccionado) lista = lista.filter(function (x) { return x.numero === seleccionado.numero; }); }
+    if (!lista.length) return UI.aviso('No hay solicitudes de cambios abiertas.', 'ok');
+    var opciones = [{ texto: 'Cerrar', valor: null, clase: 'secundario' }];
+    lista.slice(0, 12).forEach(function (x, i) {
+      opciones.push({ texto: x.numero + ' · ' + x.tipo + ' · ' + x.estado, valor: String(i) });
+    });
+    var elegido = await UI.ventana({
+      icono: '📝', titulo: 'Solicitudes abiertas (' + lista.length + ')',
+      texto: 'Selecciona una solicitud. Se muestran hasta 12, desde la más antigua.',
+      botones: opciones
+    });
+    if (elegido === null || elegido === undefined) return;
+    var x = lista[Number(elegido)];
+    if (!x) return;
+    var puedeCotizar = ['agregar', 'aumentar'].indexOf(x.tipo) >= 0 &&
+      ['Pendiente', 'Aprobada para coordinar', 'Cotizada'].indexOf(x.estado) >= 0;
+    var decisiones = [{ texto: 'Volver', valor: null, clase: 'secundario' }];
+    if (puedeCotizar) decisiones.push({ texto: x.estado === 'Cotizada' ? 'Recotizar' : 'Cotizar adicionales', valor: 'cotizar' });
+    if (x.estado === 'Pendiente') decisiones.push({ texto: 'Coordinar', valor: 'Aprobada para coordinar' });
+    if (x.estado === 'Confirmada cliente') decisiones.push({ texto: 'Aplicar adicional ' + UI.dinero(x.adicional), valor: 'aplicar' });
+    if (['Aprobada para coordinar', 'Cotizada', 'Confirmada cliente'].indexOf(x.estado) >= 0)
+      decisiones.push({ texto: 'Cerrar sin aplicar', valor: 'Cerrada sin aplicar' });
+    if (x.estado !== 'Aplicando') decisiones.push({ texto: 'Rechazar', valor: 'Rechazada' });
+    var decision = await UI.ventana({
+      titulo: x.numero + ' · ' + x.tipo,
+      texto: x.detalle + '. Estado: ' + x.estado +
+        (x.estado === 'Aplicando' ? '. Atención: posible operación interrumpida. No despachar; requiere conciliación técnica.' :
+          '. La aceptación del cliente todavía NO aplica el cambio. Solo el paso Aplicar modifica el pedido.'),
+      botones: decisiones
+    });
+    if (!decision) return;
+    if (decision === 'cotizar') return cotizarSolicitud(x);
+    if (decision === 'aplicar') {
+      var digital = x.forma_pago === 'transferencia' || x.forma_pago === 'deuna';
+      var referencia = '';
+      if (digital) {
+        referencia = await UI.pedirDato({
+          titulo: 'Verificación bancaria obligatoria', etiqueta: 'Referencia del pago adicional',
+          modo: 'text', boton: 'Continuar', ph: 'Número de transferencia o Deuna',
+          texto: 'Comprueba en la app del banco o Deuna que recibiste el importe adicional de ' +
+            UI.dinero(x.adicional) + '. La aceptación del cliente NO prueba que haya pagado.',
+          validar: function (v) { return String(v).trim().length >= 4 ? '' : 'Ingresa al menos 4 caracteres de la referencia del pago real.'; }
+        });
+        if (referencia === null || referencia === undefined || String(referencia).trim().length < 4) return;
+        referencia = String(referencia).trim();
+      }
+      var seguro = await UI.confirmar('Aplicar adicional a ' + x.numero,
+        'Se incorporarán productos al pedido por ' + UI.dinero(x.adicional) +
+        (digital ? '. Confirma que verificaste personalmente el depósito adicional.' :
+          '. Se añadirá al total a cobrar en efectivo; confirma que el cliente fue informado.') +
+        ' Se volverán a verificar precio, impuestos e inventario.', 'Sí, aplicar adicional');
+      if (!seguro) return;
+      try {
+        var aplicado = await DATOS.pedir('pedidoCambioAplicar', {
+          id: x.id, cotizacion_id: x.cotizacion_id,
+          pago_adicional_verificado: digital, referencia_pago_extra: referencia
+        }, { guardar: true });
+        UI.aviso(aplicado.repetida ? 'Este adicional ya estaba aplicado. No se duplicó.' :
+          'Adicional aplicado: ' + UI.dinero(aplicado.adicional) + '. Nuevo total: ' + UI.dinero(aplicado.total_nuevo), 'ok');
+        await cargar();
+      } catch (err) {
+        UI.aviso('No se aplicó o requiere revisión: ' + (err.message || 'Error') +
+          '. Si aparece Aplicando, NO reintentar ni despachar sin conciliación.', 'error');
+      }
+      return;
+    }
+    var respuesta = await UI.pedirDato({
+      titulo: 'Respuesta al cliente', etiqueta: 'Motivo o instrucciones', modo: 'text',
+      boton: 'Guardar respuesta', ph: 'Explica qué se acordó',
+      texto: decision === 'Rechazada' ? 'Explica el motivo del rechazo.' :
+        decision === 'Cerrada sin aplicar' ? 'Aclara que no se modificó ni cobró el pedido.' :
+        'La coordinación no significa modificación ni cobro.',
+      validar: function (v) {
+        if (v.trim().length < 5) return 'Escribe una respuesta de al menos 5 caracteres.';
+        if (decision === 'Aprobada para coordinar' && !/precio|importe|valor|total|cotiz|confirm|disponib/i.test(v))
+          return 'Indica que se confirmarán precio y disponibilidad.';
+        return '';
+      }
+    });
+    if (!respuesta) return;
+    try {
+      await DATOS.pedir('pedidoCambioResolver', { id: x.id, decision: decision, respuesta: respuesta }, { guardar: true });
+      UI.aviso('Solicitud actualizada. El pedido no se modificó ni cobró.', 'ok');
+    } catch (err) { UI.aviso('No se pudo resolver: ' + err.message, 'error'); }
+  }
+
   function cuerpo() { return UI.$('#pd-cuerpo'); }
 
   async function cargar() {
@@ -45,7 +224,11 @@
       DATOS.pedir('motorizadosListar', { local_id: APP.local })
     ]);
     if (!cuerpo()) return; // se cambió de pantalla mientras cargaba
-    if (r[0].status !== 'fulfilled') { cuerpo().innerHTML = '<div class="banda error">⚠️ <span>' + UI.esc(r[0].reason.message) + '</span></div>'; return; }
+    if (r[0].status !== 'fulfilled') {
+      // No borrar el tablero válido por una interrupción temporal de red.
+      if (!est.datos) cuerpo().innerHTML = '<div class="banda error">⚠️ <span>' + UI.esc(r[0].reason.message) + '</span></div>';
+      return;
+    }
     est.datos = r[0].value;
     est.motos = r[1].status === 'fulfilled' ? r[1].value.motorizados || [] : [];
     est.cargadoEn = Date.now();
@@ -120,6 +303,11 @@
     if (p.estado === 'En camino') principal = '<button class="btn chico" type="button" data-accion="entregar" data-id="' + UI.esc(p.id) + '">📦 Marcar entregado</button>';
     // 3.1.1: ya entregado → sin botones de trabajo, solo la constancia (y «Más» para consultar).
     if (p.estado === 'Entregado') principal = '<span class="hecho-final">✔ Entregado' + (p.entregado ? ' a las ' + UI.esc(UI.hora(p.entregado)) : '') + '</span>';
+    if (p.cambio_estado && ['Recibido', 'Preparando', 'En camino'].indexOf(p.estado) >= 0) {
+      var avisoCambio = p.cambio_estado === 'Aplicando' ? 'Aplicación incompleta: conciliar antes de avanzar.' : 'Cambio pendiente: ' + p.cambio_estado + '. Resolver antes de despachar.';
+      if (p.cambio_estado === 'Aplicando' || p.estado !== 'Recibido') principal = '';
+      principal += '<div class="banda"><span>' + UI.esc(avisoCambio) + '</span></div><button class="btn secundario chico" type="button" data-accion="solicitudes" data-id="' + UI.esc(p.id) + '">📝 Resolver solicitud</button>';
+    }
     return '<article class="pedido' + (tarde ? ' atrasado' : '') + '">' +
       '<div class="pedido-top"><span class="pedido-num">' + UI.esc(p.numero) + '</span>' + (p.estado === 'Anulado' ? UI.chipEstado('Anulado') : '') +
       '<span class="reloj' + (tarde ? ' tarde' : '') + '">' + UI.esc(UI.hora(p.creado)) + (['Entregado', 'Anulado'].indexOf(p.estado) < 0 ? ' · ' + min + ' min' : '') + '</span>' +
@@ -192,6 +380,7 @@
   }
 
   async function accion(boton, que, id) {
+    if (arguments[1] === 'solicitudes') return verSolicitudes(arguments[2]);
     var p = buscar(id);
     if (!p) return;
     if (que === 'preparar') return guardar(boton, 'pedidoEstado', { id: id, desde: p.estado, a: 'Preparando' }, p.numero + ' en preparación.');
@@ -237,7 +426,11 @@
       try {
         var r = await DATOS.pedir('pedidosNuevos', {});
         if (ultimaMarca && r.ultimo > ultimaMarca) avisarNuevo();
-      if (APP.vistaActual === 'pedidos' && est.datos) { alertarRecibidos(); pintar(); }
+        // La marca de pedido nuevo no cambia cuando solo cambia un estado.
+        // Actualizar el tablero desde el servidor sin generar una nueva notificación.
+        if (APP.vistaActual === 'pedidos' && est.datos && document.visibilityState === 'visible') {
+          try { await cargar(); } catch (e) { /* conservar tablero anterior si falla la red */ }
+        }
         ultimaMarca = r.ultimo || ultimaMarca;
       } catch (e) { /* sin red: se intenta en la próxima vuelta */ }
       vigia = setTimeout(revisar, 25000);
