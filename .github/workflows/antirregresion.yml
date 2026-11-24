@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - fix/antirregresion-pedidos-20261123
+      - desarrollo/fase1b-comercial-integral
   pull_request:
     branches:
       - main
@@ -20,6 +21,7 @@ jobs:
           node-version: '20'
       - name: Sintaxis JavaScript cliente, restaurante y motorizados
         run: |
+          for f in js/*.js sw.js; do node --check "$f"; done
           node --check js/pedir.js
           node --check js/pedidos.js
           node --check js/motorizados.js
