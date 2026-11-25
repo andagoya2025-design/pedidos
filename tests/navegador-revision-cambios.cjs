@@ -9,7 +9,7 @@ async function run(engine,device,label){
 const browser=await engine.launch({headless:true});try{const page=await browser.newPage(device),errors=[];page.on('pageerror',e=>errors.push(e.message));await page.route('**/*',r=>r.abort());
 await page.setContent('<meta name="viewport" content="width=device-width,initial-scale=1"><main id="pedir-cuerpo"><div data-exito-vigente>¡Pedido recibido! <button id="btn-wa">Pagar</button></div></main>');
 await page.addStyleTag({content:read('css/app.css')});await page.addStyleTag({content:read('css/modulos.css')});await page.addScriptTag({content:read('js/ui.js')});await page.addScriptTag({content:read('js/comun.js')});
-await page.evaluate(({menu,politica,pedido})=>{window.demo={menu,politica,pedido};window.APP_MEMORIA={leer:()=>null,guardar:()=>{}};window.DATOS={pedir:async a=>{if(a==='menuPublico')return demo.menu;throw Error('Escritura o consulta inesperada: '+a)}};}, {menu,politica,pedido});
+await page.evaluate(({menu,politica,pedido})=>{window.demo={menu,politica,pedido};window.APP_MEMORIA={leer:()=>null,guardar:()=>{}};window.DATOS={crearVigiaSync:()=>async()=>false,pedir:async a=>{if(a==='menuPublico')return demo.menu;throw Error('Escritura o consulta inesperada: '+a)}};}, {menu,politica,pedido});
 let source=read('js/pedir.js');const start=source.indexOf("  document.addEventListener('DOMContentLoaded', function () {");assert.ok(start>0);
 source=source.slice(0,start)+`  M=demo.menu;
 global.prueba={editorCambio:editorCambio,recibo:function(ref,lista,res,sols){paso=4;exitoVigente=ref;actualizarExitoVigente(lista,res,sols);}};
