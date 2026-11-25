@@ -316,3 +316,6 @@ textarea.entrada { min-height: 90px; resize: vertical; }
 
 /* Campana del comprador: fuera de los controles de carrito. */
 .pedir-portada{position:relative}.mip-cliente-avisos{position:absolute;top:12px;right:12px;z-index:2;background:var(--superficie,#fff);color:var(--texto,#222)}.mip-avisos span[hidden]{display:none!important}.pedir-portada h1{overflow-wrap:anywhere}
+
+/* Limpieza visual de avisos: botones hermanos, nunca anidados. */
+.mip-aviso-grupo{display:flex;align-items:stretch;gap:4px;min-width:0}.mip-aviso-grupo .mip-aviso-fila{flex:1;min-width:0}.mip-aviso-grupo .mip-aviso-fila span:first-child{min-width:0;overflow-wrap:anywhere}.mip-aviso-borrar{flex:0 0 44px;min-height:44px;display:grid;place-items:center;background:transparent;border:0;border-radius:10px;color:#9f3535;cursor:pointer}.mip-aviso-borrar:hover,.mip-aviso-borrar:focus-visible{background:rgba(159,53,53,.09)}.mip-aviso-vaciar{margin-top:8px;color:#9f3535}.mip-aviso-vaciar:disabled{opacity:.45;cursor:default}
