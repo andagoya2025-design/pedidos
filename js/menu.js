@@ -601,10 +601,10 @@
     }
     function editarCuenta(i) {
       var x = i >= 0 ? cuentas[i] : { banco: '', tipo: 'ahorros', numero: '', titular: '', documento: '', correo: '', activa: true };
-      var logo=x.logo_url||'', subiendo=false;
+      var logo=x.logo_url||'', color=x.color||'', subiendo=false;
       function validarCuenta(v) {
           if(subiendo) return 'Espere a que termine la subida del logotipo.';
-          var n = { banco: UI.$('#cta-b', v).value.trim(), tipo: UI.$('[data-t].activo', v).getAttribute('data-t'), numero: UI.$('#cta-n', v).value.trim().replace(/\s+/g,' '), titular: UI.$('#cta-ti', v).value.trim(), documento: UI.$('#cta-d', v).value.trim().replace(/\s+/g,' '), logo_url:logo, correo: UI.$('#cta-c', v).value.trim(), activa: UI.$('#cta-a', v).checked };
+          var n = { banco: UI.$('#cta-b', v).value.trim(), tipo: UI.$('[data-t].activo', v).getAttribute('data-t'), numero: UI.$('#cta-n', v).value.trim().replace(/\s+/g,' '), titular: UI.$('#cta-ti', v).value.trim(), documento: UI.$('#cta-d', v).value.trim().replace(/\s+/g,' '), logo_url:logo, color:color, correo: UI.$('#cta-c', v).value.trim(), activa: UI.$('#cta-a', v).checked };
           if (!n.banco) return 'Escriba el banco.';
           if (!/^[A-Za-z0-9][A-Za-z0-9 -]{3,33}$/.test(n.numero) || n.numero.replace(/[ -]/g,'').length < 5) return 'Revise el número de cuenta.';
           if (!n.titular) return 'Escriba a nombre de quién está.';
@@ -618,6 +618,7 @@
         html: '<form id="cta-f" class="formulario" novalidate>' +
           '<div class="campo"><label for="cta-b">Banco</label><input class="entrada" id="cta-b" maxlength="40" list="cta-bancos" value="' + UI.esc(x.banco) + '" placeholder="Ej. Banco Pichincha"><datalist id="cta-bancos">' + ['Banco Pichincha', 'Banco Guayaquil', 'Produbanco', 'Banco del Pacífico', 'Banco Internacional', 'Banco Bolivariano', 'Cooperativa JEP', 'Banco del Austro'].map(function (n) { return '<option value="' + n + '">'; }).join('') + '</datalist></div>' +
           '<div class="campo"><label>Logotipo del banco (opcional)</label><div id="cta-logo-prev">'+UI.logoBanco(x.banco,logo)+'</div><input type="file" id="cta-logo-file" accept="image/png,image/jpeg,image/webp"><button type="button" class="btn borde chico" id="cta-logo-quitar">Quitar logotipo personalizado</button><input type="hidden" id="cta-logo-cambio"></div>' +
+          '<div class="campo"><label for="cta-color">Color de tarjeta</label><input type="color" id="cta-color" value="'+UI.tonoBanco(x).fondo+'"><button type="button" class="btn borde chico" id="cta-color-auto">Restaurar color predeterminado</button><div id="cta-color-prev" class="banco-color-prev">Vista previa</div></div>' +
           '<div class="campo"><label>Tipo</label><div class="segmento" id="cta-t"><button type="button" data-t="ahorros" class="' + (x.tipo !== 'corriente' ? 'activo' : '') + '">Ahorros</button><button type="button" data-t="corriente" class="' + (x.tipo === 'corriente' ? 'activo' : '') + '">Corriente</button></div></div>' +
           '<div class="campo"><label for="cta-n">Número de cuenta</label><input class="entrada" id="cta-n" maxlength="34" autocapitalize="characters" value="' + UI.esc(x.numero) + '"></div>' +
           '<div class="campo"><label for="cta-ti">A nombre de</label><input class="entrada" id="cta-ti" maxlength="60" value="' + UI.esc(x.titular) + '"></div>' +
@@ -625,11 +626,14 @@
           '<div class="campo"><label for="cta-c">Correo para el comprobante (opcional)</label><input class="entrada" id="cta-c" type="email" maxlength="80" value="' + UI.esc(x.correo || '') + '" autocapitalize="off"></div>' +
           '<label class="interruptor"><input type="checkbox" id="cta-a"' + (x.activa !== false ? ' checked' : '') + '> Mostrar esta cuenta al cliente</label></form>',
         alAbrir: function (v) { UI.$$('[data-t]', v).forEach(function (b) { b.addEventListener('click', function () { UI.$$('[data-t]', v).forEach(function (y) { y.classList.toggle('activo', y === b); }); }); });
-          function pintarLogo(){UI.$('#cta-logo-prev',v).innerHTML=UI.logoBanco(UI.$('#cta-b',v).value,logo);}
+          function pintarLogo(){var nombre=UI.$('#cta-b',v).value;UI.$('#cta-logo-prev',v).innerHTML=UI.logoBanco(nombre,logo);var t=UI.tonoBanco({banco:nombre,logo_url:logo,color:color});UI.$('#cta-color',v).value=t.fondo;var p=UI.$('#cta-color-prev',v);p.style.backgroundColor=t.fondo;p.style.color=t.texto;p.innerHTML=UI.logoBanco(nombre,logo)+'<span>Vista previa</span>';}
+          UI.$('#cta-color',v).addEventListener('input',function(e){color=e.target.value;marcarLogo();pintarLogo();});
+          UI.$('#cta-color-auto',v).addEventListener('click',function(){color='';marcarLogo();pintarLogo();});
+          pintarLogo();
           function marcarLogo(){UI.$('#cta-logo-cambio',v).dispatchEvent(new Event('input',{bubbles:true}));}
           UI.$('#cta-b',v).addEventListener('input',pintarLogo);
-          UI.$('#cta-logo-quitar',v).addEventListener('click',function(){if(subiendo)return;logo='';marcarLogo();pintarLogo();});
-          UI.$('#cta-logo-file',v).addEventListener('change',async function(e){var f=e.target.files[0];if(!f||subiendo)return;subiendo=true;e.target.disabled=true;try{if(!/^image\/(png|jpeg|webp)$/.test(f.type)||f.size>8000000)throw Error('Use PNG, JPG o WebP de hasta 8 MB.');var base=await UI.leerFoto(f,480);var r=await DATOS.pedir('fotoSubir',{foto:base,tipo:'banco'},{guardar:true});if(!v.isConnected)return;logo=r.url;marcarLogo();pintarLogo();UI.aviso('Logotipo listo. Guarde los ajustes.','ok');}catch(err){if(v.isConnected)UI.aviso(err.message,'error');}finally{subiendo=false;e.target.disabled=false;e.target.value='';}});
+          UI.$('#cta-logo-quitar',v).addEventListener('click',function(){if(subiendo)return;logo='';color='';marcarLogo();pintarLogo();});
+          UI.$('#cta-logo-file',v).addEventListener('change',async function(e){var f=e.target.files[0];if(!f||subiendo)return;subiendo=true;e.target.disabled=true;try{if(!/^image\/(png|jpeg|webp)$/.test(f.type)||f.size>8000000)throw Error('Use PNG, JPG o WebP de hasta 8 MB.');var base=await UI.leerFoto(f,480);var detectado=await UI.colorLogoBanco(base);var r=await DATOS.pedir('fotoSubir',{foto:base,tipo:'banco'},{guardar:true});if(!v.isConnected)return;logo=r.url;color=detectado;marcarLogo();pintarLogo();UI.aviso('Logotipo listo. Guarde los ajustes.','ok');}catch(err){if(v.isConnected)UI.aviso(err.message,'error');}finally{subiendo=false;e.target.disabled=false;e.target.value='';}});
         },
         botones: [{ texto: 'Cancelar', valor: false, clase: 'secundario' }, { texto: 'Listo', valor: true, antes: function (v) { var m = validarCuenta(v); if (m !== true) { UI.aviso(m, 'error'); return false; } return true; } }]
       }).then(function (ok) { if (ok) { pintarCuentas(); UI.aviso('Toque «Guardar ajustes» para publicar la cuenta.', ''); } });
