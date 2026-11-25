@@ -12,7 +12,7 @@ test('tres perfiles: revisión ligera, cambios, ventanas, segundo plano y recone
  const emit=name=>{for(const fn of events[name]||[])fn()};
  const doc={get hidden(){return hidden},get visibilityState(){return hidden?'hidden':'visible'},querySelector:()=>modal,querySelectorAll:()=>modal?[{querySelector:()=>null}]:[],addEventListener:listen};
  const nav={get onLine(){return online}},global={addEventListener:listen};
- const fakeDate={now:()=>now};
+ class fakeDate extends Date {constructor(...args){super(...(args.length?args:[now]));}static now(){return now;}}
  const flush=async()=>{for(let i=0;i<30;i++)await Promise.resolve()};
  const maker=new Function('pedir','Date',ex(read('js/datos.js'),'  function crearVigiaSync()','  global.DATOS =')+';return crearVigiaSync')(async()=>{counts.signals++;return {revision}},fakeDate);
  const base={ocupado:()=>busy,crearVigiaSync:maker};
