@@ -18,10 +18,10 @@
  * ============================================================
  */
 
-var APP_VERSION = '3.1.21';
+var APP_VERSION = '3.1.30';
 // Marcador opaco, sin datos de pedidos. Una ejecución de Apps Script tiene su propio estado.
 var syncPendiente_ = false;
-var APP_VERSION_NUM = 30129; // 3.1.0 -> 30100 (la pantalla compara con su mínimo)
+var APP_VERSION_NUM = 30130; // 3.1.0 -> 30100 (la pantalla compara con su mínimo)
 var SESION_SEGUNDOS = 21600;  // 6 h; se renueva con cada uso
 var ROLES = ['dueno', 'cajero', 'motorizado'];
 
@@ -3391,12 +3391,14 @@ function accionPedidoCalificar_(data) {
 function accionPedidosNuevos_(data, ctx) {
   var local = localDeSesion_(ctx, data.local_id);
   function permitido(r) { return local === 'TODOS' || String(r.local_id) === local; }
-  var pedidos = leerTabla_('pedidos').filter(function (p) { return permitido(p) && String(p.estado) === 'Recibido'; });
+  var nombres = Object.create(null);
+  function primerNombre(p) { var x = String(p.cliente_nombre || '').trim().split(/\s+/)[0] || ''; return /^[\p{L}\p{M}][\p{L}\p{M}'’-]{0,23}$/u.test(x) ? x : ''; }
+  var pedidos = leerTabla_('pedidos').filter(permitido).filter(function (p) { nombres[String(p.id)] = primerNombre(p); return String(p.estado) === 'Recibido'; });
   var cambios = cambiosPedido_().filter(function (p) { return permitido(p) && ['Pendiente','Confirmada cliente'].indexOf(String(p.estado))>=0; });
   return { ok: true, data: {
     ultimo: Number(CacheService.getScriptCache().get('ULTIMO_PEDIDO') || 0),
-    pedidos: pedidos.map(function (p) { return { id: String(p.id), numero: String(p.numero) }; }),
-    solicitudes: cambios.map(function (p) { return { id: String(p.id), numero: String(p.numero), estado:String(p.estado) }; })
+    pedidos: pedidos.map(function (p) { return { id: String(p.id), numero: String(p.numero), nombre_aviso:nombres[String(p.id)] || '' }; }),
+    solicitudes: cambios.map(function (p) { return { id: String(p.id), numero: String(p.numero), estado:String(p.estado), nombre_aviso:nombres[String(p.pedido_id)] || '' }; })
   } };
 }
 

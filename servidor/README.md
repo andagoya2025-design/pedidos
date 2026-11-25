@@ -2,8 +2,9 @@
 
 | Archivo | Clasificación |
 | --- | --- |
-| Codigo.gs | Fuente vigente (30129 al publicar pantalla 3.1.30); comprobar APP_VERSION_NUM antes de instalar |
-| Codigo_MiPedido_3.1.29.txt | Distribución vigente, idéntica a Codigo.gs según contrato de pruebas |
+| Codigo.gs | Candidata 30130: nombre breve opcional en pedidosNuevos; instalar solo con coordinación expresa |
+| Codigo_MiPedido_3.1.30.txt | Distribución candidata, idéntica a Codigo.gs; compatible con pantalla anterior | 
+| Codigo_MiPedido_3.1.29.txt | Versión anterior estable, conservar para respaldo |
 | Codigo_MiPedido_3.1.18.txt | Histórico — NO INSTALAR |
 | Codigo_MiPedido_3.1.19.txt | Histórico — NO INSTALAR |
 | Codigo_MiPedido_3.1.20.txt | Histórico — NO INSTALAR |

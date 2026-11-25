@@ -1511,6 +1511,7 @@
             { numero: numero, telefono: x.tel || (checkoutMem['cliente'] || {}).telefono || '', tipo: tipo, detalle: detalle, items: seleccionCambio, seleccion: seleccionIntegral }, { guardar: true });
           if (solicitud.estado === 'Pendiente' || solicitud.repetida === true) {
             UI.aviso(solicitud.repetida ? 'Tu solicitud ya está pendiente de respuesta.' : 'Solicitud enviada al restaurante. Espera su confirmación; tu pedido no cambió todavía.', 'exito');
+            if(!solicitud.repetida)avisosCliente(function(a){a.conservar(misPedidos());if(a.solicitudEnviada)a.solicitudEnviada(x,String(solicitud.id||''));});
             await pintarSeguimiento(false);
             return;
           }

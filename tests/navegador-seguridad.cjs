@@ -19,6 +19,7 @@ async function run(engine,device,label){
   await page.addScriptTag({content:read('js/app.js')});
   await page.addScriptTag({content:read('js/configuracion.js')});
   await page.addScriptTag({content:'APP.vistas.pedidos={titulo:"Pedidos",roles:["dueno","cajero"],orden:10,pintar:c=>{c.textContent="Panel pedidos"}};APP.vistas.entregas={titulo:"Entregas",roles:["motorizado"],orden:10,pintar:c=>{c.textContent="Panel entregas"}};document.dispatchEvent(new Event("DOMContentLoaded"));'});
+  await page.locator('#ingreso').waitFor({state:'visible'});
   await page.locator('#ing-usuario').fill('demo');await page.locator('#ing-clave').fill('ficticia');await page.getByRole('button',{name:'Ingresar',exact:true}).click();
   await page.locator('#app').waitFor({state:'visible'});
   const home=rol==='dueno'?'inicio':rol==='cajero'?'pedidos':'entregas';
