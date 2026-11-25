@@ -14,11 +14,12 @@
   function valido(){return APP.sesion===s&&scope()===k&&gen===generacion&&modo()!=='silencio';}
   function despues(ms,fn){var t=g.setTimeout(function(){timers=timers.filter(function(x){return x!==t;});if(valido())fn();},ms);timers.push(t);}
   function pitido(){if(valido())UI.sonar();}
+  if(prueba){if(m==='sonido'||!g.MIP_VOZ){pitido();return;}g.MIP_VOZ.hablar('Prueba de voz de MiPedido.',{volumen:volumen()/100,valido:valido,fallo:pitido,fin:function(){if(m==='ambos')pitido();}});return;}
   var intervalos=m==='ambos'?[0]:tipo==='atraso'||tipos[tipo].vista==='entregas'||prueba?[0]:tipo==='solicitud'?[0,250,500]:[0,850,1700];
   if(m==='sonido'||m==='ambos')intervalos.forEach(function(ms){despues(ms+(espera||0),pitido);});
   if(m==='voz'||m==='ambos'){
    var hablar=function(){if(!g.MIP_VOZ){if(m==='voz')pitido();return;}g.MIP_VOZ.hablar(prueba?'Prueba de voz de MiPedido.':cantidad>1&&tipo==='pedido'?'Atención, '+cantidad+' nuevos pedidos recibidos.':cantidad>1&&tipo==='solicitud'?'Atención, '+cantidad+' actualizaciones de pedidos.':cantidad>1&&tipo==='entrega'?'Atención, '+cantidad+' nuevas entregas asignadas.':tipos[tipo].voz,{volumen:volumen()/100,valido:valido,fallo:function(){if(m==='voz')pitido();}});};
-   if(prueba&&m==='voz')hablar();else despues((espera||0)+(m==='ambos'?Math.max.apply(null,intervalos)+250:0),hablar);
+   if(prueba&&m==='voz')hablar();else despues((espera||0)+(m==='ambos'?Math.max.apply(null,intervalos)+650:0),hablar);
   }
  }
  function pintar(){var b=document.getElementById('mip-avisos'),n=document.getElementById('mip-avisos-num');if(!b||!n)return;var c=lista.filter(function(x){return !x.leido;}).length;n.textContent=String(Math.min(c,99))+(c>99?'+':'');n.hidden=!c;b.setAttribute('aria-label','Notificaciones'+(c?', '+c+' sin leer':''));}
@@ -37,11 +38,12 @@
  }
  async function ajustes(){
   sync();var s=APP.sesion,k=contexto;if(!s)return;UI.desbloquearSonido();var m=modo(),v=volumen(),valores={sonido:'Solo timbre',voz:'Solo voz',ambos:'Timbre + voz',silencio:'Silencio'};
-  var r=await UI.ventana({titulo:'Sonido y voz',icono:'🔊',texto:'Preferencias de este equipo y sesión. Mantén la app abierta. La voz depende de las opciones en español del dispositivo.',html:'<div class="campo"><label for="mip-modo">Modo de alerta</label><select class="entrada" id="mip-modo">'+Object.keys(valores).map(function(x){return '<option value="'+x+'"'+(x===m?' selected':'')+'>'+valores[x]+'</option>';}).join('')+'</select></div><div class="campo"><label for="mip-vol">Volumen de voz</label><input id="mip-vol" type="range" min="0" max="100" value="'+v+'"><span class="ayuda">El timbre conserva su volumen original.</span></div><p class="ayuda">'+(g.MIP_VOZ&&g.MIP_VOZ.disponible()?'Voz disponible en este navegador.':'Voz no disponible: se usará el timbre de respaldo.')+'</p>',botones:[{texto:'Probar',valor:'prueba',clase:'borde',antes:guardar},{texto:'Guardar',valor:'guardar',antes:guardar},{texto:'Activar notificación en pantalla',valor:'notif',clase:'borde'},{texto:'Cancelar',valor:null,clase:'secundario'}]});
+  var r=await UI.ventana({titulo:'Sonido y voz',icono:'🔊',texto:'Preferencias de este equipo y sesión. Mantén la app abierta. La voz depende de las opciones en español del dispositivo.',html:'<div class="campo"><label for="mip-modo">Modo de alerta</label><select class="entrada" id="mip-modo">'+Object.keys(valores).map(function(x){return '<option value="'+x+'"'+(x===m?' selected':'')+'>'+valores[x]+'</option>';}).join('')+'</select></div><div class="campo"><label for="mip-vol">Volumen de voz</label><input id="mip-vol" type="range" min="0" max="100" value="'+v+'"><span class="ayuda">El timbre conserva su volumen original.</span></div><p class="ayuda">'+(g.MIP_VOZ&&g.MIP_VOZ.disponible()?'Voz disponible en este navegador.':'Voz no disponible: se usará el timbre de respaldo.')+'</p>',botones:[{texto:'Probar',valor:'prueba',clase:'borde',antes:probar},{texto:'Guardar',valor:'guardar',antes:guardar},{texto:'Activar notificación en pantalla',valor:'notif',clase:'borde'},{texto:'Cancelar',valor:null,clase:'secundario'}]});
   function guardar(v){if(APP.sesion!==s||scope()!==k)return false;configurar(UI.$('#mip-modo',v).value,UI.$('#mip-vol',v).value);return true;}
-  if(APP.sesion!==s||scope()!==k)return;if(r==='prueba'){sonar('pedido',0,true);return ajustes();}if(r==='notif'){await UI.pedirNotificaciones();return ajustes();}
+  function probar(v){if(!guardar(v))return false;UI.desbloquearSonido();sonar('pedido',0,true);return true;}
+  if(APP.sesion!==s||scope()!==k)return;if(r==='prueba'){return ajustes();}if(r==='notif'){await UI.pedirNotificaciones();return ajustes();}
  }
- function init(){var b=document.getElementById('mip-avisos');if(b)b.addEventListener('click',abrir);}
+ function init(){var b=document.getElementById('mip-avisos');if(b)b.addEventListener('click',function(){UI.desbloquearSonido();return abrir();});}
  document.addEventListener('DOMContentLoaded',init);g.addEventListener('app:sesion-terminada',reset);
  g.MIP_AVISOS={eliminar:eliminar,registrar:registrar,entregas:entregas,pendientesAtrasados:pendientesAtrasados,sync:sync,reset:reset,ajustes:ajustes,modo:modo,configurar:configurar,estado:function(){sync();return lista.map(function(x){return Object.assign({},x);});}};
 })(window);

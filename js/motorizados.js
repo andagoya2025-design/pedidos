@@ -231,15 +231,16 @@
   var mias = null;
   var timerEntregas = null, consultandoEntregas = false;
   var vigiaMoto = DATOS.crearVigiaSync();
+  function bloqueaConsultaEntregas() { return Array.from(document.querySelectorAll('.velo')).some(function(v){return !v.querySelector('#mip-avisos-leer,#mip-modo');}); }
   function programarActualizacionEntregas(inmediato) {
     if (timerEntregas) clearTimeout(timerEntregas);
     timerEntregas = setTimeout(function () {
       timerEntregas = null;
       if (APP.vistaActual !== 'entregas' || !APP.sesion || APP.sesion.rol !== 'motorizado') return;
-      if (document.visibilityState === 'visible' && navigator.onLine !== false && !consultandoEntregas && !document.querySelector('.velo') && !DATOS.ocupado()) {
+      if (document.visibilityState === 'visible' && navigator.onLine !== false && !consultandoEntregas && !bloqueaConsultaEntregas() && !DATOS.ocupado()) {
         var s=APP.sesion;
         vigiaMoto(String(s.usuario_id||s.usuario||''), function () {
-          if (APP.sesion!==s || APP.vistaActual!=='entregas' || document.querySelector('.velo') || DATOS.ocupado()) return false;
+          if (APP.sesion!==s || APP.vistaActual!=='entregas' || bloqueaConsultaEntregas() || DATOS.ocupado()) return false;
           return cargarMias(true);
         },30000).catch(function(){});
       }
@@ -268,8 +269,9 @@
     var sesionConsulta=APP.sesion;
     try {
       var nuevos = await DATOS.pedir('misEntregas', {});
-      if (APP.vistaActual !== 'entregas' || APP.sesion!==sesionConsulta || (silencioso===true && (document.visibilityState!=='visible' || document.querySelector('.velo') || DATOS.ocupado()))) return false;
+      if (APP.vistaActual !== 'entregas' || APP.sesion!==sesionConsulta || (silencioso===true && (document.visibilityState!=='visible' || bloqueaConsultaEntregas() || DATOS.ocupado()))) return false;
       try { if (global.MIP_AVISOS) global.MIP_AVISOS.entregas(nuevos.pedidos); } catch(e) { /* avisos no bloquean entregas */ }
+      if (silencioso===true && document.querySelector('.velo')) return false; // recibir avisos sin repintar detrás de ventanas
       if (!silencioso || !mias || JSON.stringify(nuevos) !== JSON.stringify(mias)) {
         mias = nuevos;
         pintarMias();
