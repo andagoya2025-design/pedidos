@@ -193,7 +193,7 @@
   UI.tonoBanco = function (cuenta) {
     var n=String(cuenta.banco||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim().replace(/^banco\s+(?:de(?:l)?\s+)?/,'');
     var marcas={pichincha:'#f5d325',guayaquil:'#a31368',pacifico:'#07569b',bolivariano:'#006c91',produbanco:'#007b46'};
-    var color=/^#[0-9a-f]{6}$/i.test(String(cuenta.color||''))?cuenta.color:(cuenta.logo_url?'#334155':(Object.prototype.hasOwnProperty.call(marcas,n)?marcas[n]:'#334155'));
+    var color=/^#[0-9a-f]{6}$/i.test(String(cuenta.color||''))?cuenta.color:(Object.prototype.hasOwnProperty.call(marcas,n)?marcas[n]:'#334155');
     var rgb=[1,3,5].map(function(i){var c=parseInt(color.slice(i,i+2),16)/255;return c<=.04045?c/12.92:Math.pow((c+.055)/1.055,2.4);});
     var l=.2126*rgb[0]+.7152*rgb[1]+.0722*rgb[2];
     return {fondo:color,texto:(l+.05)/.05>=1.05/(l+.05)?'#000000':'#ffffff'};
