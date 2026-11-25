@@ -23,4 +23,7 @@ MAIN contiene el código publicado, no una candidata. Leer primero js/config.js 
 - La voz depende del dispositivo y permisos. No prometer avisos con aplicación cerrada sin infraestructura de push.
 
 ## Hoja de ruta
-3.1.31: avisos de cliente y ampliación de motorizados, reutilizando voz y lecturas existentes cuando sea posible. Caja anual y mejoras de comercialización: cambios separados. No asignar fechas ni versiones definitivas sin verificar MAIN.
+- Estable de referencia: 3.1.41; conservar rama estable/3.1.41 y recuperación histórica 3.1.39.
+- Candidata de audio 3.1.42: validar en teléfonos reales antes de consolidar. Consultar MAIN y CI exactos; no inferir publicación.
+- Depuración: eliminar del árbol activo solo documentos obsoletos verificados, con recuperación por SHA y sin afectar pruebas ni instalación. No eliminar ramas con commits únicos ni reescribir historial.
+- Caja anual y comercialización: cambios separados.
