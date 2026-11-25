@@ -61,3 +61,6 @@ jobs:
 
       - name: Avisos del cliente en móvil y escritorio
         run: node tests/navegador-avisos-cliente.cjs
+
+      - name: Revisión previa y cancelación independiente en los tres dispositivos
+        run: node tests/navegador-revision-cambios.cjs

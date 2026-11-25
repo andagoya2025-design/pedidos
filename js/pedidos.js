@@ -396,7 +396,7 @@
       '<ul class="pedido-items">' + (p.detalle || []).map(function (d) { return '<li><b>' + d.cantidad + '×</b> ' + UI.esc(d.nombre) + (d.extras ? ' <span class="pedido-linea">(' + UI.esc(d.extras) + ')</span>' : '') + '</li>'; }).join('') + '</ul>' +
       (p.notas ? '<div class="banda" style="margin:0;padding:8px 10px">📝 <span>' + UI.esc(p.notas) + '</span></div>' : '') +
       (dom ? '<div class="pedido-linea">🛵 ' + UI.esc(p.direccion || 'Ubicación por mapa') + (p.referencia ? ' · ' + UI.esc(p.referencia) : '') + '<br><small>' + UI.fuenteUbicacion(p) + '</small></div>' : '') +
-      '<div class="pedido-linea">' + (UI.esDigital(p.forma_pago) ? UI.NOMBRE_PAGO[p.forma_pago] + ' ' + (p.pago_verificado ? '<span class="etiqueta ok">verificado</span>' : '<span class="etiqueta aviso">por verificar</span>') : '💵 Efectivo') +
+      '<div class="pedido-linea">' + (UI.esDigital(p.forma_pago) ? UI.NOMBRE_PAGO[p.forma_pago] + ' ' + (p.estado==='Anulado'?'<span class="etiqueta">'+(p.pago_verificado?'Pago histórico verificado':'Sin pago verificado · anulado')+'</span>':p.pago_verificado ? '<span class="etiqueta ok">verificado</span>' : '<span class="etiqueta aviso">por verificar</span>') : '💵 Efectivo') +
       (p.propina ? ' · 🙌 propina ' + UI.dinero(p.propina) : '') + (p.calificacion ? ' · ' + '★'.repeat(p.calificacion) : '') +
       (p.motorizado ? ' · 🛵 ' + UI.esc(p.motorizado.nombre) : '') + '</div>' +
       (p.cuenta_pago ? '<div class="pedido-linea">🏦 Dijo que pagó a: <b>' + UI.esc(p.cuenta_pago) + '</b></div>' : '') +
