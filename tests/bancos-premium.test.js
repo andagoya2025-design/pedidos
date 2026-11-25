@@ -15,3 +15,5 @@ test('cuenta anterior, ceros iniciales y cuenta internacional',()=>{const x=JSON
 test('logo personalizado prioritario y rechazo de URL arbitraria',()=>{assert.ok(UI.logoBanco('Banco Pichincha',logo).includes('ABCDEF123456789'));assert.throws(()=>clean([{...base,logo_url:'https://example.com/a.png'}]));assert.doesNotMatch(UI.logoBanco('Otro','javascript:alert(1)'),/<img/);});
 test('límite seis cuentas y rechazo identificador inválido',()=>{assert.throws(()=>clean(Array(7).fill(base)));assert.throws(()=>clean([{...base,numero:'<script>'}]));});
 test('copia conserva caracteres de IBAN y editor permite subida',()=>{assert.ok(read('js/pedir.js').includes("x.numero.replace(/[ -]/g, '')"));assert.ok(read('js/menu.js').includes("tipo:'banco'"));assert.ok(gs.includes("banco ? 'Logotipos bancarios'"));});
+
+test('paleta guardada y validada por servidor',()=>{assert.equal(JSON.parse(clean([{...base,color:'#f5d325'}]))[0].color,'#f5d325');assert.throws(()=>clean([{...base,color:'red'}]));assert.equal(JSON.parse(clean([base]))[0].color,'');});
