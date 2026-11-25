@@ -703,3 +703,17 @@ details.otras-fechas[open] summary { margin-bottom: 10px; }
 .ux-sustitucion-premium>.acciones .btn:not(:first-child){background:transparent;border:0;box-shadow:none;}
 .ux-sustitucion-premium .ventana-x{width:44px;height:44px;font-size:14px;font-weight:600;background:transparent;}
 @media(max-width:480px){.ventana.ux-sustitucion-premium{max-height:calc(100dvh - env(safe-area-inset-top) - 6px);padding:14px 14px 8px;border-radius:18px 18px 0 0;}.ux-sustitucion-premium h2{font-size:19px;}}
+
+/* 3.1.27: identidad bancaria y filas administrativas compactas. */
+.banco-marca{position:relative;display:grid;place-items:center;flex:none;width:64px;height:44px;border-radius:8px;overflow:hidden;background:#fff;color:#334155;border:1px solid #e2e8f0}
+.banco-marca img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#fff;padding:3px}
+.banco-inicial{font-weight:800;font-size:17px}
+.banco-admin{display:grid;grid-template-columns:64px minmax(0,1fr) auto;align-items:center;gap:8px;padding:10px}
+.banco-admin-datos{min-width:0;overflow-wrap:anywhere}
+.banco-admin-nombre{font-size:14px;font-weight:700;line-height:1.3}
+.banco-admin-sub{font-size:12px;line-height:1.4;color:var(--texto-2)}
+.banco-admin-oculta{font-size:10px;font-weight:500;color:var(--texto-2)}
+.banco-admin-acciones{display:flex;gap:4px}
+.banco-admin-acciones .btn{display:grid;place-items:center;padding:0;width:44px;min-width:44px;height:44px}
+.cuenta-banco .banco-marca{width:76px;height:44px}
+@media(max-width:360px){.banco-admin{grid-template-columns:48px minmax(0,1fr) auto;gap:5px;padding:8px}.banco-admin .banco-marca{width:48px}.banco-admin-acciones{gap:2px}}
