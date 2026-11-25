@@ -55,3 +55,6 @@ jobs:
 
       - name: Seguridad y acceso por rol en móvil y escritorio
         run: node tests/navegador-seguridad.cjs
+
+      - name: Centro de avisos y voz en móvil y escritorio
+        run: node tests/navegador-notificaciones.cjs
