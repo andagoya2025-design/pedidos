@@ -52,3 +52,6 @@ jobs:
 
       - name: Bancos configurables en móvil y escritorio
         run: node tests/navegador-bancos.cjs
+
+      - name: Seguridad y acceso por rol en móvil y escritorio
+        run: node tests/navegador-seguridad.cjs

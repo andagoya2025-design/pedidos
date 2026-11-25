@@ -166,7 +166,7 @@
   function inicioPorRol(rol) { return rol === 'motorizado' ? 'entregas' : rol === 'cajero' ? 'pedidos' : 'inicio'; }
   function destinoIngreso(rol, hash, nuevoIngreso) {
     var h = String(hash || '').replace(/^#/, '');
-    if (/^pedidos\\?ver=PED-\\d{4,}(?:&|$)/i.test(h) && (rol === 'dueno' || rol === 'cajero')) return h;
+    if (/^pedidos\?ver=PED-\d{4,}(?:&|$)/i.test(h) && (rol === 'dueno' || rol === 'cajero')) return h;
     return nuevoIngreso || !h || h === 'cuenta' ? inicioPorRol(rol) : h;
   }
   APP.parametros = {};
