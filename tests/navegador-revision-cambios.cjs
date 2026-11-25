@@ -25,19 +25,24 @@ async function revisar(tipo,fase){
  assert.equal(diag.error,null,JSON.stringify(diag));assert.equal(diag.avisos.length,anterior,JSON.stringify(diag));await page.getByRole('heading',{name:titulo}).waitFor({timeout:3000});
  }catch(e){throw Error(label+' · '+tipo+' · '+fase+' · '+e.message+' · '+JSON.stringify(await page.evaluate(()=>({error:pruebaError,avisos:pruebaAvisos,titulos:Array.from(document.querySelectorAll('.ventana h2'),h=>h.textContent),campos:Array.from(document.querySelectorAll('[data-ux-cant],[data-ux-extra],#ux-nota'),el=>({id:el.getAttribute('data-ux-cant')||el.getAttribute('data-ux-extra')||el.id,valor:el.value,max:el.max}))})))+' · errores JS: '+JSON.stringify(errors));}
 }
-for(const [tipo,campos,total] of [['agregar',[['n2','1']],14.75],['aumentar',[['o0','1']],13.75],['cambiar',[['o1','1'],['n2','1']],13.5],['quitar',[['o1','1']],9.5],['reducir',[['o0','1']],7.75],['cancelar',[],null]]){
+// UI.ventana establece el foco inicial con un temporizador. Esperar el foco real
+// evita que el llenado sintético del textarea termine escribiendo en el buscador.
+async function editorListo(){await page.locator('#ux-nota').waitFor({state:'visible'});await page.waitForFunction(()=>{const v=document.querySelector('.ventana');return v&&document.activeElement===v.querySelector('input, select, textarea');});}
+for(const [tipo,campos,total] of [['agregar',[['n2','1']],15.75],['aumentar',[['o0','1']],13.75],['cambiar',[['o1','1'],['n2','1']],14.5],['quitar',[['o1','1']],9.5],['reducir',[['o0','1']],7.75],['cancelar',[],null]]){
 console.log('CASO '+label+' · '+tipo);await page.evaluate(tipo=>{window.resultado=null;window.pruebaError=null;prueba.editorCambio(tipo,demo.politica,demo.pedido).then(x=>window.resultado=x).catch(e=>window.pruebaError=String(e.stack||e))},tipo);
-await page.locator('#ux-nota').waitFor();await page.locator('#ux-nota').fill('Prueba de modificación');
-for(const [key,n] of campos)await page.locator('[data-ux-cant="'+key+'"]').fill(n);
+await editorListo();await page.locator('#ux-nota').fill('Prueba de modificación');assert.equal(await page.locator('#ux-nota').inputValue(),'Prueba de modificación');
+const buscar=page.locator('[data-ux-buscar]');if(await buscar.count())assert.equal(await buscar.inputValue(),'');
+for(const [key,n] of campos){const campo=page.locator('[data-ux-cant="'+key+'"]');try{await campo.fill(n,{timeout:5000});assert.equal(await campo.inputValue(),n);}catch(e){throw Error(label+' · '+tipo+' · '+key+' · '+e.message+' · '+JSON.stringify(await page.evaluate(()=>({busqueda:document.querySelector('[data-ux-buscar]')?.value,nota:document.querySelector('#ux-nota')?.value,filas:Array.from(document.querySelectorAll('.ux-cambio-fila'),f=>({nombre:f.getAttribute('data-busqueda'),oculta:f.hidden})),activo:document.activeElement?.outerHTML.slice(0,220)}))));}}
+const tieneExtra=tipo==='agregar'||tipo==='cambiar';if(tieneExtra){const extra=page.locator('[data-ux-extra="2-0"]');await extra.fill('2');assert.equal(await extra.inputValue(),'2');}
 if(tipo==='agregar'){assert.equal(await page.locator('.ux-cambio-mini img').count(),3);}
 await revisar(tipo,'primera revisión');
 if(total!==null)assert.match(await page.locator('.ventana .ux-total-nuevo').innerText(),new RegExp(total.toFixed(2).replace('.','[,.]')));
 else assert.match(await page.locator('.ventana').innerText(),/cancelar el pedido completo/);
-await page.getByRole('button',{name:'Volver a editar',exact:true}).click();await page.locator('#ux-nota').waitFor();
-assert.equal(await page.locator('#ux-nota').inputValue(),'Prueba de modificación');for(const [key,n] of campos)assert.equal(await page.locator('[data-ux-cant="'+key+'"]').inputValue(),n);
+await page.getByRole('button',{name:'Volver a editar',exact:true}).click();await editorListo();
+assert.equal(await page.locator('#ux-nota').inputValue(),'Prueba de modificación');for(const [key,n] of campos)assert.equal(await page.locator('[data-ux-cant="'+key+'"]').inputValue(),n);if(tieneExtra)assert.equal(await page.locator('[data-ux-extra="2-0"]').inputValue(),'2');
 await revisar(tipo,'revisión restaurada');
 await page.getByRole('button',{name:tipo==='cancelar'?'Enviar solicitud de cancelación':'Enviar solicitud',exact:true}).click();await page.waitForFunction(()=>resultado!==null);
-assert.ok(await page.evaluate(()=>resultado.texto.length>=5));
+assert.ok(await page.evaluate(()=>resultado.texto.length>=5));if(tieneExtra)assert.equal(await page.evaluate(tipo=>{const xs=tipo==='agregar'?resultado.items:resultado.seleccion.agregar;return xs[0].extras.filter(e=>e==='Chifle').length},tipo),2);
 }
 await page.evaluate(()=>{const a={n:'PED-0001',s:'a'},b={n:'PED-0002',s:'b'};prueba.recibo({identidad:'s:b',numero:b.n,total:7.75},[a,b],{[a.n]:{numero:a.n,seguimiento:'a',estado:'Recibido',total:8},[b.n]:{numero:b.n,seguimiento:'b',estado:'Anulado',total:7.75,pago_verificado:false}},{});});
 assert.match(await page.locator('#pedir-cuerpo').innerText(),/Pedido cancelado/);assert.match(await page.locator('#pedir-cuerpo').innerText(),/PED-0002/);assert.equal(await page.locator('#btn-wa').count(),0);assert.doesNotMatch(await page.locator('#pedir-cuerpo').innerText(),/PED-0001/);
