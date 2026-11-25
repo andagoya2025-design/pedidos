@@ -1202,14 +1202,45 @@
       '\nNombre: ' + p.cliente_nombre;
   }
 
+  var exitoVigente = null;
+  // La tarjeta de recepción solo es una instantánea. Vincularla a la identidad
+  // del pedido y sustituirla cuando el seguimiento autorizado cambie.
+  function estadoExitoVigente(ref,lista,res,solicitudes) {
+    if(!ref)return null;
+    var x=lista.find(function(y){return identidadSeguimiento(y)===ref.identidad;});
+    if(!x)return {estado:'No disponible',numero:ref.numero};
+    var r=res[x.n];
+    if(!r||r.consulta_error||r.no_existe||String(r.numero)!==String(x.n)||(x.s&&String(r.seguimiento)!==String(x.s)))return null;
+    var abierta=solicitudAbierta(solicitudes[x.n]);
+    if(r.estado==='Anulado')return {estado:'Anulado',numero:x.n,total:r.total,pago:r.pago_verificado===true};
+    if(r.estado!== 'Recibido'||Number(r.total)!==ref.total||r.pago_verificado===true||abierta||ref.reemplazado)return {estado:r.estado,numero:x.n,total:r.total,revision:!!abierta,pago:r.pago_verificado===true};
+    return null;
+  }
+  function actualizarExitoVigente(lista,res,solicitudes) {
+    if(paso!==4||!exitoVigente||!cuerpo()||!cuerpo().querySelector('[data-exito-vigente]'))return;
+    var e=estadoExitoVigente(exitoVigente,lista,res,solicitudes);
+    if(!e)return;
+    exitoVigente.reemplazado=true;
+    var anul=e.estado==='Anulado', falta=e.estado==='No disponible';
+    var titulo=anul?'Pedido cancelado':falta?'Pedido no disponible':e.revision?'Pedido en revisión':'Estado de tu pedido';
+    var importe=anul?'<p>Importe histórico: <b>'+UI.esc(UI.dinero(e.total))+'</b></p><p>No envíes pagos por este pedido. '+(e.pago?'Consulta con el restaurante cualquier devolución.':'')+'</p>':falta?'<p>Actualiza el seguimiento antes de realizar un pago.</p>':'<p>Importe vigente: <b>'+UI.esc(UI.dinero(e.total))+'</b></p><p>'+UI.esc(e.revision?'Espera la resolución de tu solicitud antes de realizar otro pago.':e.estado)+'</p>';
+    var html='<div class="tarjeta exito-grande" data-exito-vigente><h2>'+titulo+'</h2><div class="numero-pedido">'+UI.esc(e.numero)+'</div>'+importe+'<button class="btn borde bloque" type="button" id="btn-seguir">Ver mis pedidos</button><button class="btn secundario bloque" type="button" id="btn-nuevo">Hacer otro pedido</button></div>';
+    if(cuerpo().innerHTML===html)return;
+    cuerpo().innerHTML=html;
+    $('#btn-nuevo').addEventListener('click',function(){irA(1);});
+    $('#btn-seguir').addEventListener('click',function(){pintarSeguimiento(true);});
+  }
+
   function pintarExito(p) {
+    var x=misPedidos().find(function(y){return y.n===p.numero;});
+    exitoVigente=x?{identidad:identidadSeguimiento(x),numero:x.n,total:Number(p.total),reemplazado:false}:null;
     var wa = local().telefono || cfg().whatsapp;
     var c = cfg();
     global.scrollTo(0, 0);
     $('#barra-pedido').hidden = true;
     paso = 4;
     var qrPedido = UI.qrUrl(UI.enlaceApp() + '#pedidos?ver=' + encodeURIComponent(p.numero), 360);
-    cuerpo().innerHTML = '<div class="tarjeta exito-grande" style="margin-top:6px"><div class="ico confeti">🎉</div>' +
+    cuerpo().innerHTML = '<div class="tarjeta exito-grande" data-exito-vigente style="margin-top:6px"><div class="ico confeti">🎉</div>' +
       '<h2 style="margin:4px 0">¡Pedido recibido!</h2><p class="subtitulo" style="margin-bottom:6px">Tu número es</p>' +
       '<div class="numero-pedido">' + UI.esc(p.numero) + '</div>' +
       '<p style="margin:8px 0 0">Total: <b>' + UI.dinero(p.total) + '</b>' + (p.descuento ? ' · Descuento ' + UI.dinero(p.descuento) : '') + (p.premio ? ' · 🎁 Premio ' + UI.dinero(p.premio) : '') + '</p>' +
@@ -1354,7 +1385,7 @@
         revisar.forEach(function(x){var p=res[x.n];if(p&&!p.consulta_error&&!p.no_existe)historialRevisado[identidadSeguimiento(x)]=true;});
         lista=eliminarReferenciasInexistentes(lista,res);
         avisosCliente(function(a){a.conservar(misPedidos());});
-        if(!lista.length){cont.hidden=true;cont.innerHTML='';var accesoVacio=$('#btn-mi-pedido');if(accesoVacio)accesoVacio.hidden=true;return;}
+        if(!lista.length){actualizarExitoVigente(lista,res,{});cont.hidden=true;cont.innerHTML='';var accesoVacio=$('#btn-mi-pedido');if(accesoVacio)accesoVacio.hidden=true;return;}
         var cambio2 = false;
         lista.forEach(function (x) {
           var p = res[x.n]; if (!p) return;
@@ -1390,6 +1421,7 @@
     }));
     avisosCliente(function(a){var actuales=misPedidos();a.conservar(actuales);act.forEach(function(x){if(actuales.some(function(y){return identidadSeguimiento(y)===identidadSeguimiento(x);}))a.observar(x,res[x.n],solicitudesPorPedido[x.n]);});});
     if (automatico && (document.hidden || document.querySelector('.velo') || document.querySelector('#seguimiento [aria-busy="true"]'))) return false;
+    actualizarExitoVigente(lista,res,solicitudesPorPedido);
     var acceso = $('#btn-mi-pedido'); if (acceso) { acceso.hidden = !act.length; acceso.textContent = 'Mi pedido activo (' + act.length + ')'; }
     var abiertosPrevios=UI.$$('[data-pedido-desplegable][open]',cont).map(function(d){return d.getAttribute('data-pedido-desplegable');});
     var habiaDesplegables=UI.$$('[data-pedido-desplegable]',cont).length>0;
@@ -1424,9 +1456,10 @@
             })[0];
             if (!x || !sol) return UI.aviso('La cotización cambió. Actualiza tu pedido.', 'error');
             var acepta = accion === 'aceptar';
-            var texto=acepta?'Confirma el nuevo total de '+UI.dinero(sol.cotizacion.total_estimado)+' para '+numero+'. No se realiza un cargo automático.':'Tu pedido original se mantiene sin cambios.';
-            var confirmado = await UI.confirmar(acepta ? 'Aceptar modificación definitiva' : 'Mantener pedido original',
-              texto, acepta ? 'Sí, acepto el importe' : 'Sí, rechazar');
+            var cancelar=sol.tipo==='cancelar'||sol.cotizacion.tipo==='cancelar';
+            var texto=acepta?(cancelar?'Confirma la cancelación de '+numero+'. No se realiza una devolución automática.':'Confirma el nuevo total de '+UI.dinero(sol.cotizacion.total_estimado)+' para '+numero+'. No se realiza un cargo automático.'):'Tu pedido original se mantiene sin cambios.';
+            var confirmado = await UI.confirmar(acepta ? (cancelar?'Confirmar cancelación':'Aceptar modificación definitiva') : 'Mantener pedido original',
+              texto, acepta ? (cancelar?'Sí, cancelar el pedido':'Sí, acepto el importe') : 'Sí, rechazar');
             if (!confirmado) return;
             try {
               var payload = x.s ? { s: x.s } : {
@@ -1437,7 +1470,7 @@
               payload.acepta = acepta;
               var resultado = await DATOS.pedir('pedidoCambioConfirmar', payload);
               UI.aviso(resultado.estado === 'Confirmada cliente'
-                ? 'Modificación aceptada. Consulta el siguiente paso en tu pedido.'
+                ? (cancelar?'Cancelación aceptada. Espera que el restaurante la aplique.':'Modificación aceptada. Consulta el siguiente paso en tu pedido.')
                 : 'Cotización rechazada; el pedido original no cambia.', 'ok');
               await pintarSeguimiento(false);
             } catch (err) {
@@ -1499,7 +1532,7 @@
       if (politica.modalidad === 'cambio_definitivo') { UI.aviso(politica.mensaje,'error'); await pintarSeguimiento(false); return; }
       var nombres = { agregar: 'agregar productos', aumentar: 'aumentar cantidades', cambiar: 'cambiar productos', quitar: 'quitar productos', reducir: 'reducir cantidades', cancelar: 'cancelar el pedido' };
       if (politica.permitido) {
-        var detalle = await editorCambio(tipo, politica);
+        var detalle = await editorCambio(tipo, politica, pedido);
         if (detalle === null || detalle === undefined) return;
         var seleccionCambio = detalle.items || [], seleccionIntegral=detalle.seleccion;
         detalle = String(detalle.texto || '').trim();
@@ -1546,9 +1579,9 @@
 
   /* Editor de solicitudes: solo prepara una descripción; el servidor conserva
    * la autoridad sobre permisos, precios, existencias y aplicación. */
-  async function editorCambio(tipo, politica) {
+  async function editorCambio(tipo, politica, pedido) {
     var titulos = { agregar: 'Agregar productos', aumentar: 'Aumentar cantidades', cambiar: 'Cambiar productos', quitar: 'Quitar productos', reducir: 'Reducir cantidades', cancelar: 'Solicitar cancelación' };
-    var original = Array.isArray(politica.detalle) ? politica.detalle : [];
+    var original = Array.isArray(politica.detalle) ? politica.detalle.filter(function(d){return Number(d.cantidad)>0;}) : [];
     var menu = [];
     if (tipo === 'agregar' || tipo === 'cambiar') {
       try {
@@ -1565,14 +1598,14 @@
       return lista.map(function (p, i) {
         var max = limite ? Math.max(0, Math.floor(Number(p.cantidad) || 0) - (tipo === 'reducir' ? 1 : 0)) : 1000;
         if (tipo === 'aumentar' && prefijo === 'o') max = Math.max(0, 1000 - Number(p.cantidad || 0));
-        return '<div class="ux-cambio-fila" data-busqueda="' + UI.esc(String(p.nombre || '').toLowerCase()) + '"><div class="ux-cambio-nombre"><b>' + UI.esc(p.nombre) + '</b><small>' + UI.esc(UI.dinero(p.precio)) + (prefijo === 'o' ? ' · En pedido: ' + UI.esc(p.cantidad) + (p.extras ? ' · ' + UI.esc(p.extras) : '') : '') + '</small></div><div class="ux-cambio-controles"><button type="button" class="btn secundario chico" data-ux-step="-1" aria-label="Disminuir">−</button><input aria-label="Cantidad de ' + UI.esc(p.nombre) + '" type="number" min="0" max="' + max + '" value="0" inputmode="numeric" data-ux-cant="' + prefijo + i + '"><button type="button" class="btn secundario chico" data-ux-step="1" aria-label="Aumentar">+</button></div>' +
+        return '<div class="ux-cambio-fila ux-cambio-con-foto" data-busqueda="' + UI.esc(String(p.nombre || '').toLowerCase()) + '"><div class="ux-cambio-nombre">'+fotoCambio(p,prefijo,politica.local_id)+'<div><b>' + UI.esc(p.nombre) + '</b><small>' + UI.esc(UI.dinero(p.precio)) + (prefijo === 'o' ? ' · En pedido: ' + UI.esc(p.cantidad) + (p.extras ? ' · ' + UI.esc(p.extras) : '') : '') + '</small></div></div><div class="ux-cambio-controles"><button type="button" class="btn secundario chico" data-ux-step="-1" aria-label="Disminuir">−</button><input aria-label="Cantidad de ' + UI.esc(p.nombre) + '" type="number" min="0" max="' + max + '" value="0" inputmode="numeric" data-ux-cant="' + prefijo + i + '"><button type="button" class="btn secundario chico" data-ux-step="1" aria-label="Aumentar">+</button></div>' +
           (prefijo === 'n' && Array.isArray(p.extras) && p.extras.length ? '<div class="ux-cambio-extras" hidden>' + p.extras.map(function (e,j) { return '<label>'+inputExtraUI(e,'data-ux-extra="'+i+'-'+j+'"',0)+' '+UI.esc(e.nombre)+' (+'+UI.esc(UI.dinero(e.precio))+' c/u)</label>'; }).join('') + '</div>' : '') + '</div>';
       }).join('');
     }
     var html = (filas.length ? '<h3>' + (tipo === 'cambiar' ? '1. Selecciona el producto actual' : 'Productos del pedido') + '</h3><div class="ux-cambio-lista">' + controles(filas, 'o', tipo !== 'aumentar') + '</div>' : '') +
       (nuevos.length ? '<h3>' + (tipo === 'cambiar' ? '2. Elige el reemplazo' : 'Menú disponible') + '</h3><input type="search" data-ux-buscar placeholder="Buscar producto" aria-label="Buscar producto"><div class="ux-cambio-lista" data-ux-menu>' + controles(nuevos, 'n', false) + '</div>' : '') +
       '<label for="ux-nota">' + (tipo === 'cancelar' ? 'Motivo de cancelación' : 'Notas o solicitud manual (opcional si seleccionas productos)') + '</label><textarea id="ux-nota" maxlength="500" rows="2" placeholder="' + (tipo === 'cancelar' ? 'Describe el motivo' : 'Ej. Sin cebolla') + '"></textarea><div class="ux-seleccion-resumen" data-ux-resumen aria-live="polite"></div>';
-    var detalle = null;
+    var detalle = null, borrador=null, lectura=null;
     function leer(velo) {
       var partes = [], originales = 0, agregados = 0, estimado = 0, itemsSeleccionados = [], actuales = [], nuevosElegidos = [], retirar=[], incorporar=[];
       function recoger(lista, prefijo) {
@@ -1607,14 +1640,18 @@
       if(texto.length>500&&(itemsSeleccionados.length||seleccion)){texto='Solicitud de '+(itemsSeleccionados.length+retirar.length+incorporar.length)+' líneas seleccionadas.'+(nota?' Nota: '+nota:'');}
       return { texto: texto, originales: originales, agregados: agregados, estimado: estimado, items: itemsSeleccionados, seleccion:seleccion, actuales: actuales, nuevos: nuevosElegidos };
     }
+    while(true){
     var ok = await UI.ventana({ titulo: titulos[tipo] || 'Solicitar cambio', texto: 'Selecciona las cantidades o escribe tu solicitud. El restaurante debe aprobarla antes de modificar el pedido.', html: html,
-      botones: [{ texto: 'Volver', valor: null, clase: 'secundario' }, { texto: 'Enviar solicitud', valor: true, antes: function(velo) {
+      botones: [{ texto: 'Volver', valor: null, clase: 'secundario' }, { texto: 'Revisar solicitud', valor: true, antes: function(velo) {
         try { var v = leer(velo); if (tipo === 'cambiar' && !(v.originales && v.agregados)) throw Error('Selecciona el producto original y su sustituto.');
           if (v.texto.length < 5 || v.texto.length > 500) throw Error('Describe el cambio entre 5 y 500 caracteres.');
-          detalle = {texto:v.texto,items:v.items,seleccion:v.seleccion}; return true;
+          detalle = {texto:v.texto,items:v.items,seleccion:v.seleccion}; lectura=v;
+          borrador=UI.$('input,textarea',velo).map(function(el){return {valor:el.value,checked:el.checked};}); return true;
         } catch(e) { UI.aviso(e.message,'error'); return false; }
       }}],
       alAbrir: function(velo) {
+        if(borrador)UI.$('input,textarea',velo).forEach(function(el,i){if(borrador[i]){el.value=borrador[i].valor;el.checked=borrador[i].checked;}});
+        velo.querySelector('.ventana').classList.add('ux-gestion-modal','ux-revision-cliente');
         function resumen() {
           UI.$$('.ux-cambio-fila',velo).forEach(function(f){
             var n=f.querySelector('[data-ux-cant]'), ex=f.querySelector('.ux-cambio-extras'), activo=Number(n.value)>0;
@@ -1631,7 +1668,45 @@
         resumen();
       }
     });
-    return ok ? detalle : null;
+    if(!ok)return null;
+    var estimado=estimarSolicitudCambio(tipo,politica,pedido,lectura,cfg(),menu);
+    var vista=tipo==='cancelar'?'<p>Solicitas cancelar el pedido completo. El pedido sigue vigente hasta confirmar y aplicar la cancelación.</p><div class="ux-mensaje-propuesta"><b>Motivo</b>'+UI.esc(detalle.texto)+'</div><p>Importe vigente: <b>'+UI.esc(UI.dinero(politica.total))+'</b></p><p>'+(pedido&&pedido.pago_verificado?'Pago verificado: el restaurante deberá conciliar la devolución.':'No hay pago verificado. No realices otro pago mientras se revisa la solicitud.')+'</p>':(estimado?UI.compararTotalesCambio(estimado)+UI.compararDetalleCambio(estimado):'<p>Importe vigente: <b>'+UI.esc(UI.dinero(politica.total))+'</b></p><p>El nuevo importe requiere revisión del restaurante.</p>')+resumenSeleccionCambio(tipo,lectura)+'<p class="ayuda">Estimación informativa. El restaurante confirmará precios, impuestos, disponibilidad y total antes de aplicar el cambio.</p>';
+    var decision=await UI.ventana({titulo:(tipo==='cancelar'?'Revisar cancelación':'Revisar modificación')+' · '+politica.numero,html:vista,botones:[{texto:'Volver a editar',valor:'editar',clase:'secundario'},{texto:tipo==='cancelar'?'Enviar solicitud de cancelación':'Enviar solicitud',valor:true}],alAbrir:function(v){v.querySelector('.ventana').classList.add('ux-gestion-modal','ux-revision-cliente');}});
+    if(decision===true)return detalle;
+    if(decision!=='editar')return null;
+    }
+  }
+
+  function fotoCambio(p,prefijo,localId){
+    var pl=prefijo==='n'?p:plato(String(p.plato_id));
+    if(pl&&pl.local_id!=='TODOS'&&String(pl.local_id)!==String(localId))pl=null;
+    return '<span class="ux-cambio-mini">'+fotoHtml(pl||{nombre:p.nombre||'Producto',categoria_id:''})+'</span>';
+  }
+
+  // Estimación de solo lectura. No reemplaza la cotización autorizada.
+  function estimarSolicitudCambio(tipo,politica,pedido,v,config,menu){
+    if(tipo==='cancelar'||!pedido||!pedido.importes||!v||!config||!Array.isArray(politica.detalle))return null;
+    var m=pedido.importes,cent=function(n){return Math.round(Number(n)*100);},mon=function(n){return n/100;};
+    if(['subtotal','envio','propina','descuento','iva'].some(function(k){return m[k]==null||m[k]===''||!Number.isFinite(Number(m[k]));})||!Number.isFinite(Number(politica.total))||cent(pedido.total)!==cent(politica.total)||cent(m.descuento)!==0)return null;
+    var pct=Number(config.iva_porcentaje),incl=config.precios_incluyen_iva;
+    if(!Number.isFinite(pct)||pct<0||['SI','NO'].indexOf(incl)<0)return null;
+    function tax(sub){var g=sub+cent(m.envio);return incl==='SI'?g-Math.round(g/(1+pct/100)):Math.round(g*pct/100);}
+    function total(sub){return sub+cent(m.envio)+cent(m.propina)+(incl==='NO'?tax(sub):0);}
+    var antes=politica.detalle.filter(function(d){return Number(d.cantidad)>0;}).map(function(d){return Object.assign({},d);});
+    if(!antes.length||antes.some(function(d){return !Number.isInteger(Number(d.cantidad))||!Number.isFinite(Number(d.precio))||cent(d.total_linea)!==cent(d.precio)*Number(d.cantidad);})||antes.reduce(function(a,d){return a+cent(d.total_linea);},0)!==cent(m.subtotal)||total(cent(m.subtotal))!==cent(politica.total))return null;
+    var despues=antes.map(function(d){return Object.assign({},d);}),sel=v.seleccion||{},ret=sel.retirar||[],alt=tipo==='cambiar'?(sel.agregar||[]):(v.items||[]);
+    if(!ret.length&&!alt.length)return null;
+    for(var i=0;i<ret.length;i++){var b=ret[i],d=despues.find(function(z){return String(z.id)===String(b.id);});if(!d||!Number.isInteger(b.cantidad)||b.cantidad<1||b.cantidad>d.cantidad)return null;d.cantidad-=b.cantidad;d.total_linea=mon(cent(d.precio)*d.cantidad);}
+    for(var j=0;j<alt.length;j++){var a=alt[j],extras=(a.extras||[]).slice(),pl=(menu||[]).find(function(p){return String(p.id)===String(a.plato_id);}),precio,nombre;
+      if(tipo==='aumentar'){var orig=antes.find(function(z){return String(z.plato_id)===String(a.plato_id)&&String(z.extras||'').split(',').map(function(e){return e.trim();}).filter(Boolean).sort().join('|')===extras.slice().sort().join('|');});if(!orig)return null;precio=Number(orig.precio);nombre=orig.nombre;}
+      else{if(!pl||!Number.isFinite(Number(pl.precio)))return null;precio=unitario({plato:pl,extras:extras});nombre=pl.nombre;}
+      if(!Number.isInteger(a.cantidad)||a.cantidad<1||!Number.isFinite(precio))return null;
+      despues.push({plato_id:a.plato_id,nombre:nombre,precio:precio,cantidad:a.cantidad,extras:extras.join(', '),total_linea:mon(cent(precio)*a.cantidad)});
+    }
+    despues=despues.filter(function(d){return Number(d.cantidad)>0;});
+    if(!despues.length)return null;
+    var sub=despues.reduce(function(n,d){return n+cent(d.total_linea);},0),nuevo=total(sub);
+    return {integral:true,estimacion_previa:true,total_actual:Number(politica.total),total_estimado:mon(nuevo),adicional:mon(nuevo-cent(politica.total)),antes:antes,despues:despues,desglose:{anterior:m,propuesto:{subtotal:mon(sub),envio:Number(m.envio),propina:Number(m.propina),iva:mon(tax(sub)),total:mon(nuevo)}}};
   }
 
   function resumenSeleccionCambio(tipo, v) {
@@ -1659,10 +1734,11 @@
   }
   function tarjetaPropuesta(sol,x,r) {
     var q=sol.cotizacion;
-    var h='<div class="seg-caja ux-solicitud-pedido ux-propuesta-prioritaria"><b>'+UI.esc(sol.estado==='Cotizada'?'Propuesta enviada por el restaurante · '+x.n:sol.estado==='Confirmada cliente'?'Modificación aceptada · '+x.n:sol.aplicado?'Modificación aplicada · '+x.n:'Modificación · '+sol.tipo)+'</b>';
+    var cancelar=sol.tipo==='cancelar'||!!(q&&q.tipo==='cancelar');
+    var h='<div class="seg-caja ux-solicitud-pedido ux-propuesta-prioritaria"><b>'+UI.esc(cancelar?'Cancelación · '+x.n+' · '+(sol.estado==='Cotizada'?'por confirmar':sol.estado==='Confirmada cliente'?'aceptada, pendiente de aplicar':sol.estado==='Aplicada'?'aplicada':'en revisión'):sol.estado==='Cotizada'?'Propuesta enviada por el restaurante · '+x.n:sol.estado==='Confirmada cliente'?'Modificación aceptada · '+x.n:sol.aplicado?'Modificación aplicada · '+x.n:'Modificación · '+sol.tipo)+'</b>';
     if(!q)return h+'<p>'+UI.esc(sol.respuesta||'Estamos revisando tu solicitud.')+'</p>'+(sol.detalle?'<div class="ux-mensaje-propuesta"><b>Cambio solicitado</b>'+UI.esc(sol.detalle)+'</div>':'')+(solicitudAbierta([sol])?'<div class="ux-comparacion-totales"><div class="ux-total-anterior"><small>Total vigente</small><strong>'+UI.esc(UI.dinero(r.total))+'</strong></div><div class="ux-total-nuevo"><small>Nuevo total</small><strong>Pendiente</strong></div><div class="ux-total-diferencia"><span>Diferencia económica</span><b>Por confirmar</b></div></div><p class="ayuda">El nuevo total se confirmará cuando el restaurante envíe la propuesta.</p>':'')+'</div>';
-    h+=UI.compararTotalesCambio(q)+(q.mensaje?'<div class="ux-mensaje-propuesta"><b>Mensaje del restaurante</b>'+UI.esc(q.mensaje)+'</div>':'')+'<details '+(sol.estado==='Cotizada'?'open':'')+'><summary>Comparar productos e importes</summary>'+UI.compararDetalleCambio(q)+'</details>';
-    if(sol.estado==='Cotizada')h+='<button class="btn bloque" type="button" data-aceptar-cambio="'+UI.esc(sol.id)+'" data-numero-cambio="'+UI.esc(x.n)+'">Aceptar modificación</button><button class="btn secundario bloque" type="button" data-rechazar-cambio="'+UI.esc(sol.id)+'" data-numero-cambio="'+UI.esc(x.n)+'">Mantener pedido original</button>';
+    h+=UI.compararTotalesCambio(q)+(cancelar?'<p class="ayuda">El pedido sigue vigente hasta aplicar la cancelación. No implica devolución automática.</p>':'')+(q.mensaje?'<div class="ux-mensaje-propuesta"><b>Mensaje del restaurante</b>'+UI.esc(q.mensaje)+'</div>':'')+'<details '+(sol.estado==='Cotizada'?'open':'')+'><summary>Comparar productos e importes</summary>'+UI.compararDetalleCambio(q)+'</details>';
+    if(sol.estado==='Cotizada')h+='<button class="btn bloque" type="button" data-aceptar-cambio="'+UI.esc(sol.id)+'" data-numero-cambio="'+UI.esc(x.n)+'">'+(cancelar?'Confirmar cancelación':'Aceptar modificación')+'</button><button class="btn secundario bloque" type="button" data-rechazar-cambio="'+UI.esc(sol.id)+'" data-numero-cambio="'+UI.esc(x.n)+'">'+(cancelar?'Conservar mi pedido':'Mantener pedido original')+'</button>';
     else if(sol.estado==='Confirmada cliente'){
       if(UI.esDigital(r.forma_pago)&&r.pago_verificado&&q.adicional>0){h+='<p>Pago adicional pendiente: <b>'+UI.esc(UI.dinero(q.adicional))+'</b></p>'+(r.forma_pago==='transferencia'?tarjetasCuentas(q.adicional,r.numero,false,r.cuenta_pago):'')+(UI.digitos(cfg().whatsapp)?'<button class="btn bloque" data-comprobante-ajuste="'+UI.esc(r.numero)+'" type="button">Enviar comprobante adicional</button>':'');}
       else if(UI.esDigital(r.forma_pago)&&r.pago_verificado&&q.adicional<0)h+='<p>El restaurante debe conciliar una devolución de '+UI.esc(UI.dinero(-q.adicional))+'.</p>';

@@ -342,13 +342,13 @@
   UI.compararTotalesCambio = function(q) {
     if(!q||[q.total_actual,q.total_estimado,q.adicional].some(function(v){return v==null||v===''||!Number.isFinite(Number(v));}))return '';
     var delta=Number(q.adicional),dif=delta>0?'+'+UI.dinero(delta):delta<0?'−'+UI.dinero(-delta):UI.dinero(0);
-    return '<div class="ux-comparacion-totales"><div class="ux-total-anterior"><small>Total anterior</small><strong>'+UI.esc(UI.dinero(q.total_actual))+'</strong></div><div class="ux-total-nuevo"><small>Nuevo total</small><strong>'+UI.esc(UI.dinero(q.total_estimado))+'</strong></div><div class="ux-total-diferencia"><span>'+ (delta>0?'Aumento del pedido':delta<0?'Reducción del pedido':'Sin diferencia de precio')+'</span><b>'+UI.esc(dif)+'</b></div></div>';
+    return '<div class="ux-comparacion-totales"><div class="ux-total-anterior"><small>Total anterior</small><strong>'+UI.esc(UI.dinero(q.total_actual))+'</strong></div><div class="ux-total-nuevo"><small>'+ (q.tipo==='cancelar'?'Total si se cancela':q.estimacion_previa?'Nuevo total estimado':'Nuevo total')+'</small><strong>'+UI.esc(UI.dinero(q.total_estimado))+'</strong></div><div class="ux-total-diferencia"><span>'+ (q.tipo==='cancelar'?'Importe sujeto a cancelación':delta>0?'Aumento del pedido':delta<0?'Reducción del pedido':'Sin diferencia de precio')+'</span><b>'+UI.esc(dif)+'</b></div></div>';
   };
   UI.compararDetalleCambio = function(q) {
     function fila(t,v){return '<div class="ux-resumen-item"><span>'+UI.esc(t)+'</span><b>'+UI.esc(UI.dinero(v))+'</b></div>';}
     function importe(x,k){return x&&x[k]!=null&&x[k]!==''&&Number.isFinite(Number(x[k]))?Number(x[k]):null;}
     function grupo(t,ls,total,desglose){
-      ls=Array.isArray(ls)?ls:[];var suma=ls.reduce(function(n,d){return n+Number(d.total_linea||0);},0);
+      ls=Array.isArray(ls)?ls:[];var agrupadas=[],mapa=Object.create(null);ls.forEach(function(d){var ex=Array.isArray(d.extras)?d.extras:String(d.extras||'').split(',').map(function(e){return e.trim();}).filter(Boolean);var k=d.plato_id&&d.precio!=null?JSON.stringify([String(d.plato_id),String(d.nombre),Number(d.precio),ex.slice().sort()]):null;if(k&&mapa[k]){mapa[k].cantidad=Number(mapa[k].cantidad)+Number(d.cantidad);mapa[k].total_linea=Math.round((Number(mapa[k].total_linea)+Number(d.total_linea))*100)/100;}else{var copia=Object.assign({},d);agrupadas.push(copia);if(k)mapa[k]=copia;}});ls=agrupadas;var suma=ls.reduce(function(n,d){return n+Number(d.total_linea||0);},0);
       var html='<div class="ux-comparacion-grupo"><h4>'+UI.esc(t)+'</h4>'+ls.map(function(d){return '<div class="ux-resumen-item"><span>'+UI.esc(d.cantidad+' × '+d.nombre)+(d.extras&&d.extras.length?'<small>'+UI.esc(Array.isArray(d.extras)?d.extras.join(', '):d.extras)+'</small>':'')+'</span><b>'+UI.esc(UI.dinero(d.total_linea))+'</b></div>';}).join('');
       if(!ls.length)html+='<p class="ayuda">Sin productos</p>';
       html+=fila('Subtotal productos',importe(desglose,'subtotal')===null?suma:desglose.subtotal);
