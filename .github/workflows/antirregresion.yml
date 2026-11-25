@@ -58,3 +58,6 @@ jobs:
 
       - name: Centro de avisos y voz en móvil y escritorio
         run: node tests/navegador-notificaciones.cjs
+
+      - name: Avisos del cliente en móvil y escritorio
+        run: node tests/navegador-avisos-cliente.cjs

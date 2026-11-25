@@ -1353,13 +1353,13 @@
         }
         revisar.forEach(function(x){var p=res[x.n];if(p&&!p.consulta_error&&!p.no_existe)historialRevisado[identidadSeguimiento(x)]=true;});
         lista=eliminarReferenciasInexistentes(lista,res);
-        avisosCliente(function(a){a.conservar(lista);});
+        avisosCliente(function(a){a.conservar(misPedidos());});
         if(!lista.length){cont.hidden=true;cont.innerHTML='';var accesoVacio=$('#btn-mi-pedido');if(accesoVacio)accesoVacio.hidden=true;return;}
         var cambio2 = false;
         lista.forEach(function (x) {
           var p = res[x.n]; if (!p) return;
           if (p.no_existe || p.consulta_error) { return; }
-          avisosCliente(function(a){a.observar(x,p);});
+          avisosCliente(function(a){if(misPedidos().some(function(y){return identidadSeguimiento(y)===identidadSeguimiento(x);}))a.observar(x,p);});
           if (p.estado !== x.e) { x.e = p.estado; if (p.estado === 'Entregado') x.fe = Date.now(); cambio2 = true; }
           if (p.total != null && Number.isFinite(Number(p.total)) && Number(p.total) !== Number(x.t)) { x.t = p.total; cambio2 = true; }
           if(Array.isArray(p.detalle)&&p.detalle.length){var nuevos=p.detalle.map(function(d){return {p:String(d.plato_id),n:d.nombre,c:Number(d.cantidad),x:String(d.extras||'').split(',').map(function(v){return v.trim();}).filter(Boolean)};});if(JSON.stringify(nuevos)!==JSON.stringify(x.i)){x.i=nuevos;cambio2=true;}}

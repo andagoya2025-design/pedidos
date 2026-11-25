@@ -1,0 +1,22 @@
+const assert=require('node:assert/strict'),fs=require('node:fs');const {chromium,webkit,devices}=require('playwright');const read=p=>fs.readFileSync(p,'utf8');
+async function run(engine,device,label){
+ const browser=await engine.launch();try{
+ const page=await browser.newPage(device),errors=[];page.on('pageerror',e=>errors.push(e.message));await page.route('**/*',r=>r.abort());
+ const header=read('pedir.html').match(/<header class="pedir-portada">[\s\S]*?<\/header>/)[0];
+ await page.setContent('<meta name="viewport" content="width=device-width,initial-scale=1">'+header+'<section id="seguimiento"><details data-pedido-desplegable="PED-0001"><summary>Pedido de prueba</summary></details></section>');
+ await page.addStyleTag({content:read('css/app.css')});await page.addStyleTag({content:read('css/modulos.css')});await page.addScriptTag({content:read('js/ui.js')});
+ await page.addScriptTag({content:'var mem={};window.APP_MEMORIA={leer:k=>mem[k],guardar:(k,v)=>mem[k]=v};window.beeps=0;window.spoken=[];UI.sonar=()=>beeps++;UI.desbloquearSonido=()=>{};Object.defineProperty(window,"speechSynthesis",{configurable:true,value:{getVoices:()=>[{lang:"es-MX"}],speak:u=>{spoken.push(u.text);setTimeout(()=>u.onend(),1)},cancel:()=>{}}});window.SpeechSynthesisUtterance=function(t){this.text=t};'});
+ await page.addScriptTag({content:read('js/voz.js')});await page.addScriptTag({content:read('js/avisos-cliente.js')});await page.evaluate(()=>document.dispatchEvent(new Event('DOMContentLoaded')));
+ await page.evaluate(()=>{document.querySelector('[data-marca-nombre]').textContent='Restaurante de prueba';window.x={n:'PED-0001',s:'PED-0001-abcdef',f:1,e:'Recibido'};window.p={numero:x.n,seguimiento:x.s,estado:'Preparando',tipo_entrega:'domicilio'};MIP_CLIENTE_AVISOS.conservar([x]);});
+ assert.equal(await page.locator('#mip-cliente-num').isHidden(),true);
+ await page.locator('#mip-cliente-avisos').click();await page.getByRole('button',{name:'Configurar avisos'}).click();await page.locator('#mip-cliente-modo').selectOption('voz');await page.locator('#mip-cliente-vol').fill('65');await page.getByRole('button',{name:'Guardar',exact:true}).click();
+ await page.evaluate(()=>{MIP_CLIENTE_AVISOS.observar(x,p);MIP_CLIENTE_AVISOS.observar(x,p);MIP_CLIENTE_AVISOS.observar(x,{...p,seguimiento:'otro',estado:'Entregado'});});
+ await page.waitForFunction(()=>spoken.length===1);assert.match(await page.evaluate(()=>spoken[0]),/preparando/);assert.equal(await page.locator('#mip-cliente-num').innerText(),'1');
+ assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2));
+ await page.locator('#mip-cliente-avisos').click();assert.equal(await page.locator('[data-cliente-aviso]').count(),1);await page.locator('[data-cliente-aviso]').click();assert.equal(await page.locator('[data-pedido-desplegable]').getAttribute('open'),'');assert.equal(await page.locator('#mip-cliente-num').isHidden(),true);
+ await page.evaluate(()=>{MIP_CLIENTE_AVISOS.configurar('silencio',65);MIP_CLIENTE_AVISOS.observar(x,{...p,estado:'En camino'});});assert.equal(await page.locator('#mip-cliente-num').innerText(),'1');
+ await page.locator('#mip-cliente-avisos').click();await page.locator('#mip-cliente-leer').click();assert.equal(await page.locator('#mip-cliente-num').isHidden(),true);await page.evaluate(()=>MIP_CLIENTE_AVISOS.conservar([]));await page.locator('.ventana').waitFor({state:'hidden'});assert.equal(await page.evaluate(()=>MIP_CLIENTE_AVISOS.estado().length),0);
+ assert.equal(await page.evaluate(()=>beeps),0);assert.deepEqual(errors,[]);console.log('PASS '+label+': cliente, voz simulada, campana, privacidad y navegación');
+ }finally{await browser.close()}
+}
+(async()=>{await run(webkit,devices['iPhone SE'],'iPhone SE');await run(chromium,{viewport:{width:360,height:740},isMobile:true,hasTouch:true},'Android compacto');await run(chromium,{viewport:{width:1366,height:768}},'Escritorio')})().catch(e=>{console.error(e);process.exitCode=1});
