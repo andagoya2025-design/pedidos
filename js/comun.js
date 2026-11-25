@@ -155,8 +155,8 @@
     return '<span class="chip-tipo tipo-' + t + '">' + d.icono + ' ' + (t === 'mesa' && p.mesa ? 'Mesa ' + UI.esc(p.mesa) : d.nombre) + '</span>' +
       (p.hora_llegada ? '<span class="chip-tipo tipo-hora">⏰ ' + UI.esc(UI.ventanaHora(p.hora_llegada, p.hora_ventana_fin, Number(global.APP && global.APP.publico && global.APP.publico.ventana_minutos) || 30)) + ' aprox.</span>' : '');
   };
-  UI.NOMBRE_PAGO = { efectivo: '💵 Efectivo', transferencia: '🏦 Transferencia', deuna: '📲 Deuna' };
-  UI.esDigital = function (f) { return f === 'transferencia' || f === 'deuna'; };
+  UI.NOMBRE_PAGO = { efectivo: '💵 Efectivo', transferencia: '🏦 Transferencia', deuna: '📲 Deuna', payphone: 'Tarjeta · Payphone' };
+  UI.esDigital = function (f) { return f === 'transferencia' || f === 'deuna' || f === 'payphone'; };
 
   /* Etiquetas de los platos. */
   UI.ETIQUETAS = {
