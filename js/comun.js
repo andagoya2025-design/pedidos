@@ -169,6 +169,35 @@
     var url=/^https:\/\/drive\.google\.com\/thumbnail\?id=[A-Za-z0-9_-]{10,100}&sz=w800$/.test(String(personalizado||''))?personalizado:(Object.prototype.hasOwnProperty.call(logos,clave)?logos[clave]:'');
     return '<span class="banco-marca" aria-hidden="true"><span class="banco-inicial">'+UI.esc(clave.charAt(0).toUpperCase()||'B')+'</span>'+(url?'<img src="'+UI.esc(url)+'" alt="" referrerpolicy="no-referrer" onerror="this.remove()">':'')+'</span>';
   };
+  /* Paleta calculada una vez al cargar el logo, no durante el pago. */
+  UI.paletaBanco = function (pixels) {
+    var bins={}, best=null;
+    for(var i=0;i<pixels.length;i+=4){
+      var r=pixels[i],g=pixels[i+1],b=pixels[i+2],a=pixels[i+3],max=Math.max(r,g,b),min=Math.min(r,g,b);
+      if(a<200||min>232||max-min<24||max<45)continue;
+      var k=[r>>5,g>>5,b>>5].join(','),v=bins[k]||(bins[k]={n:0,r:0,g:0,b:0});
+      v.n++;v.r+=r;v.g+=g;v.b+=b;
+      if(!best||v.n>best.n)best=v;
+    }
+    if(!best)return '';
+    return '#'+[best.r,best.g,best.b].map(function(v){return Math.round(v/best.n).toString(16).padStart(2,'0');}).join('');
+  };
+  UI.colorLogoBanco = function (data) {
+    return new Promise(function(resolve){
+      var img=new Image();
+      img.onerror=function(){resolve('');};
+      img.onload=function(){try{var c=document.createElement('canvas');c.width=c.height=64;var ctx=c.getContext('2d');ctx.drawImage(img,0,0,64,64);resolve(UI.paletaBanco(ctx.getImageData(0,0,64,64).data));}catch(e){resolve('');}};
+      img.src=data;
+    });
+  };
+  UI.tonoBanco = function (cuenta) {
+    var n=String(cuenta.banco||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim().replace(/^banco\s+(?:de(?:l)?\s+)?/,'');
+    var marcas={pichincha:'#f5d325',guayaquil:'#a31368',pacifico:'#07569b',bolivariano:'#006c91',produbanco:'#007b46'};
+    var color=/^#[0-9a-f]{6}$/i.test(String(cuenta.color||''))?cuenta.color:(cuenta.logo_url?'#334155':(Object.prototype.hasOwnProperty.call(marcas,n)?marcas[n]:'#334155'));
+    var rgb=[1,3,5].map(function(i){var c=parseInt(color.slice(i,i+2),16)/255;return c<=.04045?c/12.92:Math.pow((c+.055)/1.055,2.4);});
+    var l=.2126*rgb[0]+.7152*rgb[1]+.0722*rgb[2];
+    return {fondo:color,texto:(l+.05)/.05>=1.05/(l+.05)?'#000000':'#ffffff'};
+  };
   UI.NOMBRE_PAGO = { efectivo: '💵 Efectivo', transferencia: '🏦 Transferencia', deuna: '📲 Deuna' };
   UI.esDigital = function (f) { return f === 'transferencia' || f === 'deuna'; };
 
