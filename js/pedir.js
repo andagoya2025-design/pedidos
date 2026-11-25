@@ -834,7 +834,6 @@
   }
   function hayTransferencia() { return cuentasBanco().length > 0 || !!String(cfg().datos_transferencia || '').trim(); }
   function etiquetaCuenta(x) { return x.banco + ' · ' + x.numero; }
-  function colorBanco(n) { var h = 0; String(n).split('').forEach(function (ch) { h = (h * 31 + ch.charCodeAt(0)) % 360; }); return 'hsl(' + h + ' 55% 32%)'; }
   /* Tarjetas «premium» de las cuentas del negocio, con botón de copiar cada dato. */
   function tarjetasCuentasSolo(p) { return tarjetasCuentas(p.total, p.numero, false, p.cuenta_pago); }
   function tarjetasCuentas(monto, referencia, elegir, solo) {
@@ -844,7 +843,7 @@
     var elegida = pago.cuenta || '';
     return '<div class="cuentas">' + lista.map(function (x) {
       var et = etiquetaCuenta(x), sel = elegir && elegida === et, tono=UI.tonoBanco(x);
-      return '<div class="cuenta-banco' + (sel ? ' elegida' : '') + '" style="--banco:' + colorBanco(x.banco) + '">' +
+      return '<div class="cuenta-banco' + (sel ? ' elegida' : '') + '" style="--banco:' + tono.fondo + ';--banco-texto:' + tono.texto + '">' +
         '<div class="cb-cabeza">'+UI.logoBanco(x.banco,x.logo_url)+
         '<div><b>' + UI.esc(x.banco) + '</b><small>Cuenta ' + (x.tipo === 'corriente' ? 'corriente' : 'de ahorros') + '</small></div></div>' +
         '<div class="cb-numero"><span>' + UI.esc(x.numero) + '</span><button type="button" class="cb-copiar" data-copiar="' + UI.esc(x.numero.replace(/[ -]/g, '')) + '" aria-label="Copiar número de cuenta">📋</button></div>' +
