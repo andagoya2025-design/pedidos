@@ -1210,23 +1210,28 @@
     var x=lista.find(function(y){return identidadSeguimiento(y)===ref.identidad;});
     if(!x)return {estado:'No disponible',numero:ref.numero};
     var r=res[x.n];
-    if(!r||r.consulta_error||r.no_existe||String(r.numero)!==String(x.n)||(x.s&&String(r.seguimiento)!==String(x.s)))return null;
+    if(!r||r.consulta_error||r.no_existe||String(r.numero)!==String(x.n)||(x.s&&String(r.seguimiento)!==String(x.s))){
+      // Estado terminal previamente confirmado y guardado en este dispositivo.
+      // No depender de una nueva consulta si ya no queda ningún pedido activo.
+      if(x.e==='Anulado')return {estado:'Anulado',numero:x.n,total:x.t==null?ref.total:x.t,pago:typeof x.pv==='boolean'?x.pv:null};
+      return null;
+    }
     var abierta=solicitudAbierta(solicitudes[x.n]);
     if(r.estado==='Anulado')return {estado:'Anulado',numero:x.n,total:r.total,pago:r.pago_verificado===true};
     if(r.estado!== 'Recibido'||Number(r.total)!==ref.total||r.pago_verificado===true||abierta||ref.reemplazado)return {estado:r.estado,numero:x.n,total:r.total,revision:!!abierta,pago:r.pago_verificado===true};
     return null;
   }
-  function actualizarExitoVigente(lista,res,solicitudes) {
+  function actualizarExitoVigente(lista,res,solicitudes,soloTerminal) {
     if(paso!==4||!exitoVigente||!cuerpo()||!cuerpo().querySelector('[data-exito-vigente]'))return;
     var e=estadoExitoVigente(exitoVigente,lista,res,solicitudes);
-    if(!e)return;
+    if(!e||(soloTerminal&&e.estado!=='Anulado'&&e.estado!=='No disponible'))return;
     var firma=JSON.stringify(e);
     if(exitoVigente.firma===firma)return;
     exitoVigente.firma=firma;
     exitoVigente.reemplazado=true;
     var anul=e.estado==='Anulado', falta=e.estado==='No disponible';
     var titulo=anul?'Pedido cancelado':falta?'Pedido no disponible':e.revision?'Pedido en revisión':'Estado de tu pedido';
-    var importe=anul?'<p>Importe histórico: <b>'+UI.esc(UI.dinero(e.total))+'</b></p><p>No envíes pagos por este pedido. '+(e.pago?'Consulta con el restaurante cualquier devolución.':'Saldo pendiente de pago: '+UI.esc(UI.dinero(0))+'.')+'</p>':falta?'<p>Actualiza el seguimiento antes de realizar un pago.</p>':'<p>Importe vigente: <b>'+UI.esc(UI.dinero(e.total))+'</b></p><p>'+UI.esc(e.revision?'Espera la resolución de tu solicitud antes de realizar otro pago.':e.estado)+'</p>';
+    var importe=anul?'<p>Importe histórico: <b>'+UI.esc(UI.dinero(e.total))+'</b></p><p>No envíes pagos por este pedido. '+('Saldo pendiente de pago: '+UI.esc(UI.dinero(0))+'. '+(e.pago===true?'Consulta con el restaurante cualquier devolución.':e.pago===null?'Si ya pagaste, consulta con el restaurante cualquier devolución.':''))+'</p>':falta?'<p>Actualiza el seguimiento antes de realizar un pago.</p>':'<p>Importe vigente: <b>'+UI.esc(UI.dinero(e.total))+'</b></p><p>'+UI.esc(e.revision?'Espera la resolución de tu solicitud antes de realizar otro pago.':e.estado)+'</p>';
     var html='<div class="tarjeta exito-grande" data-exito-vigente><h2>'+titulo+'</h2><div class="numero-pedido">'+UI.esc(e.numero)+'</div>'+importe+'<button class="btn borde bloque" type="button" id="btn-seguir">Ver mis pedidos</button><button class="btn secundario bloque" type="button" id="btn-nuevo">Hacer otro pedido</button></div>';
     cuerpo().innerHTML=html;
     $('#btn-nuevo').addEventListener('click',function(){irA(1);});
@@ -1330,6 +1335,8 @@
     return segEnCurso;
   }
   function refrescarSeguimiento() {
+    // El recibo visible debe conciliarse incluso sin pedidos activos o con un modal.
+    actualizarExitoVigente(misPedidos(),{}, {},true);
     if (document.hidden || navigator.onLine === false || !misPedidos().some(activo) || segEnCurso || document.querySelector('.velo') || document.querySelector('#seguimiento [aria-busy="true"]')) return;
     if (DATOS.ocupado()) return;
     var clave = misPedidos().filter(activo).map(identidadSeguimiento).sort().join('|');
@@ -1349,6 +1356,7 @@
     var cont = $('#seguimiento');
     if (!cont) return;
     var lista = misPedidos();
+    actualizarExitoVigente(lista,{}, {},true);
     avisosCliente(function(a){a.conservar(lista);});
     if (!lista.length) { actualizarExitoVigente(lista,{},{}); cont.hidden = true; cont.innerHTML = ''; var acceso = $('#btn-mi-pedido'); if(acceso) acceso.hidden=true; return; }
     cont.hidden = false;
@@ -1386,6 +1394,9 @@
         }
         revisar.forEach(function(x){var p=res[x.n];if(p&&!p.consulta_error&&!p.no_existe)historialRevisado[identidadSeguimiento(x)]=true;});
         lista=eliminarReferenciasInexistentes(lista,res);
+        // Pintar la anulación autenticada ANTES de guardar historial o esperar solicitudes.
+        // Un modal, otra consulta lenta o un retorno temprano no puede dejar un cobro obsoleto.
+        actualizarExitoVigente(lista,res,{},true);
         avisosCliente(function(a){a.conservar(misPedidos());});
         if(!lista.length){actualizarExitoVigente(lista,res,{});cont.hidden=true;cont.innerHTML='';var accesoVacio=$('#btn-mi-pedido');if(accesoVacio)accesoVacio.hidden=true;return;}
         var cambio2 = false;
@@ -1395,6 +1406,7 @@
           avisosCliente(function(a){if(misPedidos().some(function(y){return identidadSeguimiento(y)===identidadSeguimiento(x);}))a.observar(x,p);});
           if (p.estado !== x.e) { x.e = p.estado; if (p.estado === 'Entregado') x.fe = Date.now(); cambio2 = true; }
           if (p.total != null && Number.isFinite(Number(p.total)) && Number(p.total) !== Number(x.t)) { x.t = p.total; cambio2 = true; }
+          if (typeof p.pago_verificado==='boolean' && x.pv!==p.pago_verificado) { x.pv=p.pago_verificado; cambio2=true; }
           if(Array.isArray(p.detalle)&&p.detalle.length){var nuevos=p.detalle.map(function(d){return {p:String(d.plato_id),n:d.nombre,c:Number(d.cantidad),x:String(d.extras||'').split(',').map(function(v){return v.trim();}).filter(Boolean)};});if(JSON.stringify(nuevos)!==JSON.stringify(x.i)){x.i=nuevos;cambio2=true;}}
           if (p.seguimiento && !x.s) { x.s = p.seguimiento; cambio2 = true; }
           if (p.calificacion && !x.cal) { x.cal = p.calificacion; cambio2 = true; }

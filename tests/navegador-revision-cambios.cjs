@@ -7,12 +7,12 @@ const pedido={numero:'PED-0002',seguimiento:'b',estado:'Recibido',total:10.75,pa
 const politica={numero:pedido.numero,estado:'Recibido',local_id:'L',total:pedido.total,detalle:original};
 async function run(engine,device,label){
 const browser=await engine.launch({headless:true});try{const page=await browser.newPage(device),errors=[];page.on('pageerror',e=>errors.push(e.message));await page.route('**/*',r=>r.abort());
-await page.setContent('<meta name="viewport" content="width=device-width,initial-scale=1"><main id="pedir-cuerpo"><div data-exito-vigente>¡Pedido recibido! <button id="btn-wa">Pagar</button></div></main>');
+await page.setContent('<meta name="viewport" content="width=device-width,initial-scale=1"><main id="pedir-cuerpo"><div data-exito-vigente>¡Pedido recibido! <button id="btn-wa">Pagar</button></div></main><section id="seguimiento"></section><button id="btn-mi-pedido"></button>');
 await page.addStyleTag({content:read('css/app.css')});await page.addStyleTag({content:read('css/modulos.css')});await page.addScriptTag({content:read('js/ui.js')});await page.addScriptTag({content:read('js/comun.js')});
-await page.evaluate(({menu,politica,pedido})=>{window.demo={menu,politica,pedido};window.APP_MEMORIA={leer:()=>null,guardar:()=>{}};window.DATOS={crearVigiaSync:()=>async()=>false,pedir:async a=>{if(a==='menuPublico')return demo.menu;throw Error('Escritura o consulta inesperada: '+a)}};}, {menu,politica,pedido});
+await page.evaluate(({menu,politica,pedido})=>{window.demo={menu,politica,pedido};window.memoriaPrueba={};window.APP_MEMORIA={leer:k=>JSON.parse(JSON.stringify(memoriaPrueba[k]??null)),guardar:(k,v)=>{memoriaPrueba[k]=JSON.parse(JSON.stringify(v));}};window.DATOS={ocupado:()=>false,crearVigiaSync:()=>async()=>false,pedir:async a=>{if(a==='menuPublico')return demo.menu;throw Error('Escritura o consulta inesperada: '+a)}};}, {menu,politica,pedido});
 let source=read('js/pedir.js');const start=source.indexOf("  document.addEventListener('DOMContentLoaded', function () {");assert.ok(start>0);
 source=source.slice(0,start)+`  M=demo.menu;
-global.prueba={editorCambio:editorCambio,recibo:function(ref,lista,res,sols){paso=4;exitoVigente=ref;actualizarExitoVigente(lista,res,sols);}};
+global.prueba={editorCambio:editorCambio,recibo:function(ref,lista,res,sols){paso=4;exitoVigente=ref;actualizarExitoVigente(lista,res,sols);},preparar:function(ref){paso=4;exitoVigente=ref;},consultar:consultarSeguimiento,refrescar:refrescarSeguimiento};
 })(window);`;
 await page.addScriptTag({content:source});
 await page.evaluate(()=>{window.pruebaAvisos=[];window.pruebaError=null;const aviso=UI.aviso;UI.aviso=function(texto,tipo){if(tipo==='error')pruebaAvisos.push(String(texto));return aviso.apply(this,arguments);};});
@@ -46,6 +46,27 @@ assert.ok(await page.evaluate(()=>resultado.texto.length>=5));if(tieneExtra)asse
 }
 await page.evaluate(()=>{const a={n:'PED-0001',s:'a'},b={n:'PED-0002',s:'b'};prueba.recibo({identidad:'s:b',numero:b.n,total:7.75},[a,b],{[a.n]:{numero:a.n,seguimiento:'a',estado:'Recibido',total:8},[b.n]:{numero:b.n,seguimiento:'b',estado:'Anulado',total:7.75,pago_verificado:false}},{});});
 assert.match(await page.locator('#pedir-cuerpo').innerText(),/Pedido cancelado/);assert.match(await page.locator('#pedir-cuerpo').innerText(),/PED-0002/);assert.equal(await page.locator('#btn-wa').count(),0);assert.doesNotMatch(await page.locator('#pedir-cuerpo').innerText(),/PED-0001/);
+// Reproducir el flujo real: la respuesta de seguimiento llega cuando un modal
+// se abre, el historial se guarda y el render general debe detenerse.
+await page.evaluate(async()=>{
+ const a={n:'PED-0001',s:'a',e:'Recibido',t:8,f:Date.now()},b={n:'PED-0003',s:'c',e:'Recibido',t:8,f:Date.now()};
+ memoriaPrueba.mis_pedidos=[a,b];
+ const preparar=()=>{document.querySelector('#pedir-cuerpo').innerHTML='<div data-exito-vigente>¡Pedido recibido! <div class="pago-qr">Banco de prueba</div><button id="btn-wa">Pagar</button></div>';prueba.preparar({identidad:'s:c',numero:b.n,total:8});};
+ preparar();
+ DATOS.pedir=async(accion,args)=>{
+   if(accion==='pedidosSeguir'){const modal=document.createElement('div');modal.className='velo';modal.id='interrupcion-prueba';document.body.appendChild(modal);return {pedidos:[{numero:a.n,seguimiento:'a',estado:'Recibido',total:8},{numero:b.n,seguimiento:'c',estado:'Anulado',total:8,pago_verificado:false}]};}
+   if(accion==='pedidoCambiosConsultar'){if(!document.querySelector('#pedir-cuerpo').textContent.includes('Pedido cancelado'))throw Error('El recibo no se cerró antes de consultar solicitudes');return {numero:a.n,solicitudes:[]};}
+   throw Error('Consulta o escritura inesperada: '+accion);
+ };
+ window.resultadoInterrupcion=await prueba.consultar(false,true);
+ document.querySelector('#interrupcion-prueba').remove();
+});
+assert.equal(await page.evaluate(()=>resultadoInterrupcion),false);
+assert.match(await page.locator('#pedir-cuerpo').innerText(),/Pedido cancelado/);assert.match(await page.locator('#pedir-cuerpo').innerText(),/PED-0003/);assert.equal(await page.locator('#btn-wa,.pago-qr').count(),0);
+assert.equal(await page.evaluate(()=>memoriaPrueba.mis_pedidos.find(x=>x.n==='PED-0001').e),'Recibido');assert.equal(await page.evaluate(()=>memoriaPrueba.mis_pedidos.find(x=>x.n==='PED-0003').e),'Anulado');
+// También reparar un recibo antiguo si todos los pedidos ya son históricos.
+await page.evaluate(()=>{memoriaPrueba.mis_pedidos=memoriaPrueba.mis_pedidos.filter(x=>x.n==='PED-0003');document.querySelector('#pedir-cuerpo').innerHTML='<div data-exito-vigente>¡Pedido recibido! <button id="btn-wa">Pagar</button></div>';prueba.preparar({identidad:'s:c',numero:'PED-0003',total:8});prueba.refrescar();});
+assert.match(await page.locator('#pedir-cuerpo').innerText(),/Pedido cancelado/);assert.equal(await page.locator('#btn-wa').count(),0);
 assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2));assert.deepEqual(errors,[]);console.log('PASS '+label+': seis revisiones, restauración, cancelación e identidad de dos pedidos; red bloqueada');
 }finally{await browser.close()}}
 (async()=>{await run(webkit,devices['iPhone SE'],'iPhone SE');await run(chromium,{viewport:{width:360,height:740},isMobile:true,hasTouch:true},'Android compacto');await run(chromium,{viewport:{width:1366,height:768}},'Escritorio')})().catch(e=>{console.error(e);process.exitCode=1});
