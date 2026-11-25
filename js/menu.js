@@ -518,6 +518,7 @@
       '<label class="interruptor"><input type="checkbox" id="aj-verificar"' + (c.verificar_antes_salir !== 'NO' ? ' checked' : '') + '> Transferencia y Deuna: no despachar hasta verificar el pago en el banco</label>' +
       '<label class="interruptor"><input type="checkbox" id="aj-verprep"' + (c.verificar_antes_preparar !== 'NO' ? ' checked' : '') + '> Ni siquiera preparar hasta verificar el pago (recomendado)</label>' +
       '<div class="campo"><label for="aj-alpago">Avisar si el pago no se verifica en (min)</label><input class="entrada" id="aj-alpago" name="minutos_alerta_pago" inputmode="numeric" value="' + UI.esc(c.minutos_alerta_pago || '30') + '"><span class="ayuda">El pedido se marca en rojo en el panel para que llame o escriba al cliente.</span></div>' +
+      '<label class="interruptor"><input type="checkbox" id="aj-payphone"' + (c.payphone_habilitado === 'SI' ? ' checked' : '') + '> Payphone · cobro por enlace de WhatsApp</label><p class="ayuda">El personal genera el enlace en Payphone, lo comparte y verifica el cobro antes de preparar. No requiere API.</p>' +
       /* 3.1.3 */
       '<label class="interruptor"><input type="checkbox" id="aj-efectivo"' + (c.efectivo_permitido !== 'NO' ? ' checked' : '') + '> El cliente puede pagar en efectivo</label>' +
       '<div class="campo"><label for="aj-efmax">Efectivo solo hasta (USD)</label><input class="entrada" id="aj-efmax" name="efectivo_maximo" inputmode="decimal" value="' + UI.esc(c.efectivo_maximo || '') + '" placeholder="Ej. 20"><span class="ayuda">Vacío = sin límite. Si apaga el efectivo o el pedido pasa de este monto, el cliente solo ve transferencia o Deuna, y el pedido no pasa a cocina hasta que usted verifique el pago en su banco. Llene los datos de transferencia de arriba.</span></div>' +
@@ -655,6 +656,7 @@
       d.anos_limpieza_clientes = String(Math.min(10, Math.max(1, Math.floor(UI.numero(d.anos_limpieza_clientes) || 2))));
       d.propinas = UI.$('#aj-propinas').checked ? 'SI' : 'NO';
       d.codigo_entrega = UI.$('#aj-codigo').checked ? 'SI' : 'NO';
+      if (Object.prototype.hasOwnProperty.call(c,'payphone_habilitado')) { d.payphone_habilitado=UI.$('#aj-payphone').checked?'SI':'NO'; if(d.payphone_habilitado==='SI'&&!UI.digitos(d.whatsapp||c.whatsapp))return UI.aviso('Configura el WhatsApp del negocio antes de activar Payphone.','error'); }
       d.efectivo_permitido = UI.$('#aj-efectivo').checked ? 'SI' : 'NO'; // 3.1.3
       d.efectivo_maximo = d.efectivo_maximo ? String(UI.numero(d.efectivo_maximo) || '') : '';
       if (d.efectivo_permitido === 'NO' && !UI.$('#aj-verificar').checked) return UI.aviso('Sin efectivo, deje activado «no despachar hasta verificar el pago».', 'error');
