@@ -586,7 +586,7 @@
       UI.$('#aj-cuentas').innerHTML = cuentas.length ? cuentas.map(function (x, i) {
         var editar = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9M16 4l4 4M4 16l12-12a2.8 2.8 0 0 1 4 4L8 20H4z"/></svg>';
         var quitar = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/></svg>';
-        return '<div class="item banco-admin">'+UI.logoBanco(x.banco)+'<div class="banco-admin-datos"><div class="banco-admin-nombre">'+UI.esc(x.banco)+(x.activa===false?' <small class="banco-admin-oculta">Oculta</small>':'')+'</div>'+
+        return '<div class="item banco-admin">'+UI.logoBanco(x.banco,x.logo_url)+'<div class="banco-admin-datos"><div class="banco-admin-nombre">'+UI.esc(x.banco)+(x.activa===false?' <small class="banco-admin-oculta">Oculta</small>':'')+'</div>'+
           '<div class="banco-admin-sub">'+UI.esc(x.tipo==='corriente'?'Corriente':'Ahorros')+' · '+UI.esc(x.numero)+'</div><div class="banco-admin-sub">'+UI.esc(x.titular)+'</div></div>'+
           '<div class="banco-admin-acciones"><button class="btn secundario chico" type="button" data-cta-ed="'+i+'" aria-label="Editar">'+editar+'</button><button class="btn borde chico" type="button" data-cta-del="'+i+'" aria-label="Quitar">'+quitar+'</button></div></div>';
       }).join('') : '<p class="ayuda" style="margin:0">Aún no hay cuentas. Sin cuentas, la transferencia no aparece al cliente.</p>';
@@ -601,12 +601,14 @@
     }
     function editarCuenta(i) {
       var x = i >= 0 ? cuentas[i] : { banco: '', tipo: 'ahorros', numero: '', titular: '', documento: '', correo: '', activa: true };
+      var logo=x.logo_url||'', subiendo=false;
       function validarCuenta(v) {
-          var n = { banco: UI.$('#cta-b', v).value.trim(), tipo: UI.$('[data-t].activo', v).getAttribute('data-t'), numero: UI.$('#cta-n', v).value.replace(/\D/g, ''), titular: UI.$('#cta-ti', v).value.trim(), documento: UI.$('#cta-d', v).value.replace(/\D/g, ''), correo: UI.$('#cta-c', v).value.trim(), activa: UI.$('#cta-a', v).checked };
+          if(subiendo) return 'Espere a que termine la subida del logotipo.';
+          var n = { banco: UI.$('#cta-b', v).value.trim(), tipo: UI.$('[data-t].activo', v).getAttribute('data-t'), numero: UI.$('#cta-n', v).value.trim().replace(/\s+/g,' '), titular: UI.$('#cta-ti', v).value.trim(), documento: UI.$('#cta-d', v).value.trim().replace(/\s+/g,' '), logo_url:logo, correo: UI.$('#cta-c', v).value.trim(), activa: UI.$('#cta-a', v).checked };
           if (!n.banco) return 'Escriba el banco.';
-          if (n.numero.length < 5) return 'Revise el número de cuenta.';
+          if (!/^[A-Za-z0-9][A-Za-z0-9 -]{3,33}$/.test(n.numero) || n.numero.replace(/[ -]/g,'').length < 5) return 'Revise el número de cuenta.';
           if (!n.titular) return 'Escriba a nombre de quién está.';
-          if (n.documento && n.documento.length !== 10 && n.documento.length !== 13) return 'La cédula tiene 10 números y el RUC 13.';
+          if (n.documento && !/^[A-Za-z0-9][A-Za-z0-9 .-]{0,31}$/.test(n.documento)) return 'Revise el documento.';
           if (n.correo && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(n.correo)) return 'Revise el correo.';
           if (i >= 0) cuentas[i] = n; else cuentas.push(n);
           return true;
@@ -615,13 +617,20 @@
         icono: '🏦', titulo: i >= 0 ? 'Editar cuenta' : 'Nueva cuenta bancaria',
         html: '<form id="cta-f" class="formulario" novalidate>' +
           '<div class="campo"><label for="cta-b">Banco</label><input class="entrada" id="cta-b" maxlength="40" list="cta-bancos" value="' + UI.esc(x.banco) + '" placeholder="Ej. Banco Pichincha"><datalist id="cta-bancos">' + ['Banco Pichincha', 'Banco Guayaquil', 'Produbanco', 'Banco del Pacífico', 'Banco Internacional', 'Banco Bolivariano', 'Cooperativa JEP', 'Banco del Austro'].map(function (n) { return '<option value="' + n + '">'; }).join('') + '</datalist></div>' +
+          '<div class="campo"><label>Logotipo del banco (opcional)</label><div id="cta-logo-prev">'+UI.logoBanco(x.banco,logo)+'</div><input type="file" id="cta-logo-file" accept="image/png,image/jpeg,image/webp"><button type="button" class="btn borde chico" id="cta-logo-quitar">Quitar logotipo personalizado</button><input type="hidden" id="cta-logo-cambio"></div>' +
           '<div class="campo"><label>Tipo</label><div class="segmento" id="cta-t"><button type="button" data-t="ahorros" class="' + (x.tipo !== 'corriente' ? 'activo' : '') + '">Ahorros</button><button type="button" data-t="corriente" class="' + (x.tipo === 'corriente' ? 'activo' : '') + '">Corriente</button></div></div>' +
-          '<div class="campo"><label for="cta-n">Número de cuenta</label><input class="entrada" id="cta-n" inputmode="numeric" maxlength="20" value="' + UI.esc(x.numero) + '"></div>' +
+          '<div class="campo"><label for="cta-n">Número de cuenta</label><input class="entrada" id="cta-n" maxlength="34" autocapitalize="characters" value="' + UI.esc(x.numero) + '"></div>' +
           '<div class="campo"><label for="cta-ti">A nombre de</label><input class="entrada" id="cta-ti" maxlength="60" value="' + UI.esc(x.titular) + '"></div>' +
-          '<div class="campo"><label for="cta-d">Cédula o RUC del titular (opcional)</label><input class="entrada" id="cta-d" inputmode="numeric" maxlength="13" value="' + UI.esc(x.documento || '') + '"><span class="ayuda">Algunos bancos lo piden para transferir desde otro banco.</span></div>' +
+          '<div class="campo"><label for="cta-d">Documento del titular (opcional)</label><input class="entrada" id="cta-d" maxlength="32" value="' + UI.esc(x.documento || '') + '"><span class="ayuda">Algunos bancos lo piden para transferir desde otro banco.</span></div>' +
           '<div class="campo"><label for="cta-c">Correo para el comprobante (opcional)</label><input class="entrada" id="cta-c" type="email" maxlength="80" value="' + UI.esc(x.correo || '') + '" autocapitalize="off"></div>' +
           '<label class="interruptor"><input type="checkbox" id="cta-a"' + (x.activa !== false ? ' checked' : '') + '> Mostrar esta cuenta al cliente</label></form>',
-        alAbrir: function (v) { UI.$$('[data-t]', v).forEach(function (b) { b.addEventListener('click', function () { UI.$$('[data-t]', v).forEach(function (y) { y.classList.toggle('activo', y === b); }); }); }); },
+        alAbrir: function (v) { UI.$$('[data-t]', v).forEach(function (b) { b.addEventListener('click', function () { UI.$$('[data-t]', v).forEach(function (y) { y.classList.toggle('activo', y === b); }); }); });
+          function pintarLogo(){UI.$('#cta-logo-prev',v).innerHTML=UI.logoBanco(UI.$('#cta-b',v).value,logo);}
+          function marcarLogo(){UI.$('#cta-logo-cambio',v).dispatchEvent(new Event('input',{bubbles:true}));}
+          UI.$('#cta-b',v).addEventListener('input',pintarLogo);
+          UI.$('#cta-logo-quitar',v).addEventListener('click',function(){if(subiendo)return;logo='';marcarLogo();pintarLogo();});
+          UI.$('#cta-logo-file',v).addEventListener('change',async function(e){var f=e.target.files[0];if(!f||subiendo)return;subiendo=true;e.target.disabled=true;try{if(!/^image\/(png|jpeg|webp)$/.test(f.type)||f.size>8000000)throw Error('Use PNG, JPG o WebP de hasta 8 MB.');var base=await UI.leerFoto(f,480);var r=await DATOS.pedir('fotoSubir',{foto:base,tipo:'banco'},{guardar:true});if(!v.isConnected)return;logo=r.url;marcarLogo();pintarLogo();UI.aviso('Logotipo listo. Guarde los ajustes.','ok');}catch(err){if(v.isConnected)UI.aviso(err.message,'error');}finally{subiendo=false;e.target.disabled=false;e.target.value='';}});
+        },
         botones: [{ texto: 'Cancelar', valor: false, clase: 'secundario' }, { texto: 'Listo', valor: true, antes: function (v) { var m = validarCuenta(v); if (m !== true) { UI.aviso(m, 'error'); return false; } return true; } }]
       }).then(function (ok) { if (ok) { pintarCuentas(); UI.aviso('Toque «Guardar ajustes» para publicar la cuenta.', ''); } });
     }
