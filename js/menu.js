@@ -584,9 +584,11 @@
     if (!Array.isArray(cuentas)) cuentas = [];
     function pintarCuentas() {
       UI.$('#aj-cuentas').innerHTML = cuentas.length ? cuentas.map(function (x, i) {
-        return '<div class="item"><div class="avatar">🏦</div><div class="item-cuerpo"><div class="item-titulo">' + UI.esc(x.banco) + (x.activa === false ? ' <span class="etiqueta aviso">oculta</span>' : '') + '</div>' +
-          '<div class="item-sub">' + UI.esc(x.tipo === 'corriente' ? 'Corriente' : 'Ahorros') + ' N.º ' + UI.esc(x.numero) + ' · ' + UI.esc(x.titular) + '</div></div>' +
-          '<button class="btn secundario chico" type="button" data-cta-ed="' + i + '" aria-label="Editar">✏️</button><button class="btn borde chico" type="button" data-cta-del="' + i + '" aria-label="Quitar">🗑</button></div>';
+        var editar = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9M16 4l4 4M4 16l12-12a2.8 2.8 0 0 1 4 4L8 20H4z"/></svg>';
+        var quitar = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/></svg>';
+        return '<div class="item banco-admin">'+UI.logoBanco(x.banco)+'<div class="banco-admin-datos"><div class="banco-admin-nombre">'+UI.esc(x.banco)+(x.activa===false?' <small class="banco-admin-oculta">Oculta</small>':'')+'</div>'+
+          '<div class="banco-admin-sub">'+UI.esc(x.tipo==='corriente'?'Corriente':'Ahorros')+' · '+UI.esc(x.numero)+'</div><div class="banco-admin-sub">'+UI.esc(x.titular)+'</div></div>'+
+          '<div class="banco-admin-acciones"><button class="btn secundario chico" type="button" data-cta-ed="'+i+'" aria-label="Editar">'+editar+'</button><button class="btn borde chico" type="button" data-cta-del="'+i+'" aria-label="Quitar">'+quitar+'</button></div></div>';
       }).join('') : '<p class="ayuda" style="margin:0">Aún no hay cuentas. Sin cuentas, la transferencia no aparece al cliente.</p>';
       UI.$('#aj-cuenta-mas').hidden = cuentas.length >= 6;
       UI.$$('[data-cta-ed]', cuerpo()).forEach(function (b) { b.addEventListener('click', function () { editarCuenta(Number(b.getAttribute('data-cta-ed'))); }); });
