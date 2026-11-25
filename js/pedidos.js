@@ -122,7 +122,7 @@
     }
     if(t==='cancelar')html+='<p>Se propondrá cancelar el pedido completo y conciliar cualquier pago recibido.</p>';
     var ok=await UI.ventana({titulo:'Revisar '+x.numero,html:html,botones:[{texto:'Revisar propuesta',valor:true,antes:function(v){try{sel={retirar:[],agregar:[]};bajas.forEach(function(p,i){var el=v.querySelector('[data-cantidad="r'+i+'"]'),ch=v.querySelector('[data-retirar-todo="'+i+'"]'),n=ch?(ch.checked?Number(p.cantidad):0):Number(el.value);if(!Number.isInteger(n)||n<0||n>Number(p.cantidad))throw Error('Cantidad inválida');if(n)sel.retirar.push({id:String(p.id),cantidad:n});});platos.forEach(function(p,i){var el=v.querySelector('[data-cantidad="a'+i+'"]'),n=Number(el.value);if(!Number.isInteger(n)||n<0||n>1000)throw Error('Cantidad inválida');if(n)sel.agregar.push({plato_id:String(p.id),cantidad:n,extras:leerExtrasAdmin(p,v,i)});});if(t!=='cancelar'&&!sel.retirar.length&&!sel.agregar.length)throw Error('Selecciona productos.');if(t==='cambiar'&&(!sel.retirar.length||!sel.agregar.length))throw Error('Selecciona original y reemplazo.');return true;}catch(e){UI.aviso(e.message,'error');return false;}}},{texto:'Rechazar solicitud',valor:'rechazar',clase:'secundario'},{texto:'Volver',valor:null,clase:'secundario'}],alAbrir:function(v){v.querySelector('.ventana').classList.add('ux-gestion-modal');v.addEventListener('click',function(e){var variante=e.target.closest('[data-variante]');if(variante){if(platos.length>=400)return UI.aviso('Hay demasiadas variantes abiertas.','error');var p=platos[Number(variante.getAttribute('data-variante'))];if(!p)return;var clon=Object.assign({},p,{uxPre:{cantidad:0,extras:[]}});platos.push(clon);variante.closest('.ux-cambio-fila').insertAdjacentHTML('afterend',filaSegura(clon,platos.length-1,false));return;}var b=e.target.closest('[data-paso]');if(!b)return;var el=b.parentNode.querySelector('input');el.value=Math.max(0,Math.min(Number(el.max),Number(el.value)+Number(b.getAttribute('data-paso'))));el.dispatchEvent(new Event('input',{bubbles:true}));});v.addEventListener('input',function(e){if(e.target.hasAttribute('data-buscar'))UI.$$('[data-menu] [data-busqueda]',v).forEach(function(f){f.hidden=f.getAttribute('data-busqueda').indexOf(norm(e.target.value))<0;});if(e.target.hasAttribute('data-cantidad')){var row=e.target.closest('.ux-cambio-fila'),ex=row.querySelector('.ux-cambio-extras');if(ex){ex.hidden=Number(e.target.value)<=0;if(ex.hidden)UI.$$('input',ex).forEach(function(ch){if(ch.type==='checkbox')ch.checked=false;else ch.value='0';});}}});if(t==='cambiar')presentarSustitucionPremium(v);}});
-    if(ok==='rechazar'){var resp=await responderSolicitud(x,'Rechazada');if(resp){try{await DATOS.pedir('pedidoCambioResolver',{id:x.id,decision:'Rechazada',respuesta:resp},{guardar:true});UI.aviso('Solicitud rechazada.','ok');await cargar();}catch(e){UI.aviso(e.message,'error');}}return;}
+    if(ok==='rechazar'){var resp=await responderSolicitud(x,'Rechazada');if(resp){try{await guardarConAviso('pedidoCambioResolver',{id:x.id,decision:'Rechazada',respuesta:resp},x);UI.aviso('Solicitud rechazada.','ok');await cargar();}catch(e){UI.aviso(e.message,'error');}}return;}
     if(!ok)return;
     try{
       var q=await DATOS.pedir('pedidoCambioCotizar',{id:x.id,integral:true,seleccion:sel});
@@ -132,7 +132,7 @@
       var preview=UI.compararTotalesCambio(q)+UI.compararDetalleCambio(q)+(compatible?'<div class="campo ux-propuesta-mensaje"><label for="ux-prop-plantilla">Respuesta rápida</label><select id="ux-prop-plantilla" class="entrada">'+plantillas.map(function(m,i){return '<option value="'+i+'">'+['Propuesta revisada','Cambio disponible','Alternativa disponible'][i]+'</option>';}).join('')+'</select><label for="ux-prop-mensaje">Mensaje para el cliente</label><textarea class="entrada" id="ux-prop-mensaje" rows="3" maxlength="500">'+UI.esc(mensaje)+'</textarea></div>':'<p class="ayuda">La comparación está disponible. Para enviar un mensaje personalizado, actualiza el servidor a 3.1.16.</p>');
       var enviar=await UI.ventana({titulo:'Propuesta definitiva · '+x.numero,html:preview,botones:[{texto:'Confirmar y enviar al cliente',valor:true,antes:function(v){if(!compatible)return true;mensaje=v.querySelector('#ux-prop-mensaje').value.trim();if(mensaje.length<5||mensaje.length>500){UI.aviso('Escribe un mensaje de 5 a 500 caracteres.','error');return false;}return true;}},{texto:'Volver',valor:null,clase:'secundario'}],alAbrir:function(v){v.querySelector('.ventana').classList.add('ux-gestion-modal');if(compatible)v.querySelector('#ux-prop-plantilla').addEventListener('change',function(e){v.querySelector('#ux-prop-mensaje').value=plantillas[Number(e.target.value)];});}});
       if(!enviar)return;
-      var emitida=await DATOS.pedir('pedidoCambioProponer',{id:x.id,integral:true,seleccion:sel,total_esperado:q.total_estimado,mensaje:compatible?mensaje:undefined},{guardar:true});UI.aviso('Propuesta enviada. El cliente puede aceptar o rechazar.','ok');await cargar();
+      var emitida=await guardarConAviso('pedidoCambioProponer',{id:x.id,integral:true,seleccion:sel,total_esperado:q.total_estimado,mensaje:compatible?mensaje:undefined},x);UI.aviso('Propuesta enviada. El cliente puede aceptar o rechazar.','ok');await cargar();
       if(emitida&&emitida.estado==='Cotizada'&&emitida.cotizacion){var aviso=botonAvisoPropuesta(pedido,emitida.cotizacion);if(aviso)await UI.ventana({titulo:'Propuesta enviada · '+x.numero,html:UI.compararTotalesCambio(emitida.cotizacion)+'<p>Ya está disponible en la página del cliente.</p>'+aviso,botones:[{texto:'Listo',valor:true,clase:'secundario'}]});}
     }catch(e){UI.aviso('No se pudo emitir: '+e.message,'error');}
   }
@@ -273,19 +273,19 @@
     if(String(decision).indexOf('pago-')===0&&x.conciliacion_simple){
       var modo=String(decision).slice(5),q=x.cotizacion;
       if(!accionesPagoCambio(x).some(function(b){return b.valor===decision;}))return UI.aviso('Actualiza la solicitud.','error');
-      try{var a=await DATOS.pedir('pedidoCambioAplicar',{id:x.id,cotizacion_id:x.cotizacion_id,conciliacion_pago:modo,pago_previo_verificado:x.pago_verificado===true,total_confirmado:Number(q.total_estimado),confirmacion_bancaria:modo!=='efectivo'&&modo!=='sin_ajuste'},{guardar:true});UI.aviso(a.repetida?'Ya estaba aplicada.':'Modificación aplicada. '+(a.pago_verificado?'Pago conciliado.':'Total actualizado: '+UI.dinero(a.total_nuevo)),'ok');await cargar();}catch(e){UI.aviso('No se aplicó: '+e.message,'error');}return;
+      try{var a=await guardarConAviso('pedidoCambioAplicar',{id:x.id,cotizacion_id:x.cotizacion_id,conciliacion_pago:modo,pago_previo_verificado:x.pago_verificado===true,total_confirmado:Number(q.total_estimado),confirmacion_bancaria:modo!=='efectivo'&&modo!=='sin_ajuste'},x);UI.aviso(a.repetida?'Ya estaba aplicada.':'Modificación aplicada. '+(a.pago_verificado?'Pago conciliado.':'Total actualizado: '+UI.dinero(a.total_nuevo)),'ok');await cargar();}catch(e){UI.aviso('No se aplicó: '+e.message,'error');}return;
     }
     if(decision==='aplicar'){
       var digital=UI.esDigital(x.forma_pago),ref='',sinPago=false,delta=Number(x.adicional)||0;
       if(digital&&!x.pago_verificado){sinPago=await UI.confirmar('Actualizar total pendiente','Confirma en el banco que no existe ningún depósito anterior de '+x.numero+'. Si ya existe un pago, verifica primero el importe recibido.','Confirmo: aún no ha pagado');if(!sinPago)return;}
       else if(digital&&delta!==0){ref=await UI.pedirDato({titulo:delta>0?'Verificar pago adicional':'Registrar devolución realizada',etiqueta:'Referencia bancaria real',modo:'text',boton:'Verificar y aplicar',texto:'Comprueba '+(delta>0?'el pago recibido de ':'la devolución efectuada de ')+UI.dinero(Math.abs(delta))+'.',validar:function(v){return String(v).trim().length>=4?'':'Ingresa la referencia real.';}});if(!ref)return;}
-      try{var a=await DATOS.pedir('pedidoCambioAplicar',{id:x.id,cotizacion_id:x.cotizacion_id,pago_adicional_verificado:digital&&!!ref,referencia_pago_extra:ref,sin_pago_previo:sinPago},{guardar:true});UI.aviso(a.repetida?'Ya estaba aplicada.':'Modificación aplicada. Nuevo total: '+UI.dinero(a.total_nuevo),'ok');await cargar();}catch(e){UI.aviso('No se aplicó: '+e.message,'error');}return;
+      try{var a=await guardarConAviso('pedidoCambioAplicar',{id:x.id,cotizacion_id:x.cotizacion_id,pago_adicional_verificado:digital&&!!ref,referencia_pago_extra:ref,sin_pago_previo:sinPago},x);UI.aviso(a.repetida?'Ya estaba aplicada.':'Modificación aplicada. Nuevo total: '+UI.dinero(a.total_nuevo),'ok');await cargar();}catch(e){UI.aviso('No se aplicó: '+e.message,'error');}return;
     }
     var respuesta = await responderSolicitud(x,decision);
     if (!respuesta) return;
     var conciliado=false;if(x.estado==='Confirmada cliente'&&UI.esDigital(x.forma_pago)){conciliado=await UI.confirmar('Cerrar propuesta aceptada','Comprueba que no existe un ajuste bancario pendiente de devolver o registrar.','Confirmo conciliación');if(!conciliado)return;}
     try {
-      await DATOS.pedir('pedidoCambioResolver', { id: x.id, decision: decision, respuesta: respuesta, conciliado:conciliado }, { guardar: true });
+      await guardarConAviso('pedidoCambioResolver', { id: x.id, decision: decision, respuesta: respuesta, conciliado:conciliado }, x);
       UI.aviso('Solicitud actualizada. El pedido no se modificó ni cobró.', 'ok'); await cargar();
     } catch (err) { UI.aviso('No se pudo resolver: ' + err.message, 'error'); }
   }
@@ -414,10 +414,18 @@
     pintar();
   }
 
+  async function guardarConAviso(accion, datos, previo) {
+    var confirmar = function(){};
+    try { if(global.MIP_AVISOS && global.MIP_AVISOS.capturarSalida) confirmar=global.MIP_AVISOS.capturarSalida(accion, datos, previo); } catch(e) {}
+    var r = await DATOS.pedir(accion, datos, { guardar: true });
+    try { confirmar(r); } catch(e) {}
+    return r;
+  }
+
   async function guardar(boton, accion, datos, okTexto) {
     return UI.trabajando(boton, async function () {
       try {
-        var r = await DATOS.pedir(accion, datos, { guardar: true });
+        var r = await guardarConAviso(accion, datos, buscar(datos.id));
         if (r.pedido) reemplazar(r.pedido);
         if (okTexto) UI.aviso(okTexto, 'ok');
         return true;

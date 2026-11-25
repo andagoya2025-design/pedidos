@@ -317,13 +317,21 @@
       '<button class="btn ' + (t ? 'secundario' : '') + ' chico" type="button" id="btn-turno">' + (t ? 'Terminar turno' : '▶ Empezar turno') + '</button></div>' +
       '<button class="btn secundario chico" type="button" id="btn-ubic-vivo" style="margin:-4px 0 12px">📍 Compartir ubicación en vivo (Google Maps)</button>';
   }
+  async function guardarConAviso(accion, datos, previo) {
+    var confirmar = function(){};
+    try { if(global.MIP_AVISOS && global.MIP_AVISOS.capturarSalida) confirmar=global.MIP_AVISOS.capturarSalida(accion, datos, previo); } catch(e) {}
+    var r = await DATOS.pedir(accion, datos, { guardar: true });
+    try { confirmar(r); } catch(e) {}
+    return r;
+  }
+
   async function cambiarTurno(boton) {
     var terminar = !!mias.turno;
     if (terminar && !(await UI.confirmar('¿Terminar tu turno?', 'Se guarda la hora de salida. Entrega antes el efectivo en caja.', 'Sí, terminar'))) return;
     UI.trabajando(boton, async function () {
       var pos = await UI.ubicacion(8000);
       try {
-        mias = await DATOS.pedir(terminar ? 'turnoTerminar' : 'turnoIniciar', { lat: pos ? pos.lat : '', lng: pos ? pos.lng : '' }, { guardar: true });
+        mias = await guardarConAviso(terminar ? 'turnoTerminar' : 'turnoIniciar', { lat: pos ? pos.lat : '', lng: pos ? pos.lng : '' }, mias.turno);
         UI.aviso(terminar ? 'Turno terminado. ¡Buen descanso!' : '¡Turno iniciado! Buen trabajo 🛵', 'ok');
         pintarMias();
       } catch (err) { UI.error('No se guardó', err.message); }
@@ -401,7 +409,7 @@
       return UI.trabajando(boton, async function () {
         var pos = await UI.ubicacion(8000);
         try {
-          await DATOS.pedir('entregaSali', { id: id, lat: pos ? pos.lat : '', lng: pos ? pos.lng : '' }, { guardar: true });
+          await guardarConAviso('entregaSali', { id: id, lat: pos ? pos.lat : '', lng: pos ? pos.lng : '' }, p);
           UI.vibrar(); UI.aviso('¡Buen viaje! Hora de salida guardada.', 'ok');
           await cargarMias();
           var ofrecer = await UI.confirmar('¿Avisar al cliente que ya saliste?', 'Se abre WhatsApp con el mensaje listo.', '💬 Sí, avisar');
@@ -437,7 +445,7 @@
       return UI.trabajando(boton, async function () {
         var pos = await UI.ubicacion(8000);
         try {
-          mias = await DATOS.pedir('entregaEntregado', { id: id, lat: pos ? pos.lat : '', lng: pos ? pos.lng : '', foto: foto, codigo: codigo }, { guardar: true });
+          mias = await guardarConAviso('entregaEntregado', { id: id, lat: pos ? pos.lat : '', lng: pos ? pos.lng : '', foto: foto, codigo: codigo }, p);
           UI.vibrar([30, 40, 30]); UI.aviso('¡Entrega registrada! 🎉', 'ok');
           pintarMias();
         } catch (err) { UI.error('No se guardó', err.message); if (err.codigo === 'CAMBIO') cargarMias(); }
