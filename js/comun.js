@@ -155,6 +155,20 @@
     return '<span class="chip-tipo tipo-' + t + '">' + d.icono + ' ' + (t === 'mesa' && p.mesa ? 'Mesa ' + UI.esc(p.mesa) : d.nombre) + '</span>' +
       (p.hora_llegada ? '<span class="chip-tipo tipo-hora">⏰ ' + UI.esc(UI.ventanaHora(p.hora_llegada, p.hora_ventana_fin, Number(global.APP && global.APP.publico && global.APP.publico.ventana_minutos) || 30)) + ' aprox.</span>' : '');
   };
+  /* Identidad bancaria: solo URLs constantes, nunca URLs suministradas por la cuenta. */
+  UI.logoBanco = function (nombre) {
+    var n = String(nombre || '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim().replace(/\s+/g,' ');
+    var clave = n.replace(/^banco\s+(?:de(?:l)?\s+)?/,'');
+    var logos = {
+      pichincha:'https://brandemia.org/sites/default/files/inline/images/logo_banco_pichincha_portada.jpg',
+      guayaquil:'https://seeklogo.com/images/B/banco-guayaquil-2020-fondo-blanco-logo-097425DE72-seeklogo.com.png',
+      pacifico:'https://iconlogovector.com/uploads/images/2026/04/lg-69f29264c62b8-Banco-del-Pacifico.webp',
+      bolivariano:'https://www.temenos.com/wp-content/uploads/2019/05/Bolivariano-Casestudy-logo.jpg',
+      produbanco:'https://diariobusinessnews.com/wp-content/uploads/2023/06/Produbanco.jpg'
+    };
+    var url=Object.prototype.hasOwnProperty.call(logos,clave)?logos[clave]:'';
+    return '<span class="banco-marca" aria-hidden="true"><span class="banco-inicial">'+UI.esc(clave.charAt(0).toUpperCase()||'B')+'</span>'+(url?'<img src="'+UI.esc(url)+'" alt="" referrerpolicy="no-referrer" onerror="this.remove()">':'')+'</span>';
+  };
   UI.NOMBRE_PAGO = { efectivo: '💵 Efectivo', transferencia: '🏦 Transferencia', deuna: '📲 Deuna' };
   UI.esDigital = function (f) { return f === 'transferencia' || f === 'deuna'; };
 
