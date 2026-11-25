@@ -20,6 +20,25 @@ async function run(engine,device,label){
  assert.equal(await page.locator('.banco-admin').count(),6);
  assert.equal(await page.locator('.cuenta-banco').count(),5);
  assert.equal(await page.locator('#aj-cuenta-mas').isHidden(),true);
+ // Los logos existentes no se deben volver a subir para recuperar el color de marca.
+ assert.equal(await page.locator('.cuenta-banco').first().evaluate(e=>getComputedStyle(e).backgroundColor),'rgb(245, 211, 37)');
+ assert.equal(await page.locator('.cuenta-banco .banco-marca').first().evaluate(e=>getComputedStyle(e).backgroundColor),'rgb(255, 255, 255)');
+ // Extracción real desde imágenes locales, sin red ni datos de producción.
+ const palette=await page.evaluate(async()=>{
+   const canvas=document.createElement('canvas');canvas.width=canvas.height=64;
+   const ctx=canvas.getContext('2d');ctx.fillStyle='#ffffff';ctx.fillRect(0,0,64,64);ctx.fillStyle='#07569b';ctx.fillRect(8,8,48,48);
+   const results={};
+   for(const mime of ['image/png','image/jpeg','image/webp']){
+     const data=canvas.toDataURL(mime,1);
+     if(data.startsWith('data:'+mime+';'))results[mime]=await UI.colorLogoBanco(data);
+   }
+   results.invalid=await UI.colorLogoBanco('data:image/png;base64,invalid');
+   return results;
+ });
+ assert.equal(palette['image/png'],'#07569b');
+ for(const mime of ['image/jpeg','image/webp'])if(palette[mime]){const c=palette[mime];assert.ok(/^#[0-9a-f]{6}$/i.test(c));assert.ok([1,3,5].every((i,j)=>Math.abs(parseInt(c.slice(i,i+2),16)-[7,86,155][j])<=12),mime+': '+c);}
+ assert.equal(palette.invalid,'');
+
  await page.locator('[data-cta-ed="0"]').click();
  await page.locator('#cta-logo-quitar').click();
  await page.locator('#cta-color').fill('#f5d325');
