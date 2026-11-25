@@ -206,6 +206,8 @@
     var f = ev.target, boton = f.querySelector('button[type=submit]');
     var datos = UI.leerFormulario(f);
     if (!datos.usuario || !datos.clave) return UI.aviso('Escriba su usuario y su clave.', 'error');
+    // El submit todavía pertenece al gesto del usuario; no esperar la red.
+    if(global.MIP_AVISOS&&global.MIP_AVISOS.prepararIngreso)global.MIP_AVISOS.prepararIngreso();
     if (UI.dispId) datos.disp_id = UI.dispId(); // 3.0: el bloqueo por intentos es por teléfono
     await UI.trabajando(boton, async function () {
       try {
@@ -236,6 +238,7 @@
     } catch (err) {
       UI.aviso('No se pudieron cargar los locales: ' + err.message, 'error');
     }
+    if(global.MIP_AVISOS)global.MIP_AVISOS.sync();
     APP.ir(destinoIngreso(sesion.rol, global.location.hash, nuevoIngreso));
   }
 
