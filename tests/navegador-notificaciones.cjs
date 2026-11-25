@@ -32,6 +32,16 @@ async function run(engine,device,label){
  await page.waitForFunction(()=>spoken.length===5);assert.equal(await page.evaluate(()=>spoken.at(-1)),'Nuevo pedido de María.');
  await page.evaluate(()=>{for(let i=0;i<10;i++)MIP_AVISOS.registrar('pedido',[{id:'grupo'+i,nombre_aviso:'Carlos José'}]);MIP_AVISOS.registrar('solicitud',[{id:'c1',estado:'Pendiente'},{id:'c2',estado:'Confirmada cliente'}]);});
  await page.waitForFunction(()=>spoken.length===6);assert.equal(await page.evaluate(()=>spoken.at(-1)),'Atención, 10 nuevos pedidos, 1 solicitud de modificación, 1 modificación aceptada.');assert.equal(await page.evaluate(()=>MIP_AVISOS.estado().length),13);assert.deepEqual(errors,[]);
+ await page.evaluate(()=>{window.confirmar=MIP_AVISOS.capturarSalida('pedidoEstado',{id:'p',desde:'Recibido',a:'Preparando'},{numero:'PED-0020'});if(confirmar({pedido:{id:'otro',estado:'Preparando'}})!==false)throw Error('pedido ajeno');});assert.equal(await page.evaluate(()=>spoken.length),6);
+ await page.evaluate(()=>{let r={pedido:{id:'p',numero:'PED-0020',estado:'Preparando',preparando:'T1'}};if(!confirmar(r)||confirmar(r)!==false)throw Error('duplicación');});
+ await page.waitForFunction(()=>spoken.length===7);assert.equal(await page.evaluate(()=>spoken.at(-1)),'Pedido en preparación.');
+ await page.locator('#mip-avisos').click();assert.match(await page.locator('[data-aviso]').first().innerText(),/Pedido en preparación/);await page.getByRole('button',{name:'Cerrar',exact:true}).last().click();
+ await page.evaluate(()=>{APP.sesion={usuario_id:'U4',rol:'motorizado'};MIP_AVISOS.sync();MIP_AVISOS.entregas([{id:'e',numero:'PED-0021',estado:'Preparando',cliente_nombre:'José Luis'}]);});
+ await page.waitForFunction(()=>spoken.length===8);assert.equal(await page.evaluate(()=>spoken.at(-1)),'Nueva entrega para José.');
+ await page.evaluate(()=>{MIP_AVISOS.capturarSalida('entregaSali',{id:'e'},{numero:'PED-0021'})({pedido:{id:'e',numero:'PED-0021',estado:'En camino',en_camino:'T2'}});});
+ await page.waitForFunction(()=>spoken.length===9);assert.equal(await page.evaluate(()=>spoken.at(-1)),'Salida registrada. Buen viaje.');
+ await page.evaluate(()=>{MIP_AVISOS.capturarSalida('entregaEntregado',{id:'e'},{numero:'PED-0021'})({pedidos:[{id:'e',numero:'PED-0021',estado:'Entregado',entregado:'T3'}]});});
+ await page.waitForFunction(()=>spoken.length===10);assert.equal(await page.evaluate(()=>spoken.at(-1)),'Entrega registrada correctamente.');assert.equal(await page.evaluate(()=>MIP_AVISOS.estado().length),3);assert.deepEqual(errors,[]);
  console.log('PASS '+label+': campana, voz simulada, QR, permisos, silencio, lectura, aislamiento y diseño');
  }finally{await browser.close()}
 }
