@@ -1124,6 +1124,7 @@
         MEM.guardar('ultimo_carrito', { local: datos.local_id, items: datos.items });
         guardarMiPedido({ n: r.pedido.numero, tel: datos.cliente.telefono, s: r.pedido.clave_seguimiento ? r.pedido.numero + '-' + r.pedido.clave_seguimiento : '', f: Date.now(), t: r.pedido.total, e: 'Recibido', l: datos.local_id,
           i: datos.items.map(function (x) { var pl = plato(x.plato_id); return { p: x.plato_id, c: x.cantidad, x: x.extras, n: pl ? pl.nombre : '' }; }) });
+        avisoPedidoRecibido(r.pedido.numero);
         var detalle = datos.items.map(function (x) { var pl = plato(x.plato_id); return { plato: pl, cantidad: x.cantidad, extras: x.extras }; });
         r.pedido.ubic_por_wa = !!(ubic && ubic.fuente === 'whatsapp'); // 3.1.1: solo entonces se pide la ubicación por WhatsApp
         carrito = {}; codigoEnvio = ''; envioPendiente = null; ubic = null; limpiarCheckout();
@@ -1262,6 +1263,8 @@
   }
   function guardarMisPedidos(l) { MEM.guardar('mis_pedidos', l.slice(0, 30)); }
   function guardarMiPedido(x) { var l = misPedidos().filter(function (y) { return y.n !== x.n; }); l.unshift(x); guardarMisPedidos(l); }
+  function avisosCliente(fn) { try { if(global.MIP_CLIENTE_AVISOS)fn(global.MIP_CLIENTE_AVISOS); } catch(e) { /* los avisos nunca interrumpen el pedido */ } }
+  function avisoPedidoRecibido(numero) { avisosCliente(function(a){var l=misPedidos();a.conservar(l);var x=l.find(function(x){return x.n===numero;});if(x)a.recibido(x);}); }
   function activo(x) { return FINALES.indexOf(x.e) < 0 || (x.e === 'Entregado' && !x.cal && Date.now() - (x.fe || x.f || 0) < 6 * 3600000); }
 
   function identidadSeguimiento(x) { return x.s ? 's:'+String(x.s) : 'local:'+JSON.stringify([x.n,x.tel||'',x.f||0]); }
@@ -1313,6 +1316,7 @@
     var cont = $('#seguimiento');
     if (!cont) return;
     var lista = misPedidos();
+    avisosCliente(function(a){a.conservar(lista);});
     if (!lista.length) { cont.hidden = true; cont.innerHTML = ''; var acceso = $('#btn-mi-pedido'); if(acceso) acceso.hidden=true; return; }
     cont.hidden = false;
     var act = lista.filter(activo), hist = lista.filter(function (x) { return !activo(x); });
@@ -1349,11 +1353,13 @@
         }
         revisar.forEach(function(x){var p=res[x.n];if(p&&!p.consulta_error&&!p.no_existe)historialRevisado[identidadSeguimiento(x)]=true;});
         lista=eliminarReferenciasInexistentes(lista,res);
+        avisosCliente(function(a){a.conservar(lista);});
         if(!lista.length){cont.hidden=true;cont.innerHTML='';var accesoVacio=$('#btn-mi-pedido');if(accesoVacio)accesoVacio.hidden=true;return;}
         var cambio2 = false;
         lista.forEach(function (x) {
           var p = res[x.n]; if (!p) return;
           if (p.no_existe || p.consulta_error) { return; }
+          avisosCliente(function(a){a.observar(x,p);});
           if (p.estado !== x.e) { x.e = p.estado; if (p.estado === 'Entregado') x.fe = Date.now(); cambio2 = true; }
           if (p.total != null && Number.isFinite(Number(p.total)) && Number(p.total) !== Number(x.t)) { x.t = p.total; cambio2 = true; }
           if(Array.isArray(p.detalle)&&p.detalle.length){var nuevos=p.detalle.map(function(d){return {p:String(d.plato_id),n:d.nombre,c:Number(d.cantidad),x:String(d.extras||'').split(',').map(function(v){return v.trim();}).filter(Boolean)};});if(JSON.stringify(nuevos)!==JSON.stringify(x.i)){x.i=nuevos;cambio2=true;}}
@@ -1382,6 +1388,7 @@
         if (respuesta.numero === x.n) solicitudesPorPedido[x.n] = respuesta.solicitudes || [];
       } catch (e) { /* Seguimiento sigue funcionando si falla la consulta de solicitudes. */ }
     }));
+    avisosCliente(function(a){var actuales=misPedidos();a.conservar(actuales);act.forEach(function(x){if(actuales.some(function(y){return identidadSeguimiento(y)===identidadSeguimiento(x);}))a.observar(x,res[x.n],solicitudesPorPedido[x.n]);});});
     if (automatico && (document.hidden || document.querySelector('.velo') || document.querySelector('#seguimiento [aria-busy="true"]'))) return false;
     var acceso = $('#btn-mi-pedido'); if (acceso) { acceso.hidden = !act.length; acceso.textContent = 'Mi pedido activo (' + act.length + ')'; }
     var abiertosPrevios=UI.$$('[data-pedido-desplegable][open]',cont).map(function(d){return d.getAttribute('data-pedido-desplegable');});
@@ -1522,7 +1529,7 @@
     var bb = $('#mp-borrar'); if (bb) bb.addEventListener('click', async function () {
       var ok = await UI.confirmar('¿Borrar tu historial?', 'Se borra la lista de pedidos de este teléfono. Tus pedidos ya hechos no se cancelan.', 'Sí, borrar', true);
       if (!ok) return;
-      guardarMisPedidos(misPedidos().filter(activo)); MEM.guardar('ultimo_pedido', null); UI.aviso('Historial borrado.', 'ok'); pintarSeguimiento();
+      guardarMisPedidos(misPedidos().filter(activo)); MEM.guardar('ultimo_pedido', null); avisosCliente(function(a){a.conservar(misPedidos());}); UI.aviso('Historial borrado.', 'ok'); pintarSeguimiento();
     });
     if (abrir) cont.scrollIntoView({ behavior: 'smooth', block: 'start' });
     return act.every(function (x) { return res[x.n] && !res[x.n].consulta_error && !res[x.n].no_existe && Array.isArray(solicitudesPorPedido[x.n]); });

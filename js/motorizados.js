@@ -269,7 +269,7 @@
     try {
       var nuevos = await DATOS.pedir('misEntregas', {});
       if (APP.vistaActual !== 'entregas' || APP.sesion!==sesionConsulta || (silencioso===true && (document.visibilityState!=='visible' || document.querySelector('.velo') || DATOS.ocupado()))) return false;
-      if (global.MIP_AVISOS) global.MIP_AVISOS.entregas(nuevos.pedidos);
+      try { if (global.MIP_AVISOS) global.MIP_AVISOS.entregas(nuevos.pedidos); } catch(e) { /* avisos no bloquean entregas */ }
       if (!silencioso || !mias || JSON.stringify(nuevos) !== JSON.stringify(mias)) {
         mias = nuevos;
         pintarMias();
