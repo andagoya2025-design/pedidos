@@ -16,8 +16,8 @@ test('tres perfiles: revisión ligera, cambios, ventanas, segundo plano y recone
  const flush=async()=>{for(let i=0;i<30;i++)await Promise.resolve()};
  const maker=new Function('pedir','Date',ex(read('js/datos.js'),'  function crearVigiaSync()','  global.DATOS =')+';return crearVigiaSync')(async()=>{counts.signals++;return {revision}},fakeDate);
  const base={ocupado:()=>busy,crearVigiaSync:maker};
- let cs,as;
- const client=new Function('DATOS','document','navigator','global','misPedidos','activo','identidadSeguimiento','setInterval','consultarSeguimiento',ex(read('js/pedir.js'),'  var segEnCurso =','  async function consultarSeguimiento(')+';return {iniciarSeguimientoAutomatico,refrescarSeguimiento}')({...base},doc,nav,global,()=>[{s:'P1'}],()=>true,x=>x.s,(fn,n)=>{intervals.push({fn,n});return 1},async()=>{counts.client++;cs={...data};return true});
+ let cs,as,conciliaciones=0;
+ const client=new Function('DATOS','document','navigator','global','misPedidos','activo','identidadSeguimiento','setInterval','consultarSeguimiento','actualizarExitoVigente',ex(read('js/pedir.js'),'  var segEnCurso =','  async function consultarSeguimiento(')+';return {iniciarSeguimientoAutomatico,refrescarSeguimiento}')({...base},doc,nav,global,()=>[{s:'P1'}],()=>true,x=>x.s,(fn,n)=>{intervals.push({fn,n});return 1},async()=>{counts.client++;cs={...data};return true},(lista,res,sols,terminal)=>{assert.equal(terminal,true);conciliaciones++;});
  const APP={sesion:{rol:'dueno',usuario:'a'},local:'L1',vistaActual:'pedidos'},state={textContent:''},count={textContent:''};
  const admin=new Function('APP','DATOS','document','navigator','global','UI','est','setTimeout','clearTimeout','avisarNuevo','cargar','Date',ex(read('js/pedidos.js'),'  var vigia =','  function avisarNuevo(')+';return {vigilar}') (APP,{...base,pedir:async()=>({pedidos:[{id:'P1'}],solicitudes:[]})},doc,nav,global,{$:q=>q==='#pd-conexion'?state:count,fechaHora:()=>''},{datos:true},setTimeoutFake,clearTimeoutFake,()=>{},async()=>{counts.admin++;as={...data};return true},fakeDate);
  const MAPP={sesion:{rol:'motorizado',usuario:'m'},vistaActual:'entregas'},ms=read('js/motorizados.js');
@@ -29,7 +29,7 @@ test('tres perfiles: revisión ligera, cambios, ventanas, segundo plano y recone
  assert.equal(intervals[0].n,3000);assert.ok([...timers.values()].every(t=>t.n===2000));
  let before={...counts};await tick();assert.equal(counts.client,before.client);assert.equal(counts.admin,before.admin);assert.equal(counts.moto,before.moto);
  revision='revision-002';data={estado:'Preparando',total:8.5};await tick();same('Preparando',8.5);
- modal=true;revision='revision-003';data={estado:'En camino',total:8.5};before={...counts};await tick();assert.equal(counts.client,before.client);assert.equal(counts.admin,before.admin);assert.equal(counts.moto,before.moto);
+ modal=true;revision='revision-003';data={estado:'En camino',total:8.5};before={...counts};const antesConciliar=conciliaciones;await tick();assert.ok(conciliaciones>antesConciliar);assert.equal(counts.client,before.client);assert.equal(counts.admin,before.admin);assert.equal(counts.moto,before.moto);
  modal=false;await tick();await tick();same('En camino',8.5);
  hidden=true;revision='revision-004';data={estado:'Entregado',total:8.5};before={...counts};await tick();assert.equal(counts.client,before.client);assert.equal(counts.moto,before.moto);assert.ok([...timers.values()].some(t=>t.n===15000));assert.ok([...timers.values()].some(t=>t.n===30000));
  online=false;hidden=false;emit('visibilitychange');before={...counts};await tick();assert.equal(counts.client,before.client);assert.equal(counts.admin,before.admin);assert.equal(counts.moto,before.moto);
