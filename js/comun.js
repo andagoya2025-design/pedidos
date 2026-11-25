@@ -156,7 +156,7 @@
       (p.hora_llegada ? '<span class="chip-tipo tipo-hora">⏰ ' + UI.esc(UI.ventanaHora(p.hora_llegada, p.hora_ventana_fin, Number(global.APP && global.APP.publico && global.APP.publico.ventana_minutos) || 30)) + ' aprox.</span>' : '');
   };
   /* Identidad bancaria: solo URLs constantes, nunca URLs suministradas por la cuenta. */
-  UI.logoBanco = function (nombre) {
+  UI.logoBanco = function (nombre, personalizado) {
     var n = String(nombre || '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim().replace(/\s+/g,' ');
     var clave = n.replace(/^banco\s+(?:de(?:l)?\s+)?/,'');
     var logos = {
@@ -166,7 +166,7 @@
       bolivariano:'https://www.temenos.com/wp-content/uploads/2019/05/Bolivariano-Casestudy-logo.jpg',
       produbanco:'https://diariobusinessnews.com/wp-content/uploads/2023/06/Produbanco.jpg'
     };
-    var url=Object.prototype.hasOwnProperty.call(logos,clave)?logos[clave]:'';
+    var url=/^https:\/\/drive\.google\.com\/thumbnail\?id=[A-Za-z0-9_-]{10,100}&sz=w800$/.test(String(personalizado||''))?personalizado:(Object.prototype.hasOwnProperty.call(logos,clave)?logos[clave]:'');
     return '<span class="banco-marca" aria-hidden="true"><span class="banco-inicial">'+UI.esc(clave.charAt(0).toUpperCase()||'B')+'</span>'+(url?'<img src="'+UI.esc(url)+'" alt="" referrerpolicy="no-referrer" onerror="this.remove()">':'')+'</span>';
   };
   UI.NOMBRE_PAGO = { efectivo: '💵 Efectivo', transferencia: '🏦 Transferencia', deuna: '📲 Deuna' };
