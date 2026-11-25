@@ -1,10 +1,10 @@
 /* Centro de avisos local: consume eventos ya consultados por la aplicación. */
 (function(g){
  'use strict';
- var APP=g.APP,UI=g.UI,MEM=g.APP_MEMORIA,contexto='',lista=[],vistos=Object.create(null),asignados=null,atrasados=Object.create(null),generacion=0,timers=[],cerrarDialogo=null;
+ var APP=g.APP,UI=g.UI,MEM=g.APP_MEMORIA,contexto='',lista=[],vistos=Object.create(null),asignados=null,asignacionSeq=0,atrasados=Object.create(null),generacion=0,timers=[],cerrarDialogo=null;
  var tipos={pedido:{titulo:'Nuevo pedido',voz:'Atención, nuevo pedido recibido.',roles:['dueno','cajero'],vista:'pedidos'},solicitud:{titulo:'Solicitud de modificación',voz:'Atención, tiene una actualización de modificación de pedido.',roles:['dueno','cajero'],vista:'pedidos'},atraso:{titulo:'Pedido sin atender',voz:'Atención, tiene un pedido pendiente de atender.',roles:['dueno','cajero'],vista:'pedidos'},entrega:{titulo:'Nueva entrega asignada',voz:'Atención, tiene una nueva entrega asignada.',roles:['motorizado'],vista:'entregas'}};
  function scope(){var s=APP.sesion;return s?String(s.usuario_id||s.usuario)+'|'+s.rol+'|'+String(APP.local||s.local_id||'')+'|'+String(g.APP_CONFIG.url||''):'';}
- function reset(){if(cerrarDialogo){var cerrar=cerrarDialogo;cerrarDialogo=null;cerrar(null);}generacion++;timers.forEach(function(t){g.clearTimeout(t);});timers=[];if(g.MIP_VOZ)g.MIP_VOZ.limpiar();lista=[];vistos=Object.create(null);asignados=null;atrasados=Object.create(null);contexto='';pintar();}
+ function reset(){if(cerrarDialogo){var cerrar=cerrarDialogo;cerrarDialogo=null;cerrar(null);}generacion++;timers.forEach(function(t){g.clearTimeout(t);});timers=[];if(g.MIP_VOZ)g.MIP_VOZ.limpiar();lista=[];vistos=Object.create(null);asignados=null;asignacionSeq=0;atrasados=Object.create(null);contexto='';pintar();}
  function sync(){var k=scope();if(k!==contexto){reset();contexto=k;}return k;}
  function modo(){if(MEM.leer('sonido_pedidos')===false)return 'silencio';var v=MEM.leer('modo_avisos');return ['sonido','voz','ambos'].indexOf(v)>=0?v:'sonido';}
  function volumen(){var v=MEM.leer('volumen_voz');return typeof v==='number'?Math.max(0,Math.min(100,v)):80;}
@@ -27,7 +27,7 @@
   var nuevos=[];(items||[]).forEach(function(p){var id=String(p.id||'');if(!id)return;var key=tipo+':'+id+(tipo==='solicitud'?':'+String(p.estado||''):'');if(vistos[key])return;vistos[key]=true;nuevos.push({key:key,tipo:tipo,numero:String(p.numero||'').slice(0,30),fecha:Date.now(),leido:false});});
   if(!nuevos.length)return false;lista=nuevos.reverse().concat(lista).slice(0,100);pintar();if(op.audio!==false)sonar(tipo,op.espera||0);return true;
  }
- function entregas(pedidos){sync();if(!APP.sesion||APP.sesion.rol!=='motorizado'||!Array.isArray(pedidos))return;var ahora=Object.create(null),nuevos=[];pedidos.filter(function(p){return p.estado!=='Entregado'&&p.estado!=='Anulado';}).forEach(function(p){var id=String(p.id||'');if(!id)return;ahora[id]=true;if(!asignados||!asignados[id])nuevos.push(p);});asignados=ahora;if(nuevos.length)registrar('entrega',nuevos);}
+ function entregas(pedidos){sync();if(!APP.sesion||APP.sesion.rol!=='motorizado'||!Array.isArray(pedidos))return;var ahora=Object.create(null),nuevos=[];pedidos.filter(function(p){return p.estado!=='Entregado'&&p.estado!=='Anulado';}).forEach(function(p){var id=String(p.id||'');if(!id)return;ahora[id]=true;if(!asignados||!asignados[id])nuevos.push({id:id+':asignacion:'+ ++asignacionSeq,numero:p.numero});});asignados=ahora;if(nuevos.length)registrar('entrega',nuevos);}
  function pendientesAtrasados(pedidos){sync();var nuevos=[];(pedidos||[]).forEach(function(p){if(!atrasados[p.id]){atrasados[p.id]=true;nuevos.push(p);}});return nuevos;}
  async function abrir(){
   sync();if(!APP.sesion)return;var s=APP.sesion,k=contexto;
