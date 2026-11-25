@@ -670,3 +670,36 @@ details.otras-fechas[open] summary { margin-bottom: 10px; }
 .pedir-app .preenvio-subtotal-tarjeta {border:1px solid var(--borde);background:var(--acento-suave);color:var(--texto);}
 .preenvio-linea [data-carrito-extras]:empty {display:none;}
 .preenvio-linea .contador {flex:none;}
+
+/* Piloto ejecutivo: sólo revisión de sustituciones del administrador. */
+.ventana.ux-sustitucion-premium{width:100%;max-width:640px;box-sizing:border-box;overscroll-behavior:contain;}
+.ux-sustitucion-premium .ux-premium-solicitud{background:var(--superficie-2);border:1px solid var(--borde);border-radius:14px;padding:14px;margin:12px 0;}
+.ux-sustitucion-premium .ux-premium-solicitud small{font-size:10px;letter-spacing:.08em;font-weight:700;color:var(--texto-2);}
+.ux-sustitucion-premium .ux-premium-solicitud p{margin:8px 0 12px;font-size:14px;overflow-wrap:anywhere;color:var(--texto);}
+.ux-sustitucion-premium .ux-premium-vigente{display:flex;align-items:center;justify-content:space-between;gap:12px;border-top:1px solid var(--borde);padding-top:10px;font-size:13px;color:var(--texto-2);}
+.ux-sustitucion-premium .ux-premium-vigente b{font-size:22px;color:var(--texto);font-variant-numeric:tabular-nums;}
+.ux-sustitucion-premium .ux-premium-toolbar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:4px 12px;margin:8px 0;color:var(--texto-2);font-size:12px;}
+.ux-sustitucion-premium [data-premium-alternativas]{font:inherit;font-weight:700;color:var(--acento);background:transparent;border:0;min-height:44px;padding:6px 0;text-align:left;cursor:pointer;}
+.ux-sustitucion-premium [data-premium-ajustes]:not(.ux-premium-expandido) .ux-premium-alternativa,.ux-sustitucion-premium [data-premium-ajustes]:not(.ux-premium-expandido) [data-buscar]{display:none!important;}
+.ux-sustitucion-premium .ux-cambio-lista{max-height:none;overflow:visible;overscroll-behavior:auto;gap:8px;}
+.ux-sustitucion-premium h3{font-size:13px;letter-spacing:.01em;font-weight:700;margin:16px 0 6px;}
+.ux-sustitucion-premium .ux-cambio-fila{grid-template-columns:minmax(0,1fr);padding:12px;border-radius:12px;gap:6px;}
+.ux-sustitucion-premium .ux-cambio-nombre b{font-size:14px;line-height:1.4;}
+.ux-sustitucion-premium .ux-cambio-nombre small{font-size:12px;color:var(--texto-2);}
+.ux-sustitucion-premium .ux-premium-seleccion{border-color:var(--acento);}
+.ux-sustitucion-premium .ux-cambio-controles{justify-self:start;gap:2px;border:1px solid var(--borde);border-radius:10px;padding:0 2px;}
+.ux-sustitucion-premium .ux-cambio-controles button,.ux-sustitucion-premium .contador-extra button{width:44px;min-width:44px;min-height:44px;padding:0;background:transparent;color:var(--texto);border:0;font-size:16px;box-shadow:none;}
+.ux-sustitucion-premium .ux-cambio-controles input{width:56px;height:44px;border:0;background:transparent;color:var(--texto);font-size:16px;font-weight:700;appearance:textfield;-moz-appearance:textfield;}
+.ux-sustitucion-premium .ux-cambio-controles input::-webkit-inner-spin-button,.ux-sustitucion-premium .ux-cambio-controles input::-webkit-outer-spin-button{-webkit-appearance:none;margin:0;}
+.ux-sustitucion-premium .ux-cambio-extras{display:grid;gap:8px;}
+.ux-sustitucion-premium .ux-cambio-extras[hidden]{display:none!important;}
+.ux-sustitucion-premium .ux-cambio-extras label{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:12px;}
+.ux-sustitucion-premium [data-variante]{min-height:44px;font-size:12px;}
+.ux-sustitucion-premium [data-buscar]{width:100%;min-height:44px;border:1px solid var(--borde);border-radius:10px;padding:10px 12px;background:var(--superficie);color:var(--texto);font-size:16px;}
+.ux-sustitucion-premium .ux-premium-nota{font-size:12px;color:var(--texto-2);margin:14px 0 6px;}
+.ventana.ux-sustitucion-premium>.acciones{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:6px;padding:8px 0 max(6px,env(safe-area-inset-bottom));}
+.ux-sustitucion-premium>.acciones .btn{min-width:0;min-height:44px;font-size:13px;padding:8px;white-space:normal;}
+.ux-sustitucion-premium>.acciones .btn:first-child{grid-column:1/-1;min-height:48px;font-size:15px;}
+.ux-sustitucion-premium>.acciones .btn:not(:first-child){background:transparent;border:0;box-shadow:none;}
+.ux-sustitucion-premium .ventana-x{width:44px;height:44px;font-size:14px;font-weight:600;background:transparent;}
+@media(max-width:480px){.ventana.ux-sustitucion-premium{max-height:calc(100dvh - env(safe-area-inset-top) - 6px);padding:14px 14px 8px;border-radius:18px 18px 0 0;}.ux-sustitucion-premium h2{font-size:19px;}}
