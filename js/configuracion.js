@@ -15,6 +15,7 @@
     ['negocio', '🏪 Negocio'],
     ['locales', '📍 Locales'],
     ['usuarios', '👥 Usuarios'],
+    ['seguridad', '🔒 Seguridad'],
     ['licencia', '🔑 Licencia'],
     ['bitacora', '📜 Bitácora']
   ];
@@ -55,6 +56,7 @@
       if (pestanaActual === 'negocio') await pintarNegocio(forzar);
       else if (pestanaActual === 'locales') await pintarLocales(forzar);
       else if (pestanaActual === 'usuarios') await pintarUsuarios(forzar);
+      else if (pestanaActual === 'seguridad') await pintarSeguridad(forzar);
       else if (pestanaActual === 'licencia') await pintarLicencia(forzar);
       else if (pestanaActual === 'bitacora') await pintarBitacora();
     } catch (err) {
@@ -65,6 +67,30 @@
   async function traerConfig(forzar) {
     if (!cache.config || forzar) cache.config = await DATOS.pedir('configObtener', {});
     return cache.config;
+  }
+
+  async function pintarSeguridad(forzar) {
+    var ses = APP.sesion, destino = cuerpo(), r = await traerConfig(true);
+    if (APP.sesion !== ses || pestanaActual !== 'seguridad' || cuerpo() !== destino) return;
+    var c = r.config;
+    destino.innerHTML = '<form class="tarjeta" id="form-seguridad"><h3>Seguridad y accesos</h3><p class="subtitulo">Solo el propietario puede administrar estos permisos.</p>' +
+      '<label class="interruptor"><input type="checkbox" id="seg-moto"' + (c.permitir_clave_motorizado === 'SI' ? ' checked' : '') + '> Motorizados: permitir cambiar su propia clave</label>' +
+      '<label class="interruptor"><input type="checkbox" id="seg-caja"' + (c.permitir_clave_cajero === 'SI' ? ' checked' : '') + '> Cajeros: permitir cambiar su propia clave</label>' +
+      '<p class="ayuda">El propietario siempre puede restablecer claves. Los permisos se verifican en el servidor.</p><button class="btn bloque" type="submit">Guardar permisos</button></form>';
+    var f = UI.$('#form-seguridad', destino);
+    f.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var datos = { permitir_clave_motorizado: UI.$('#seg-moto', f).checked ? 'SI' : 'NO', permitir_clave_cajero: UI.$('#seg-caja', f).checked ? 'SI' : 'NO' };
+      UI.trabajando(f.querySelector('button'), async function () {
+        try {
+          var res = await DATOS.pedir('configGuardar', {config: datos}, {guardar: true});
+          if (APP.sesion !== ses) return;
+          if (!res.config || Object.keys(datos).some(function(k){return res.config[k] !== datos[k];})) throw Error('El servidor no confirmó los permisos.');
+          cache.config = {config: res.config, licencia: r.licencia};
+          UI.aviso('Permisos guardados.', 'ok');
+        } catch (err) { UI.error('No se guardaron los permisos', err.message); }
+      });
+    });
   }
 
   /* ---------------- Negocio ---------------- */
@@ -288,7 +314,7 @@
         '<div class="fila-campos"><div class="campo"><label for="us-rol">Rol</label><select class="entrada" id="us-rol" name="rol">' +
         ['dueno', 'cajero', 'motorizado'].map(function (r) { return '<option value="' + r + '"' + (r === u.rol ? ' selected' : '') + '>' + APP.nombreRol(r) + '</option>'; }).join('') +
         '</select></div><div class="campo" id="us-local-campo"><label for="us-local">Local</label><select class="entrada" id="us-local" name="local_id"><option value="">Elegir…</option>' + opcionesLocal + '</select></div></div>' +
-        (nuevo ? '<div class="campo"><label for="us-clave">Clave inicial</label><input class="entrada" id="us-clave" name="clave" type="text" autocomplete="off" minlength="6"><span class="ayuda">Mínimo 6 caracteres. La persona puede cambiarla en «Mi cuenta».</span></div>' : '') +
+        (nuevo ? '<div class="campo"><label for="us-clave">Clave inicial</label><input class="entrada" id="us-clave" name="clave" type="text" autocomplete="off" minlength="6"><span class="ayuda">Mínimo 6 caracteres. La persona puede cambiarla si el propietario lo autoriza en Seguridad.</span></div>' : '') +
         '<label class="interruptor"><input type="checkbox" name="activo"' + (u.activo ? ' checked' : '') + '> Usuario activo</label></form>',
       alAbrir: function (v) {
         var rol = UI.$('#us-rol', v), campoLocal = UI.$('#us-local-campo', v);

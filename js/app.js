@@ -74,10 +74,11 @@
       cont.innerHTML =
         '<h1 class="titulo">Mi cuenta</h1><p class="subtitulo">' + UI.esc(s.nombre) + ' · ' + UI.esc(APP.nombreRol(s.rol)) + '</p>' +
         '<div class="rejilla">' +
-        '<form class="tarjeta" id="form-mi-clave" autocomplete="off"><h3 style="margin-top:0">Cambiar mi clave</h3>' +
+        '<section class="tarjeta" id="panel-mi-clave" hidden><h3 style="margin-top:0">Seguridad</h3><button class="btn borde bloque" id="abrir-mi-clave" type="button">Cambiar mi clave</button>' +
+        '<form id="form-mi-clave" autocomplete="off" hidden>' +
         '<div class="campo"><label for="mc-actual">Clave actual</label><input class="entrada" id="mc-actual" name="actual" type="password" autocomplete="current-password" required></div>' +
         '<div class="campo"><label for="mc-nueva">Clave nueva</label><input class="entrada" id="mc-nueva" name="nueva" type="password" minlength="6" autocomplete="new-password" required><span class="ayuda">Mínimo 6 caracteres.</span></div>' +
-        '<button class="btn bloque" type="submit">Guardar clave</button></form>' +
+        '<button class="btn bloque" type="submit">Guardar clave</button><button class="btn secundario bloque" id="cancelar-mi-clave" type="button">Cancelar</button></form></section>' +
         '<div class="tarjeta"><h3 style="margin-top:0">Apariencia</h3>' +
         '<label class="interruptor"><input type="checkbox" id="tema-oscuro"' + (tema === 'oscuro' ? ' checked' : '') + '> Modo oscuro</label>' +
         '<hr style="border:0;border-top:1px solid var(--borde);margin:14px 0">' +
@@ -86,7 +87,15 @@
 
       UI.$('#tema-oscuro', cont).addEventListener('change', function (e) { UI.tema(e.target.checked ? 'oscuro' : 'claro'); });
       UI.$('#btn-salir', cont).addEventListener('click', APP.salir);
-      UI.$('#form-mi-clave', cont).addEventListener('submit', function (e) {
+      var panel = UI.$('#panel-mi-clave', cont), form = UI.$('#form-mi-clave', cont), abrir = UI.$('#abrir-mi-clave', cont);
+      function cerrarClave() { form.reset(); form.hidden = true; abrir.hidden = false; }
+      abrir.addEventListener('click', function () { abrir.hidden = true; form.hidden = false; });
+      UI.$('#cancelar-mi-clave', cont).addEventListener('click', cerrarClave);
+      // No confiar en permisos guardados localmente: consultar cada vez que se abre Mi cuenta.
+      DATOS.pedir('sesion', {}).then(function (r) {
+        if (APP.sesion === s && APP.vistaActual === 'cuenta' && panel.isConnected) panel.hidden = !(r.puede_cambiar_clave === true);
+      }).catch(function () {});
+      form.addEventListener('submit', function (e) {
         e.preventDefault();
         var f = e.target, boton = f.querySelector('button[type=submit]');
         var datos = UI.leerFormulario(f);
@@ -94,9 +103,10 @@
         UI.trabajando(boton, async function () {
           try {
             await DATOS.pedir('miClave', datos, { guardar: true });
-            f.reset();
+            cerrarClave();
             UI.aviso('Clave actualizada.', 'ok');
           } catch (err) {
+            if (err.codigo === 'PERMISO') { cerrarClave(); panel.hidden = true; }
             UI.error('No se cambió la clave', err.message);
           }
         });
@@ -153,6 +163,12 @@
     }).join('');
   }
 
+  function inicioPorRol(rol) { return rol === 'motorizado' ? 'entregas' : rol === 'cajero' ? 'pedidos' : 'inicio'; }
+  function destinoIngreso(rol, hash, nuevoIngreso) {
+    var h = String(hash || '').replace(/^#/, '');
+    if (/^pedidos\\?ver=PED-\\d{4,}(?:&|$)/i.test(h) && (rol === 'dueno' || rol === 'cajero')) return h;
+    return nuevoIngreso || !h || h === 'cuenta' ? inicioPorRol(rol) : h;
+  }
   APP.parametros = {};
   APP.ir = function (clave) {
     // 3.0: «#pedidos?ver=PED-0005» (QR del pedido) → vista + parámetros.
@@ -161,7 +177,7 @@
     APP.parametros = {};
     if (partes[1]) new URLSearchParams(partes[1]).forEach(function (v, k) { APP.parametros[k] = v; });
     var permitidas = vistasPermitidas();
-    if (permitidas.indexOf(clave) < 0) clave = 'inicio';
+    if (permitidas.indexOf(clave) < 0) { clave = inicioPorRol(APP.sesion.rol); APP.parametros = {}; }
     APP.vistaActual = clave;
     UI.$$('#navegacion .nav-btn').forEach(function (b) {
       if (b.getAttribute('data-vista') === clave) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
@@ -195,7 +211,7 @@
         var r = await DATOS.pedir('login', datos, { guardar: true });
         MEM.guardar('token', r.token);
         f.reset();
-        await abrirApp(r.sesion, r.publico);
+        await abrirApp(r.sesion, r.publico, true);
       } catch (err) {
         UI.$('#ingreso-mensaje').hidden = false;
         UI.$('#ingreso-mensaje').textContent = err.message;
@@ -203,7 +219,7 @@
     });
   }
 
-  async function abrirApp(sesion, publico) {
+  async function abrirApp(sesion, publico, nuevoIngreso) {
     if (/\/driver\.html$/.test(global.location.pathname) && sesion.rol !== 'motorizado') { MEM.limpiarSesion(); return mostrarIngreso('Este acceso es exclusivo para motorizados.'); }
     MEM.guardar('sesion', sesion); // para abrir sin internet (solo datos de la persona, nunca listas ajenas)
     APP.sesion = sesion;
@@ -219,7 +235,7 @@
     } catch (err) {
       UI.aviso('No se pudieron cargar los locales: ' + err.message, 'error');
     }
-    APP.ir((global.location.hash || (/\/driver\.html$/.test(global.location.pathname) ? '#entregas' : '#inicio')).slice(1));
+    APP.ir(destinoIngreso(sesion.rol, global.location.hash, nuevoIngreso));
   }
 
   APP.salir = async function () {
@@ -231,6 +247,7 @@
     APP.sesion = null;
     APP.locales = [];
     APP.local = 'TODOS';
+    history.replaceState(null, '', global.location.pathname + global.location.search);
     mostrarIngreso('');
   };
 

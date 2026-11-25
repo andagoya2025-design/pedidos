@@ -6,6 +6,7 @@ on:
       - desarrollo/fase1b-comercial-integral
       - fix/fase1b1-instalacion
       - fix/pedidos-premium
+      - 'candidata/**'
   pull_request:
     branches:
       - main

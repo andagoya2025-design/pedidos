@@ -21,7 +21,7 @@
 var APP_VERSION = '3.1.21';
 // Marcador opaco, sin datos de pedidos. Una ejecución de Apps Script tiene su propio estado.
 var syncPendiente_ = false;
-var APP_VERSION_NUM = 30128; // 3.1.0 -> 30100 (la pantalla compara con su mínimo)
+var APP_VERSION_NUM = 30129; // 3.1.0 -> 30100 (la pantalla compara con su mínimo)
 var SESION_SEGUNDOS = 21600;  // 6 h; se renueva con cada uso
 var ROLES = ['dueno', 'cajero', 'motorizado'];
 
@@ -69,6 +69,8 @@ var HOJAS = {
 
 /* Configuración por defecto (todo se cambia desde la pantalla). */
 var CONFIG_DEFECTO = {
+  permitir_clave_cajero: 'NO',
+  permitir_clave_motorizado: 'NO',
   negocio_nombre: 'Mi Restaurante',
   logo_url: '',
   color_primario: '#1F1B16',
@@ -532,6 +534,7 @@ function accionConfigGuardar_(data, ctx) {
   Object.keys(cambios).forEach(function (k) {
     if (permitidas.indexOf(k) < 0) return;
     var v = LARGOS_[k] ? textoLargo_(cambios[k], LARGOS_[k]) : limpiarTexto_(cambios[k], 300); // 3.1.5: textos largos conservan los saltos de línea
+    if (['permitir_clave_cajero','permitir_clave_motorizado'].indexOf(k)>=0 && ['SI','NO'].indexOf(v)<0) throw fallo_('Permiso no válido.');
     if ((k === 'color_primario' || k === 'color_acento') && !/^#[0-9A-Fa-f]{6}$/.test(v)) throw fallo_('Color no válido: use el selector de color.');
     if (k === 'whatsapp' && v) v = normalizarTelefono_(v, cambios.pais_codigo || leerConfig_().pais_codigo);
     if (k === 'pais_codigo' && !/^\d{1,3}$/.test(v)) throw fallo_('Código de país no válido (ej. 593).');
@@ -648,7 +651,7 @@ function accionLogin_(data, ctx) {
   cache.put('SES_' + token, JSON.stringify(ses), SESION_SEGUNDOS);
   actualizarCampos_('usuarios', u._fila, u, { ultimo_acceso: new Date() });
   bitacora_(ses, 'SEGURIDAD', 'LOGIN', '', ctx.dispositivo);
-  return { ok: true, data: { token: token, sesion: ses, publico: datosPublicos_() } };
+  return { ok: true, data: { token: token, sesion: ses, publico: datosPublicos_(), puede_cambiar_clave: permisoMiClave_(ses.rol, leerConfig_()) } };
 }
 
 function leerSesion_(token) {
@@ -669,7 +672,7 @@ function revocarSesiones_(usuarioId) {
 }
 
 function accionSesion_(data, ctx) {
-  return { ok: true, data: { sesion: ctx.sesion, publico: datosPublicos_() } };
+  return { ok: true, data: { sesion: ctx.sesion, publico: datosPublicos_(), puede_cambiar_clave: permisoMiClave_(ctx.sesion.rol, leerConfig_()) } };
 }
 
 function accionCerrarSesion_(data, ctx) {
@@ -836,21 +839,25 @@ function accionUsuarioClave_(data, ctx) {
   return cambiarClave_(id, clave, ctx, 'RESTABLECER_CLAVE');
 }
 
+function permisoMiClave_(rol, cfg) {
+  return rol === 'dueno' || (rol === 'cajero' && cfg.permitir_clave_cajero === 'SI') || (rol === 'motorizado' && cfg.permitir_clave_motorizado === 'SI');
+}
 function accionMiClave_(data, ctx) {
-  var actual = String(data.actual || '');
   var nueva = String(data.nueva || '');
   validarClave_(nueva);
-  var u = leerTabla_('usuarios').filter(function (r) { return String(r.id) === ctx.sesion.usuario_id; })[0];
-  if (!u || !claveCorrecta_(actual, u)) throw fallo_('La clave actual no es correcta.');
-  return cambiarClave_(ctx.sesion.usuario_id, nueva, ctx, 'CAMBIAR_MI_CLAVE');
+  return cambiarClave_(ctx.sesion.usuario_id, nueva, ctx, 'CAMBIAR_MI_CLAVE', String(data.actual || ''));
 }
 
-function cambiarClave_(id, clave, ctx, accion) {
+function cambiarClave_(id, clave, ctx, accion, actual) {
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(15000)) throw fallo_('El sistema está ocupado. Intente en un momento.', 'OCUPADO');
   try {
     var u = leerTabla_('usuarios').filter(function (r) { return String(r.id) === id; })[0];
     if (!u) throw fallo_('Ese usuario ya no existe.', 'NO_EXISTE');
+    if (accion === 'CAMBIAR_MI_CLAVE') {
+      if (!permisoMiClave_(ctx.sesion.rol, leerConfig_())) throw fallo_('El propietario no ha autorizado el cambio de clave.', 'PERMISO');
+      if (u.activo !== true || String(u.rol) !== ctx.sesion.rol || !claveCorrecta_(actual, u)) throw fallo_('La clave actual no es correcta.');
+    }
     var sal = Utilities.getUuid();
     actualizarCampos_('usuarios', u._fila, u, { hash: hashClave2_(clave, sal), sal: sal });
     if (accion === 'RESTABLECER_CLAVE') revocarSesiones_(id);
