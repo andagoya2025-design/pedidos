@@ -22,6 +22,9 @@ async function run(engine,device,label){
  await page.evaluate(()=>{MIP_AVISOS.configurar('voz',80);MIP_AVISOS.entregas([{id:'3',numero:'PED-0003',estado:'Preparando'}]);});
  await page.waitForFunction(()=>spoken.length===2);
  await page.locator('#mip-avisos').click();assert.match(await page.locator('[data-aviso]').innerText(),/Nueva entrega asignada/);assert.equal(await page.locator('[data-aviso]').count(),1);await page.locator('[data-aviso]').click();assert.equal(await page.evaluate(()=>dest),'entregas');assert.equal(await page.evaluate(()=>beeps),0);assert.deepEqual(errors,[]);
+ await page.locator('#mip-avisos').click();await page.locator('[data-borrar-aviso]').click();assert.equal(await page.locator('[data-aviso]').count(),0);await page.getByRole('button',{name:'Cerrar',exact:true}).last().click();
+ await page.evaluate(()=>{MIP_AVISOS.entregas([{id:'3',numero:'PED-0003',estado:'Preparando'},{id:'4',numero:'PED-0004',estado:'Preparando'}]);});
+ await page.waitForFunction(()=>spoken.length===3);await page.locator('#mip-avisos').click();await page.locator('#mip-avisos-vaciar').click();await page.getByRole('button',{name:'Cancelar',exact:true}).click();assert.equal(await page.locator('[data-aviso]').count(),1);await page.locator('#mip-avisos-vaciar').click();await page.getByRole('button',{name:'Sí, eliminar',exact:true}).click();assert.equal(await page.locator('[data-aviso]').count(),0);assert.equal(await page.locator('#mip-avisos-num').isHidden(),true);assert.deepEqual(errors,[]);
  console.log('PASS '+label+': campana, voz simulada, QR, permisos, silencio, lectura, aislamiento y diseño');
  }finally{await browser.close()}
 }
