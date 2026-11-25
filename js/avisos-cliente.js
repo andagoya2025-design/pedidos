@@ -7,7 +7,7 @@
  function vol(){var v=MEM.leer('cliente_volumen_voz');return typeof v==='number'?Math.max(0,Math.min(100,v)):80;}
  function cancelar(){gen++;timers.forEach(function(t){g.clearTimeout(t);});timers=[];if(g.MIP_VOZ)g.MIP_VOZ.limpiar();}
  function configurar(m,v){if(['sonido','voz','ambos','silencio'].indexOf(m)<0)return;v=Math.max(0,Math.min(100,Number(v)||0));if(m===modo()&&v===vol())return;cancelar();MEM.guardar('cliente_modo_avisos',m);MEM.guardar('cliente_volumen_voz',Math.max(0,Math.min(100,Number(v)||0)));}
- function audio(texto,prueba,ref){var m=modo(),k=gen;if(m==='silencio')return;function valido(){return k===gen&&modo()!=='silencio'&&(!ref||autorizados[ref]===true);}
+ function audio(texto,prueba,ref,estado){var m=modo(),k=gen;if(m==='silencio')return;function valido(){return k===gen&&modo()!=='silencio'&&(!ref||autorizados[ref]===true&&(estados[ref]!=='Anulado'||estado==='Anulado'));}
   function beep(){if(valido())UI.sonar();}
   function voz(){if(!valido())return;if(!g.MIP_VOZ){if(m==='voz')beep();return;}g.MIP_VOZ.hablar(texto,{volumen:vol()/100,valido:valido,fallo:function(){if(m==='voz')beep();}});}
   if(prueba){if(m==='sonido'||!g.MIP_VOZ){beep();return;}g.MIP_VOZ.hablar(texto,{volumen:vol()/100,valido:valido,fallo:beep,fin:function(){if(m==='ambos')beep();}});return;}
@@ -16,7 +16,7 @@
  function pintar(){var b=document.getElementById('mip-cliente-avisos'),n=document.getElementById('mip-cliente-num');if(!b||!n)return;var c=lista.filter(function(x){return !x.leido;}).length;n.hidden=!c;n.textContent=String(Math.min(c,99))+(c>99?'+':'');b.setAttribute('aria-label','Notificaciones'+(c?', '+c+' sin leer':''));}
  function ref(x){return x&&typeof x.n==='string'?JSON.stringify([x.n,x.s||'',x.f||0]):'';}
  function conservar(xs){var validos=Object.create(null);(xs||[]).forEach(function(x){var k=ref(x);if(k)validos[k]=true;});var cambio=Object.keys(autorizados).some(function(k){return !validos[k];});autorizados=validos;if(cambio){cancelar();if(cerrarDialogo){var cerrar=cerrarDialogo;cerrarDialogo=null;cerrar(null);}}lista=lista.filter(function(x){return validos[x.ref];});Object.keys(estados).forEach(function(k){if(!validos[k])delete estados[k];});Object.keys(sols).forEach(function(k){if(!validos[k])delete sols[k];});pintar();}
- function agregar(x,estado,texto){var k=ref(x);if(!k||!autorizados[k]||!texto)return;lista.unshift({id:++seq,ref:k,numero:x.n,estado:estado,texto:texto,fecha:Date.now(),leido:false});lista=lista.slice(0,60);pintar();audio(texto,false,k);}
+ function agregar(x,estado,texto){var k=ref(x);if(!k||!autorizados[k]||!texto)return;lista.unshift({id:++seq,ref:k,numero:x.n,estado:estado,texto:texto,fecha:Date.now(),leido:false});lista=lista.slice(0,60);pintar();audio(texto,false,k,estado);}
  function solicitudEnviada(x,id){var k=ref(x);if(!k||!autorizados[k]||!id)return;var mapa=sols[k]||(sols[k]=Object.create(null));if(mapa[id])return;mapa[id]='Pendiente';agregar(x,'Pendiente','Tu solicitud de modificación fue enviada.');}
  function recibido(x){var k=ref(x);if(!k||!autorizados[k]||estados[k])return;estados[k]='Recibido';agregar(x,'Recibido',textos.Recibido);}
  function observar(x,p,solicitudes){var k=ref(x);if(!k||!autorizados[k]||!p||p.consulta_error||p.no_existe||String(p.numero)!==String(x.n)||(x.s&&String(p.seguimiento)!==String(x.s)))return;

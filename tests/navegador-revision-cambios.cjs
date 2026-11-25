@@ -67,6 +67,18 @@ assert.equal(await page.evaluate(()=>memoriaPrueba.mis_pedidos.find(x=>x.n==='PE
 // También reparar un recibo antiguo si todos los pedidos ya son históricos.
 await page.evaluate(()=>{memoriaPrueba.mis_pedidos=memoriaPrueba.mis_pedidos.filter(x=>x.n==='PED-0003');document.querySelector('#pedir-cuerpo').innerHTML='<div data-exito-vigente>¡Pedido recibido! <button id="btn-wa">Pagar</button></div>';prueba.preparar({identidad:'s:c',numero:'PED-0003',total:8});prueba.refrescar();});
 assert.match(await page.locator('#pedir-cuerpo').innerText(),/Pedido cancelado/);assert.equal(await page.locator('#btn-wa').count(),0);
-assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2));assert.deepEqual(errors,[]);console.log('PASS '+label+': seis revisiones, restauración, cancelación e identidad de dos pedidos; red bloqueada');
+// Pago verificado, desconexión y reconexión con tres pedidos aislados.
+await page.evaluate(async()=>{
+ const a={n:'PED-0001',s:'a',e:'Recibido',t:8,f:Date.now()},b={n:'PED-0004',s:'d',e:'Recibido',t:11,f:Date.now()},c={n:'PED-0005',s:'e',e:'Recibido',t:6,f:Date.now()};
+ memoriaPrueba.mis_pedidos=[a,b,c];
+ document.querySelector('#pedir-cuerpo').innerHTML='<div data-exito-vigente>¡Pedido recibido! <div class="pago-qr">Banco</div><button id="btn-wa">Pagar</button></div>';prueba.preparar({identidad:'s:d',numero:b.n,total:11});
+ DATOS.pedir=async()=>{throw Error('sin red');};await prueba.consultar(false,true);
+ window.sinFalsaAnulacion=document.querySelector('#pedir-cuerpo').textContent.includes('Pedido recibido');
+ DATOS.pedir=async(accion,args)=>{if(accion==='pedidosSeguir')return {pedidos:[{numero:a.n,seguimiento:a.s,estado:'Recibido',total:8},{numero:b.n,seguimiento:b.s,estado:'Anulado',total:11,pago_verificado:true},{numero:c.n,seguimiento:c.s,estado:'Recibido',total:6}]};if(accion==='pedidoCambiosConsultar')return {numero:args.s==='a'?a.n:c.n,solicitudes:[]};throw Error('Consulta inesperada '+accion);};
+ await prueba.consultar(false,true);
+});
+assert.equal(await page.evaluate(()=>sinFalsaAnulacion),true);assert.match(await page.locator('#pedir-cuerpo').innerText(),/Pedido cancelado/);assert.match(await page.locator('#pedir-cuerpo').innerText(),/devolución/);assert.equal(await page.locator('#btn-wa,.pago-qr').count(),0);
+assert.deepEqual(await page.evaluate(()=>memoriaPrueba.mis_pedidos.map(x=>[x.n,x.e,x.t]).sort()),[['PED-0001','Recibido',8],['PED-0004','Anulado',11],['PED-0005','Recibido',6]]);
+assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2));assert.deepEqual(errors,[]);console.log('PASS '+label+': seis revisiones, restauración, cancelación, modal, desconexión, pago verificado y tres pedidos; red bloqueada');
 }finally{await browser.close()}}
 (async()=>{await run(webkit,devices['iPhone SE'],'iPhone SE');await run(chromium,{viewport:{width:360,height:740},isMobile:true,hasTouch:true},'Android compacto');await run(chromium,{viewport:{width:1366,height:768}},'Escritorio')})().catch(e=>{console.error(e);process.exitCode=1});

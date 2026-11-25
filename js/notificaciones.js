@@ -1,10 +1,10 @@
 /* Centro de avisos local: consume eventos ya consultados por la aplicación. */
 (function(g){
  'use strict';
- var APP=g.APP,UI=g.UI,MEM=g.APP_MEMORIA,contexto='',lista=[],vistos=Object.create(null),asignados=null,asignacionSeq=0,atrasados=Object.create(null),generacion=0,timers=[],cerrarDialogo=null,loteAudio=null,salidasUltimas=Object.create(null),salidaSeq=0;
+ var APP=g.APP,UI=g.UI,MEM=g.APP_MEMORIA,contexto='',lista=[],vistos=Object.create(null),asignados=null,asignacionSeq=0,atrasados=Object.create(null),generacion=0,timers=[],cerrarDialogo=null,loteAudio=null,salidasUltimas=Object.create(null),salidaSeq=0,pendientes=Object.create(null),revocados=Object.create(null);
  var tipos={salidaAdmin:{titulo:'Confirmación enviada',roles:['dueno','cajero'],vista:'pedidos'},salidaMoto:{titulo:'Confirmación enviada',roles:['motorizado'],vista:'entregas'},pedido:{titulo:'Nuevo pedido',voz:'Atención, nuevo pedido recibido.',roles:['dueno','cajero'],vista:'pedidos'},solicitud:{titulo:'Solicitud de modificación',voz:'Atención, tiene una actualización de modificación de pedido.',roles:['dueno','cajero'],vista:'pedidos'},atraso:{titulo:'Pedido sin atender',voz:'Atención, tiene un pedido pendiente de atender.',roles:['dueno','cajero'],vista:'pedidos'},entrega:{titulo:'Nueva entrega asignada',voz:'Atención, tiene una nueva entrega asignada.',roles:['motorizado'],vista:'entregas'},retiro:{titulo:'Asignación actualizada',voz:'Atención, una entrega ya no está en tus asignaciones.',roles:['motorizado'],vista:'entregas'},cambioEntrega:{titulo:'Modificación de entrega',voz:'Atención, revisa una modificación en tu entrega.',roles:['motorizado'],vista:'entregas'},cambioResuelto:{titulo:'Actualización de entrega',voz:'Atención, una modificación de entrega fue actualizada.',roles:['motorizado'],vista:'entregas'}};
  function scope(){var s=APP.sesion;return s?String(s.usuario_id||s.usuario)+'|'+s.rol+'|'+String(APP.local||s.local_id||'')+'|'+String(g.APP_CONFIG.url||''):'';}
- function reset(){if(cerrarDialogo){var cerrar=cerrarDialogo;cerrarDialogo=null;cerrar(null);}generacion++;timers.forEach(function(t){g.clearTimeout(t);});timers=[];loteAudio=null;if(g.MIP_VOZ)g.MIP_VOZ.limpiar();lista=[];vistos=Object.create(null);asignados=null;asignacionSeq=0;atrasados=Object.create(null);salidasUltimas=Object.create(null);salidaSeq=0;contexto='';pintar();}
+ function reset(){if(cerrarDialogo){var cerrar=cerrarDialogo;cerrarDialogo=null;cerrar(null);}generacion++;timers.forEach(function(t){g.clearTimeout(t);});timers=[];loteAudio=null;if(g.MIP_VOZ)g.MIP_VOZ.limpiar();lista=[];vistos=Object.create(null);asignados=null;asignacionSeq=0;atrasados=Object.create(null);salidasUltimas=Object.create(null);salidaSeq=0;pendientes=Object.create(null);revocados=Object.create(null);contexto='';pintar();}
  function sync(){var k=scope();if(k!==contexto){reset();contexto=k;}return k;}
  function modo(){if(MEM.leer('sonido_pedidos')===false)return 'silencio';var v=MEM.leer('modo_avisos');return ['sonido','voz','ambos'].indexOf(v)>=0?v:'sonido';}
  function volumen(){var v=MEM.leer('volumen_voz');return typeof v==='number'?Math.max(0,Math.min(100,v)):80;}
@@ -25,13 +25,16 @@
   function pitido(){if(valido())UI.sonar();}
   if(prueba){if(m==='sonido'||!g.MIP_VOZ){pitido();return;}g.MIP_VOZ.hablar('Prueba de voz de MiPedido.',{volumen:volumen()/100,valido:valido,fallo:pitido,fin:function(){if(m==='ambos')pitido();}});return;}
   items=items||[];var grupos=Object.create(null);items.forEach(function(x){var t=clasificar(tipo,x);(grupos[t]||(grupos[t]=[])).push(x);});
+  function vigentes(gs){var r=Object.create(null);Object.keys(gs).forEach(function(t){var xs=gs[t].filter(function(x){return !revocados[x.key];});if(xs.length)r[t]=xs;});return r;}
+  function hay(gs){return valido()&&Object.keys(vigentes(gs)).length>0;}
+  function emitir(gs,fallo){if(!hay(gs))return;if(!g.MIP_VOZ){if(fallo)fallo();return;}g.MIP_VOZ.hablar(fraseLote(vigentes(gs)),{textoActual:function(){return fraseLote(vigentes(gs));},volumen:volumen()/100,valido:function(){return hay(gs);},fallo:fallo||function(){}});}
   // Ventana natural del timbre: agrupar todos los eventos detectados sin añadir latencia a la voz.
   if(m==='ambos'&&!espera){if(loteAudio&&loteAudio.gen===gen){Object.keys(grupos).forEach(function(t){loteAudio.grupos[t]=(loteAudio.grupos[t]||[]).concat(grupos[t]);});return;}
-   var lote={gen:gen,grupos:grupos};loteAudio=lote;despues(0,pitido);despues(650,function(){if(loteAudio===lote)loteAudio=null;if(g.MIP_VOZ)g.MIP_VOZ.hablar(fraseLote(lote.grupos),{volumen:volumen()/100,valido:valido,fallo:function(){}});});return;}
+   var lote={gen:gen,grupos:grupos};loteAudio=lote;despues(0,function(){if(hay(lote.grupos))pitido();});despues(650,function(){if(loteAudio===lote)loteAudio=null;emitir(lote.grupos);});return;}
   var intervalos=m==='ambos'?[0]:tipo==='atraso'||tipos[tipo].vista==='entregas'||prueba?[0]:tipo==='solicitud'?[0,250,500]:[0,850,1700];
-  if(m==='sonido'||m==='ambos')intervalos.forEach(function(ms){despues(ms+(espera||0),pitido);});
+  if(m==='sonido'||m==='ambos')intervalos.forEach(function(ms){despues(ms+(espera||0),function(){if(hay(grupos))pitido();});});
   if(m==='voz'||m==='ambos'){
-   var hablar=function(){if(!g.MIP_VOZ){if(m==='voz')pitido();return;}g.MIP_VOZ.hablar(fraseLote(grupos),{volumen:volumen()/100,valido:valido,fallo:function(){if(m==='voz')pitido();}});};
+   var hablar=function(){emitir(grupos,function(){if(m==='voz'&&hay(grupos))pitido();});};
    if(prueba&&m==='voz')hablar();else despues((espera||0)+(m==='ambos'?Math.max.apply(null,intervalos)+650:0),hablar);
   }
  }
@@ -39,8 +42,11 @@
  function registrar(tipo,items,op){
   sync();op=op||{};var t=tipos[tipo],s=APP.sesion;if(!contexto||!t||!s||t.roles.indexOf(s.rol)<0)return false;
   var nuevos=[];(items||[]).forEach(function(p){var id=String(p.id||'');if(!id)return;var key=tipo+':'+id+(tipo==='solicitud'?':'+String(p.estado||''):'');if(vistos[key])return;vistos[key]=true;nuevos.push({key:key,tipo:tipo,numero:String(p.numero||'').slice(0,30),nombre:primerNombre(p.nombre_aviso||p.cliente_nombre),estado:String(p.estado||''),mensaje:tipo==='salidaAdmin'||tipo==='salidaMoto'?String(p.mensaje||'').slice(0,120):'',fecha:Date.now(),leido:false});});
-  if(!nuevos.length)return false;lista=nuevos.reverse().concat(lista).slice(0,100);pintar();if(op.audio!==false)sonar(tipo,op.espera||0,false,nuevos.slice().reverse());return true;
+  if(!nuevos.length)return false;nuevos.forEach(function(x){if(['pedido','atraso','solicitud'].indexOf(x.tipo)>=0)pendientes[x.key]=x;});lista=nuevos.reverse().concat(lista).slice(0,100);pintar();if(op.audio!==false)sonar(tipo,op.espera||0,false,nuevos.slice().reverse());return true;
  }
+ function retirarPendientes(noVigente){var cambio=false;Object.keys(pendientes).forEach(function(k){if(noVigente(pendientes[k])){revocados[k]=true;delete pendientes[k];cambio=true;}});if(cambio){lista=lista.filter(function(x){return !revocados[x.key];});pintar();}}
+ // Solo una respuesta completa y autenticada del local puede invalidar avisos.
+ function reconciliarPendientes(pedidos,solicitudes){sync();var s=APP.sesion;if(!s||['dueno','cajero'].indexOf(s.rol)<0||!Array.isArray(pedidos)||!Array.isArray(solicitudes))return;var activos=new Set(pedidos.map(function(p){return String(p.id); })),cambios=new Set(solicitudes.map(function(p){return 'solicitud:'+String(p.id)+':'+String(p.estado||'');}));retirarPendientes(function(x){return x.tipo==='solicitud'?!cambios.has(x.key):!activos.has(x.key.slice(x.tipo.length+1));});}
  function entregas(pedidos){sync();if(!APP.sesion||APP.sesion.rol!=='motorizado'||!Array.isArray(pedidos))return;var ahora=Object.create(null),finales=Object.create(null),nuevos=[],retirados=[],cambios=[],resueltos=[];pedidos.forEach(function(p){if(!p||!p.id)return;var id=String(p.id);if(p.estado==='Entregado'||p.estado==='Anulado'){finales[id]=p.estado;return;}if(['Recibido','Preparando','En camino'].indexOf(p.estado)<0)return;ahora[id]={numero:p.numero,bloqueo:p.cambios_pendientes===true};var anterior=asignados&&asignados[id];function item(){return {id:id+':evento:'+ ++asignacionSeq,numero:p.numero,cliente_nombre:p.cliente_nombre};}if(!anterior)nuevos.push(item());else if(anterior.bloqueo!==ahora[id].bloqueo){(ahora[id].bloqueo?cambios:resueltos).push(item());}});if(asignados)Object.keys(asignados).forEach(function(id){if(!ahora[id]&&finales[id]!=='Entregado')retirados.push({id:id+':retiro:'+ ++asignacionSeq,numero:asignados[id].numero});});asignados=ahora;if(nuevos.length)registrar('entrega',nuevos);if(retirados.length)registrar('retiro',retirados,{espera:0});if(cambios.length)registrar('cambioEntrega',cambios,{espera:0});if(resueltos.length)registrar('cambioResuelto',resueltos,{espera:0});}
  // Confirmación local posterior a escritura exitosa. Sin nuevas consultas.
  function audioSalida(texto){
@@ -81,7 +87,7 @@
    }else return false;
    if(!mensaje||!id)return false;
    var clave=familia+':'+id;if(salidasUltimas[clave]===firma)return false;
-   salidasUltimas[clave]=firma;var tipo=admin?'salidaAdmin':'salidaMoto';
+   salidasUltimas[clave]=firma;if(admin&&(accion==='pedidoAnular'||accion==='pedidoCambioAplicar'&&previo.tipo==='cancelar'))retirarPendientes(function(x){return (x.tipo==='pedido'||x.tipo==='atraso')&&accion==='pedidoAnular'?x.key===x.tipo+':'+id:!!numero&&x.numero===numero;});var tipo=admin?'salidaAdmin':'salidaMoto';
    if(!registrar(tipo,[{id:'salida-'+ ++salidaSeq,numero:numero,mensaje:mensaje}],{audio:false}))return false;
    audioSalida(mensaje);return true;
   }catch(e){return false;}};
@@ -106,5 +112,5 @@
  function init(){var b=document.getElementById('mip-avisos');if(b)b.addEventListener('click',function(){UI.desbloquearSonido();return abrir();});}
  document.addEventListener('click',function(e){if(e.isTrusted&&APP.sesion&&!e.target.closest('.velo')){activarVoz();}},true);
  document.addEventListener('DOMContentLoaded',init);g.addEventListener('app:sesion-terminada',reset);
- g.MIP_AVISOS={capturarSalida:capturarSalida,eliminar:eliminar,registrar:registrar,entregas:entregas,pendientesAtrasados:pendientesAtrasados,sync:sync,reset:reset,ajustes:ajustes,modo:modo,configurar:configurar,estado:function(){sync();return lista.map(function(x){return Object.assign({},x);});}};
+ g.MIP_AVISOS={reconciliarPendientes:reconciliarPendientes,capturarSalida:capturarSalida,eliminar:eliminar,registrar:registrar,entregas:entregas,pendientesAtrasados:pendientesAtrasados,sync:sync,reset:reset,ajustes:ajustes,modo:modo,configurar:configurar,estado:function(){sync();return lista.map(function(x){return Object.assign({},x);});}};
 })(window);

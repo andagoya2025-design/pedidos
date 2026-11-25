@@ -534,6 +534,7 @@
         if (APP.sesion !== s || (APP.local || s.local_id || 'TODOS') !== local) return;
         actualizarEstadoSolicitudes(r, false);
         if (Array.isArray(r.pedidos) && Array.isArray(r.solicitudes)) {
+          if(global.MIP_AVISOS&&global.MIP_AVISOS.reconciliarPendientes)global.MIP_AVISOS.reconciliarPendientes(r.pedidos,r.solicitudes);
           var pedidos = [], solicitudes = [];
           r.pedidos.forEach(function(p) { var k = 'p:' + p.id; if (!vistosAvisos[k]) { vistosAvisos[k] = true; pedidos.push(p); } });
           r.solicitudes.forEach(function(p) { var k = 's:' + p.id + ':' + (p.estado||'Pendiente'); if (!vistosAvisos[k]) { vistosAvisos[k] = true; solicitudes.push(p); } });
