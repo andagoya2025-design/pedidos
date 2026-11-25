@@ -269,6 +269,7 @@
     try {
       var nuevos = await DATOS.pedir('misEntregas', {});
       if (APP.vistaActual !== 'entregas' || APP.sesion!==sesionConsulta || (silencioso===true && (document.visibilityState!=='visible' || document.querySelector('.velo') || DATOS.ocupado()))) return false;
+      if (global.MIP_AVISOS) global.MIP_AVISOS.entregas(nuevos.pedidos);
       if (!silencioso || !mias || JSON.stringify(nuevos) !== JSON.stringify(mias)) {
         mias = nuevos;
         pintarMias();

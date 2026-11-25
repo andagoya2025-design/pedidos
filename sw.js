@@ -8,7 +8,7 @@
  * - Nunca guarda datos del negocio: los pedidos van siempre al servidor.
  * ============================================================
  */
-var VERSION = 'app-3.1.39-seguridad';
+var VERSION = 'app-3.1.40-notificaciones';
 var FOTOS = 'fotos-1';      // 3.1: fotos de platos y mapas (sobrevive a las actualizaciones)
 var MAX_FOTOS = 150;
 
@@ -33,6 +33,8 @@ var ARCHIVOS = [
   'js/comun.js',
   'js/mapa.js',
   'js/qr.js',
+  'js/voz.js',
+  'js/notificaciones.js',
   'js/pedir.js',
   'js/pedidos.js',
   'js/menu.js',

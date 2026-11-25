@@ -328,7 +328,8 @@
     est.datos.pedidos.filter(esRecibidoAtrasado).forEach(function (p) {
       if (est.alertados[p.id]) return;
       est.alertados[p.id] = true;
-      if (global.APP_MEMORIA.leer('sonido_pedidos') !== false) UI.sonar();
+      if (global.MIP_AVISOS) { if (!global.MIP_AVISOS.registrar('atraso',[p])) return; }
+      else if (global.APP_MEMORIA.leer('sonido_pedidos') !== false) UI.sonar();
       UI.notificar('🔴 Pedido sin atender', p.numero + ' sigue en Recibido.');
     });
   }
@@ -527,8 +528,8 @@
           var pedidos = [], solicitudes = [];
           r.pedidos.forEach(function(p) { var k = 'p:' + p.id; if (!vistosAvisos[k]) { vistosAvisos[k] = true; pedidos.push(p); } });
           r.solicitudes.forEach(function(p) { var k = 's:' + p.id + ':' + (p.estado||'Pendiente'); if (!vistosAvisos[k]) { vistosAvisos[k] = true; solicitudes.push(p); } });
-          if (pedidos.length) avisarNuevo(false, pedidos.length);
-          if (solicitudes.length) avisarNuevo(true, solicitudes.length, pedidos.length ? 2200 : 0);
+          if (pedidos.length) avisarNuevo(false, pedidos.length, 0, pedidos);
+          if (solicitudes.length) avisarNuevo(true, solicitudes.length, pedidos.length ? 2200 : 0, solicitudes);
         } else if (r.ultimo > ultimaMarca && (ultimaMarca || Date.now() - r.ultimo < 120000)) avisarNuevo(false, 1);
         ultimaMarca = r.ultimo || ultimaMarca;
         if (APP.vistaActual === 'pedidos' && est.datos && document.visibilityState === 'visible') {
@@ -548,11 +549,12 @@
     };
     vigia = setTimeout(revisar, 1500);
   }
-  function avisarNuevo(solicitud, cantidad, espera) {
+  function avisarNuevo(solicitud, cantidad, espera, items) {
     var titulo = solicitud ? '📝 Actualización de modificación' : '🛎️ ¡Pedido nuevo!';
     var mensaje = cantidad > 1 ? cantidad + (solicitud ? ' solicitudes pendientes.' : ' pedidos sin atender.') : (solicitud ? 'Revisa Solicitudes en Pedidos.' : 'Revisa el panel de pedidos.');
     var usuario = APP.sesion;
-    [0, solicitud ? 250 : 850, solicitud ? 500 : 1700].forEach(function(ms) {
+    if (global.MIP_AVISOS) { if (!global.MIP_AVISOS.registrar(solicitud?'solicitud':'pedido',items||[{id:'marca-'+Date.now(),numero:''}],{espera:espera})) return; }
+    else [0, solicitud ? 250 : 850, solicitud ? 500 : 1700].forEach(function(ms) {
       setTimeout(function() { if (APP.sesion === usuario && global.APP_MEMORIA.leer('sonido_pedidos') !== false) UI.sonar(); }, ms + (espera || 0));
     });
     UI.vibrar(solicitud ? [80,60,80] : [150,80,150,80,150]);
@@ -567,6 +569,7 @@
   }
   /* Ventana de avisos: probar sonido, activar notificaciones, silenciar. */
   async function avisosVentana() {
+    if (global.MIP_AVISOS) return global.MIP_AVISOS.ajustes();
     UI.desbloquearSonido();
     var on = global.APP_MEMORIA.leer('sonido_pedidos') !== false;
     var permiso = UI.permisoNotificaciones();

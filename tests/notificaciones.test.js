@@ -1,0 +1,16 @@
+const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs');
+const read=p=>fs.readFileSync(p,'utf8');
+function sim(rol='dueno',available=true){
+ let mem={},beeps=0,tasks=new Map(),seq=0,spoken=[],ev={},g={APP:{sesion:{usuario_id:'U',rol},local:'L'},APP_CONFIG:{url:'demo'},APP_MEMORIA:{leer:k=>mem[k],guardar:(k,v)=>mem[k]=v},UI:{sonar:()=>beeps++},setTimeout:(f,ms)=>{tasks.set(++seq,{f,ms});return seq},clearTimeout:i=>tasks.delete(i),addEventListener:(k,f)=>ev[k]=f};
+ const doc={getElementById:()=>null,addEventListener:()=>{}};
+ if(available){g.SpeechSynthesisUtterance=function(t){this.text=t};g.speechSynthesis={getVoices:()=>[{lang:'es-MX'}],speak:u=>spoken.push(u),cancel:()=>{}};}
+ new Function('window',read('js/voz.js'))(g);new Function('window','document',read('js/notificaciones.js'))(g,doc);
+ function flush(){let i=0;while(tasks.size&&i++<100){let [id,x]=[...tasks].sort((a,b)=>a[1].ms-b[1].ms)[0];tasks.delete(id);x.f();if(spoken.length&&spoken.at(-1).onend)spoken.at(-1).onend();}}
+ return {g,n:g.MIP_AVISOS,flush,spoken,beeps:()=>beeps,ev};
+}
+test('predeterminado conserva triple timbre y deduplica',()=>{let x=sim();assert.equal(x.n.registrar('pedido',[{id:'1'}]),true);assert.equal(x.n.registrar('pedido',[{id:'1'}]),false);x.flush();assert.equal(x.beeps(),3);assert.equal(x.spoken.length,0);assert.equal(x.n.estado().length,1)});
+test('voz español y respaldo sin API',()=>{let x=sim();x.n.configurar('voz',70);x.n.registrar('pedido',[{id:'1'}]);x.flush();assert.equal(x.spoken.length,1);assert.equal(x.spoken[0].lang,'es-MX');assert.equal(x.spoken[0].volume,.7);assert.equal(x.beeps(),0);let y=sim('dueno',false);y.n.configurar('voz',80);y.n.registrar('pedido',[{id:'1'}]);y.flush();assert.equal(y.beeps(),1)});
+test('silencio conserva avisos y cancela pendientes',()=>{let x=sim();x.n.registrar('pedido',[{id:'1'}]);x.n.configurar('silencio',80);x.n.registrar('pedido',[{id:'2'}]);x.flush();assert.equal(x.beeps(),0);assert.equal(x.n.estado().length,2)});
+test('perfiles y sesión/local no mezclan datos ni sonidos',()=>{let x=sim('motorizado');assert.equal(x.n.registrar('pedido',[{id:'1'}]),false);x.n.entregas([{id:'e',estado:'Preparando'}]);x.n.entregas([{id:'e',estado:'Preparando'}]);assert.equal(x.n.estado().length,1);x.g.APP.sesion={usuario_id:'B',rol:'motorizado'};x.n.sync();x.flush();assert.equal(x.beeps(),0);assert.equal(x.n.estado().length,0);x.n.entregas([{id:'e',estado:'Preparando'}]);x.flush();assert.equal(x.beeps(),1)});
+test('solicitud cambia de estado, atraso deduplicado, sin escrituras',()=>{let x=sim();x.n.registrar('solicitud',[{id:'a',estado:'Pendiente'}]);x.n.registrar('solicitud',[{id:'a',estado:'Confirmada cliente'}]);x.n.registrar('atraso',[{id:'b'}]);assert.equal(x.n.registrar('atraso',[{id:'b'}]),false);assert.equal(x.n.estado().length,3);assert.doesNotMatch(read('js/notificaciones.js'),/DATOS\.pedir|fetch\(/)});
+test('paquete web independiente del servidor, caché y ambos perfiles',()=>{assert.match(read('js/config.js'),/versionScriptMinima: 30129/);for(const p of ['index.html','driver.html','sw.js']){assert.match(read(p),/js\/voz\.js/);assert.match(read(p),/js\/notificaciones\.js/)}assert.doesNotMatch(read('pedir.html'),/js\/notificaciones\.js/);});

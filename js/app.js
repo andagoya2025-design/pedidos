@@ -179,6 +179,7 @@
     var permitidas = vistasPermitidas();
     if (permitidas.indexOf(clave) < 0) { clave = inicioPorRol(APP.sesion.rol); APP.parametros = {}; }
     APP.vistaActual = clave;
+    if (global.MIP_AVISOS) global.MIP_AVISOS.sync();
     UI.$$('#navegacion .nav-btn').forEach(function (b) {
       if (b.getAttribute('data-vista') === clave) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
     });
@@ -245,6 +246,7 @@
     MEM.limpiarSesion();
     if (APP.limpiarConfiguracion) APP.limpiarConfiguracion();
     APP.sesion = null;
+    if (global.MIP_AVISOS) global.MIP_AVISOS.reset();
     APP.locales = [];
     APP.local = 'TODOS';
     history.replaceState(null, '', global.location.pathname + global.location.search);
