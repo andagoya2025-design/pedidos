@@ -845,7 +845,7 @@
     return '<div class="cuentas">' + lista.map(function (x) {
       var et = etiquetaCuenta(x), sel = elegir && elegida === et;
       return '<div class="cuenta-banco' + (sel ? ' elegida' : '') + '" style="--banco:' + colorBanco(x.banco) + '">' +
-        '<div class="cb-cabeza"><span class="cb-logo" aria-hidden="true">' + UI.esc(String(x.banco).replace(/^(banco|cooperativa)\s+(de(l)?\s+)?/i, '').charAt(0).toUpperCase()) + '</span>' +
+        '<div class="cb-cabeza">'+UI.logoBanco(x.banco)+
         '<div><b>' + UI.esc(x.banco) + '</b><small>Cuenta ' + (x.tipo === 'corriente' ? 'corriente' : 'de ahorros') + '</small></div></div>' +
         '<div class="cb-numero"><span>' + UI.esc(x.numero) + '</span><button type="button" class="cb-copiar" data-copiar="' + UI.esc(x.numero.replace(/\D/g, '')) + '" aria-label="Copiar número de cuenta">📋</button></div>' +
         '<div class="cb-dato"><span>Titular</span><b>' + UI.esc(x.titular) + '</b></div>' +
