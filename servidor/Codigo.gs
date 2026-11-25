@@ -18,10 +18,10 @@
  * ============================================================
  */
 
-var APP_VERSION = '3.1.21';
+var APP_VERSION = '3.1.27';
 // Marcador opaco, sin datos de pedidos. Una ejecución de Apps Script tiene su propio estado.
 var syncPendiente_ = false;
-var APP_VERSION_NUM = 30121; // 3.1.0 -> 30100 (la pantalla compara con su mínimo)
+var APP_VERSION_NUM = 30127; // 3.1.0 -> 30100 (la pantalla compara con su mínimo)
 var SESION_SEGUNDOS = 21600;  // 6 h; se renueva con cada uso
 var ROLES = ['dueno', 'cajero', 'motorizado'];
 
@@ -93,6 +93,7 @@ var CONFIG_DEFECTO = {
   horario_apertura: '',      // ej. 11:00 (vacío = siempre abierto)
   horario_cierre: '',        // ej. 22:30
   dias_cerrado: '',          // ej. 1 (lunes); varios separados por coma; 7 = domingo
+  payphone_habilitado: 'NO', // cobro manual por enlace, activación expresa del dueño
   deuna_qr_url: '',          // imagen del QR de Deuna del negocio
   fidelidad_sellos: '0',     // 0 = apagado; ej. 8 = cada 8 pedidos entregados
   fidelidad_descuento: '50', // % de descuento del premio sobre el plato más caro
@@ -131,7 +132,7 @@ var CONFIG_DEFECTO = {
 
 /* Campos de configuración que puede ver cualquiera (sin sesión). */
 var CONFIG_PUBLICA = ['minutos_alerta_pago', 'anos_limpieza_clientes', 'negocio_nombre', 'logo_url', 'color_primario', 'color_acento', 'whatsapp', 'pais_codigo', 'ciudad', 'moneda', 'zona_horaria', 'mensaje_bienvenida',
-  /* 3.0 */ 'horario_apertura', 'horario_cierre', 'dias_cerrado', 'deuna_qr_url', 'fidelidad_sellos', 'fidelidad_descuento', 'propinas', 'mesas', 'verificar_antes_salir', 'precios_incluyen_iva', 'codigo_entrega', 'privacidad_texto', 'formato_hora',
+  /* 3.0 */ 'horario_apertura', 'horario_cierre', 'dias_cerrado', 'payphone_habilitado', 'deuna_qr_url', 'fidelidad_sellos', 'fidelidad_descuento', 'propinas', 'mesas', 'verificar_antes_salir', 'precios_incluyen_iva', 'codigo_entrega', 'privacidad_texto', 'formato_hora',
   /* 3.1.3 */ 'efectivo_permitido', 'efectivo_maximo', 'red_instagram', 'red_facebook', 'red_tiktok', 'pagina_web',
   /* 3.1.5 */ 'iva_porcentaje', 'cuentas_bancarias', 'verificar_antes_preparar', 'dias_historial_cliente', 'politicas_texto',
   /* 3.1.6 */ 'cobertura_km', 'cobertura_modo', 'permitir_programar', 'ventana_minutos', 'velocidad_moto_kmh', 'minutos_alerta_pedido', 'minutos_preparacion', 'recibir_cerrado'];
@@ -559,7 +560,7 @@ function accionConfigGuardar_(data, ctx) {
     if (k === 'formato_hora' && ['12', '24'].indexOf(v) < 0) throw fallo_('Formato de hora no válido.');
     if ((k === 'meta_entregas_dia' || k === 'bono_meta') && v !== '' && !(Number(v) >= 0 && Number(v) <= 1000)) throw fallo_('Meta o bono no válidos.');
     /* 3.1.3 */
-    if (k === 'efectivo_permitido' && ['SI', 'NO'].indexOf(v) < 0) throw fallo_('Valor no válido.');
+    if ((k === 'efectivo_permitido' || k === 'payphone_habilitado') && ['SI', 'NO'].indexOf(v) < 0) throw fallo_('Valor no válido.');
     if (k === 'efectivo_maximo' && v !== '' && !(Number(v) > 0 && Number(v) <= 10000)) throw fallo_('Monto máximo de efectivo no válido.');
     if (['red_instagram', 'red_facebook', 'red_tiktok', 'pagina_web'].indexOf(k) >= 0) v = enlaceRed_(k, v);
     /* 3.1.5 */
@@ -1002,9 +1003,9 @@ function diaTrabajo_(fecha, cfg) {
  * ============================================================ */
 
 var ESTADOS = ['Recibido', 'Preparando', 'En camino', 'Entregado', 'Anulado'];
-var FORMAS_PAGO = ['efectivo', 'transferencia', 'deuna'];
+var FORMAS_PAGO = ['efectivo', 'transferencia', 'deuna', 'payphone'];
 var TIPOS_ENTREGA = ['domicilio', 'retiro', 'mesa'];
-function esDigital_(forma) { return String(forma) === 'transferencia' || String(forma) === 'deuna'; }
+function esDigital_(forma) { return String(forma) === 'transferencia' || String(forma) === 'deuna' || String(forma) === 'payphone'; }
 
 /* ---------- 11.1 Ayudas de esta sección ---------- */
 
@@ -1260,6 +1261,7 @@ function accionPedidoCrear_(data, ctx, soloCotizar) {
   if (tipo === 'domicilio' && !direccion && lat === '' && !enlaceUbic) throw fallo_('Escriba su dirección o use «Usar mi ubicación».');
   var forma = String(data.forma_pago || '');
   if (FORMAS_PAGO.indexOf(forma) < 0) throw fallo_('Elija la forma de pago.');
+  if (forma === 'payphone' && (cfg.payphone_habilitado !== 'SI' || !String(cfg.whatsapp || '').replace(/\D/g,''))) throw fallo_('Payphone no está disponible. Elija otra forma de pago.','PAGO');
   if (forma === 'deuna' && !cfg.deuna_qr_url) throw fallo_('Este negocio aún no recibe pagos con Deuna. Elija otra forma de pago.');
   if(siNo_(cfg.propinas)&&tipo==='domicilio'&&data.propina!=null&&data.propina!==''&&(!['number','string'].includes(typeof data.propina)||!isFinite(Number(data.propina))))throw fallo_('Propina no válida.');
   var propina = siNo_(cfg.propinas) && tipo === 'domicilio' ? redondear_(numero_(data.propina)) : 0;
@@ -2468,7 +2470,7 @@ function accionPedidoEstado_(data, ctx) {
     }
     if (a === 'Entregado' && String(p.estado) === 'Preparando' && (p.zona_id || p.motorizado_id)) throw fallo_('Este pedido es a domicilio: primero debe salir «En camino».');
     if (a === 'En camino' || (a === 'Entregado' && String(p.estado) === 'Preparando')) exigirPagoVerificado_(p);
-    if (a === 'Preparando' && siNo_(leerConfig_().verificar_antes_preparar)) exigirPagoVerificado_(p, true); // 3.1.5
+    if (a === 'Preparando' && (String(p.forma_pago)==='payphone'||siNo_(leerConfig_().verificar_antes_preparar))) exigirPagoVerificado_(p, true); // 3.1.5
     var cambios = { estado: a };
     if (a === 'En camino' && !String(p.codigo_entrega || '')) cambios.codigo_entrega = nuevoCodigoEntrega_();
     cambios[{ 'Preparando': 'preparando', 'En camino': 'en_camino', 'Entregado': 'entregado' }[a]] = new Date();
@@ -2583,7 +2585,7 @@ function accionPedidoPagoVerificar_(data, ctx) {
   var p;
   try {
     p = buscarPedido_(data.id, ctx);
-    if (!esDigital_(p.forma_pago)) throw fallo_('Este pedido no es por transferencia ni Deuna.');
+    if (!esDigital_(p.forma_pago)) throw fallo_('Este pedido no es por un medio de pago digital.');
     if(String(p.estado)==='Anulado')throw fallo_('No se verifica un pedido anulado.','PAGO');
     if(data.verificado===false&&(['En camino','Entregado'].indexOf(String(p.estado))>=0||p.propina_pago_json))throw fallo_('El pedido ya fue despachado o conciliado; requiere revisión financiera.','PAGO');
     if(data.total_esperado!==undefined&&(typeof data.total_esperado!=='number'||!isFinite(data.total_esperado)||redondear_(data.total_esperado)!==redondear_(p.total)))throw fallo_('El total cambió. Actualiza el pedido antes de verificar.');
@@ -2593,7 +2595,7 @@ function accionPedidoPagoVerificar_(data, ctx) {
     actualizarCampos_('pedidos', p._fila, p, { pago_verificado: verificar, pago_verificado_fecha: verificar ? new Date() : '' });
     p = buscarPedido_(data.id, ctx);
   } finally { lock.releaseLock(); }
-  bitacora_(ctx.sesion, 'CAJA', data.verificado !== false ? 'TRANSFERENCIA_VERIFICADA' : 'TRANSFERENCIA_PENDIENTE', p.numero, ctx.dispositivo);
+  bitacora_(ctx.sesion, 'CAJA', String(p.forma_pago)==='payphone'?(data.verificado!==false?'PAYPHONE_VERIFICADO':'PAYPHONE_PENDIENTE'):(data.verificado !== false ? 'TRANSFERENCIA_VERIFICADA' : 'TRANSFERENCIA_PENDIENTE'), p.numero, ctx.dispositivo);
   return { ok: true, data: { pedido: pedidoSalida_(p) } };
 }
 
@@ -2805,11 +2807,11 @@ function accionReportesBase_(data, ctx) {
   var porLocal = {}, horas = [], dias = [], porMoto = {}, tiempos = [];
   for (var h = 0; h < 24; h++) horas.push({ hora: h, pedidos: 0, total: 0 });
   ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'].forEach(function (n) { dias.push({ dia: n, pedidos: 0, total: 0 }); });
-  var totales = { pedidos: 0, ventas: 0, envio: 0, descuento: 0, efectivo: 0, transferencia: 0, anulados: todos.length - validos.length };
+  var totales = { pedidos: 0, ventas: 0, envio: 0, descuento: 0, efectivo: 0, transferencia: 0, payphone: 0, anulados: todos.length - validos.length };
   validos.forEach(function (p) {
     var t = numero_(p.total);
     totales.pedidos++; totales.ventas += t; totales.envio += numero_(p.envio); totales.descuento += numero_(p.descuento);
-    totales[esDigital_(p.forma_pago) ? 'transferencia' : 'efectivo'] += t;
+    totales[String(p.forma_pago)==='payphone'?'payphone':esDigital_(p.forma_pago) ? 'transferencia' : 'efectivo'] += t;
     var l = String(p.local_id);
     porLocal[l] = porLocal[l] || { local_id: l, nombre: nombresLocal[l] || l, pedidos: 0, total: 0 };
     porLocal[l].pedidos++; porLocal[l].total += t;
@@ -3022,7 +3024,7 @@ function resumenCaja_(caja, cfg) {
   var pedidos = leerTabla_('pedidos').filter(function (p) { return String(p.local_id) === local; });
   var previo=leerTabla_('caja').filter(function(c){return String(c.local_id)===local&&String(c.id)!==cid&&String(c.estado)==='cerrada'&&c.cierre instanceof Date&&(!(caja.apertura instanceof Date)||c.cierre<=caja.apertura);}).sort(function(a,b){return b.cierre-a.cierre;})[0];
   var desde=previo?previo.cierre:null;
-  var r = { fondo: numero_(caja.fondo), entradas: 0, salidas: 0, fondos_motorizado: 0, liquidado: 0, efectivo_local: 0, transferencias: 0, transferencias_pendientes: 0, pedidos: 0, ventas: 0, ventas_sin_propina:0, propinas_digitales_pendientes:0 };
+  var r = { fondo: numero_(caja.fondo), entradas: 0, salidas: 0, fondos_motorizado: 0, liquidado: 0, efectivo_local: 0, transferencias: 0, transferencias_pendientes: 0, payphone: 0, payphone_pendiente: 0, pedidos: 0, ventas: 0, ventas_sin_propina:0, propinas_digitales_pendientes:0 };
   var propinasPendientes=[];
   movs.forEach(function (m) {
     var t = String(m.tipo);
@@ -3043,10 +3045,10 @@ function resumenCaja_(caja, cfg) {
     if(esDigital_(p.forma_pago)){
       if(p.pago_verificado===true){
         if(!eventoEnCaja_(p,caja,cfg,'pago_verificado_fecha',desde))return;
-        r.transferencias+=numero_(p.total);
+        if(String(p.forma_pago)==='payphone')r.payphone+=numero_(p.total);else r.transferencias+=numero_(p.total);
       }else{
         if(ymd_(p.dia_trabajo,cfg)>dia)return;
-        r.transferencias_pendientes+=numero_(p.total);
+        if(String(p.forma_pago)==='payphone')r.payphone_pendiente+=numero_(p.total);else r.transferencias_pendientes+=numero_(p.total);
       }
       transf.push({id:String(p.id),numero:String(p.numero),cliente:String(p.cliente_nombre),total:redondear_(p.total),verificado:p.pago_verificado===true,estado:String(p.estado),forma:String(p.forma_pago)});
     }else if(String(p.estado)==='Entregado'&&!p.motorizado_id&&eventoEnCaja_(p,caja,cfg,'entregado',desde))r.efectivo_local+=numero_(p.total);
@@ -3298,9 +3300,9 @@ function estaAbierto_(cfg, fecha) {
 
 /* 3.0: transferencia o Deuna sin verificar no sale ni se entrega. */
 function exigirPagoVerificado_(p, preparar) {
-  if (!preparar && !siNo_(leerConfig_().verificar_antes_salir)) return;
+  if (String(p.forma_pago)!=='payphone' && !preparar && !siNo_(leerConfig_().verificar_antes_salir)) return;
   if (esDigital_(p.forma_pago) && p.pago_verificado !== true) {
-    throw fallo_('Primero verifique el pago en la app del banco' + (String(p.forma_pago) === 'deuna' ? ' o de Deuna' : '') + ' y toque «Marcar pago verificado».', 'PAGO_SIN_VERIFICAR');
+    throw fallo_(String(p.forma_pago)==='payphone'?'Primero confirme la acreditación en Payphone.':'Primero verifique el pago en la app del banco' + (String(p.forma_pago) === 'deuna' ? ' o de Deuna' : '') + ' y toque «Marcar pago verificado».', 'PAGO_SIN_VERIFICAR');
   }
 }
 
@@ -3480,7 +3482,7 @@ function accionReportes_(data, ctx) {
   var r = accionReportesBase_(data, ctx);
   var d = r.data, cfg = leerConfig_();
   var local = d.local;
-  var ex = { comida: 0, envio: 0, propinas: 0, premios: 0, base_iva: 0, iva: 0, deuna: 0, transferencia_banco: 0, calificaciones: 0, estrellas: 0, clientes_nuevos: 0 };
+  var ex = { comida: 0, envio: 0, propinas: 0, premios: 0, base_iva: 0, iva: 0, deuna: 0, payphone: 0, transferencia_banco: 0, calificaciones: 0, estrellas: 0, clientes_nuevos: 0 };
   var porTipo = { domicilio: { pedidos: 0, total: 0 }, retiro: { pedidos: 0, total: 0 }, mesa: { pedidos: 0, total: 0 } };
   var porOrigen = {}, comentarios = [];
   leerTabla_('pedidos').forEach(function (p) {
@@ -3493,6 +3495,7 @@ function accionReportes_(data, ctx) {
     var base = p.base_iva === '' || p.base_iva == null ? redondear_((t - prop) / (1 + pct / 100)) : numero_(p.base_iva); // pedidos viejos: se calcula
     ex.base_iva += base; ex.iva += (p.iva === '' || p.iva == null) ? (t - prop - base) : numero_(p.iva);
     if (String(p.forma_pago) === 'deuna') ex.deuna += t;
+    if (String(p.forma_pago) === 'payphone') ex.payphone += t;
     if (String(p.forma_pago) === 'transferencia') ex.transferencia_banco += t;
     var tipo = tipoEntrega_(p);
     porTipo[tipo].pedidos++; porTipo[tipo].total += t;
