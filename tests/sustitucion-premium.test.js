@@ -5,7 +5,7 @@ function fixture(values=[1,0,2]){
  const events={},classes=()=>({s:new Set(),add(k){this.s.add(k)},toggle(k,on){if(on)this.s.add(k);else this.s.delete(k)},contains(k){return this.s.has(k)}});
  const rows=values.map((value,i)=>({el:{value:String(value),tipo:i===0?'r':'a'},classList:classes(),querySelector(){return this.el}}));
  const panel={classList:classes()},modal={classList:classes()},aviso={},buscar={value:'',dispatchEvent(){}},boton={attrs:{'aria-expanded':'false'},getAttribute(k){return this.attrs[k]},setAttribute(k,v){this.attrs[k]=v},addEventListener(k,f){this.handler=f},click(){this.handler()}};
- const v={querySelector(k){if(k.includes('^='))return rows.find(f=>f.classList.contains('ux-premium-seleccion')&&f.el.tipo===(k.includes('"r"')?'r':'a'));return {'.ventana':modal,'[data-premium-ajustes]':panel,'[data-premium-alternativas]':boton,'[data-premium-contador]':aviso,'[data-buscar]':buscar}[k]},addEventListener(k,f){events[k]=f}};
+ const v={querySelectorAll(){return rows},querySelector(k){if(k.includes('^='))return rows.find(f=>f.classList.contains('ux-premium-seleccion')&&f.el.tipo===(k.includes('"r"')?'r':'a'));return {'.ventana':modal,'[data-premium-ajustes]':panel,'[data-premium-alternativas]':boton,'[data-premium-contador]':aviso,'[data-buscar]':buscar}[k]},addEventListener(k,f){events[k]=f}};
  const ctx={UI:{$$:()=>rows},Event:class{}};
  vm.createContext(ctx);vm.runInContext(s.slice(a,b),ctx);ctx.presentarSustitucionPremium(v);return {rows,panel,modal,aviso,boton,events,buscar};
 }
