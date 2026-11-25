@@ -1649,11 +1649,11 @@
         try { var v = leer(velo); if (tipo === 'cambiar' && !(v.originales && v.agregados)) throw Error('Selecciona el producto original y su sustituto.');
           if (v.texto.length < 5 || v.texto.length > 500) throw Error('Describe el cambio entre 5 y 500 caracteres.');
           detalle = {texto:v.texto,items:v.items,seleccion:v.seleccion}; lectura=v;
-          borrador=UI.$('input,textarea',velo).map(function(el){return {valor:el.value,checked:el.checked};}); return true;
+          borrador=UI.$$('input,textarea',velo).map(function(el){return {valor:el.value,checked:el.checked};}); return true;
         } catch(e) { UI.aviso(e.message,'error'); return false; }
       }}],
       alAbrir: function(velo) {
-        if(borrador)UI.$('input,textarea',velo).forEach(function(el,i){if(borrador[i]){el.value=borrador[i].valor;el.checked=borrador[i].checked;}});
+        if(borrador)UI.$$('input,textarea',velo).forEach(function(el,i){if(borrador[i]){el.value=borrador[i].valor;el.checked=borrador[i].checked;}});
         velo.querySelector('.ventana').classList.add('ux-gestion-modal','ux-revision-cliente');
         function resumen() {
           UI.$$('.ux-cambio-fila',velo).forEach(function(f){
