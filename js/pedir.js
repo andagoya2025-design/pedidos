@@ -843,7 +843,7 @@
     if (!lista.length) return nota ? '<div class="banda" style="margin-top:10px;text-align:left;white-space:pre-line">🏦 <span>' + UI.esc(nota) + (referencia ? '\nReferencia: ' + UI.esc(referencia) : '') + '</span></div>' : '';
     var elegida = pago.cuenta || '';
     return '<div class="cuentas">' + lista.map(function (x) {
-      var et = etiquetaCuenta(x), sel = elegir && elegida === et;
+      var et = etiquetaCuenta(x), sel = elegir && elegida === et, tono=UI.tonoBanco(x);
       return '<div class="cuenta-banco' + (sel ? ' elegida' : '') + '" style="--banco:' + colorBanco(x.banco) + '">' +
         '<div class="cb-cabeza">'+UI.logoBanco(x.banco,x.logo_url)+
         '<div><b>' + UI.esc(x.banco) + '</b><small>Cuenta ' + (x.tipo === 'corriente' ? 'corriente' : 'de ahorros') + '</small></div></div>' +
