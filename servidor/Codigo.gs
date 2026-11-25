@@ -21,7 +21,7 @@
 var APP_VERSION = '3.1.21';
 // Marcador opaco, sin datos de pedidos. Una ejecución de Apps Script tiene su propio estado.
 var syncPendiente_ = false;
-var APP_VERSION_NUM = 30127; // 3.1.0 -> 30100 (la pantalla compara con su mínimo)
+var APP_VERSION_NUM = 30128; // 3.1.0 -> 30100 (la pantalla compara con su mínimo)
 var SESION_SEGUNDOS = 21600;  // 6 h; se renueva con cada uso
 var ROLES = ['dueno', 'cajero', 'motorizado'];
 
@@ -4055,12 +4055,13 @@ function cuentasLimpias_(v) {
     var o = {
       banco: limpiarTexto_(c.banco, 60), tipo: String(c.tipo) === 'corriente' ? 'corriente' : 'ahorros',
       numero: limpiarTexto_(c.numero, 34), titular: limpiarTexto_(c.titular, 80),
-      documento: limpiarTexto_(c.documento, 32), correo: limpiarTexto_(c.correo, 80), activa: c.activa !== false, logo_url: limpiarTexto_(c.logo_url, 200)
+      documento: limpiarTexto_(c.documento, 32), correo: limpiarTexto_(c.correo, 80), activa: c.activa !== false, logo_url: limpiarTexto_(c.logo_url, 200), color: limpiarTexto_(c.color, 7)
     };
     if (!o.banco) throw fallo_('Cuenta ' + (i + 1) + ': elija el banco.');
     if (!/^[A-Za-z0-9][A-Za-z0-9 -]{3,33}$/.test(o.numero) || o.numero.replace(/[ -]/g,'').length < 5) throw fallo_('Cuenta ' + (i + 1) + ': escriba el número de cuenta.');
     if (!o.titular) throw fallo_('Cuenta ' + (i + 1) + ': escriba el nombre del titular.');
     if (o.documento && !/^[A-Za-z0-9][A-Za-z0-9 .-]{0,31}$/.test(o.documento)) throw fallo_('Cuenta ' + (i + 1) + ': documento no válido.');
+    if (o.color && !/^#[0-9a-f]{6}$/i.test(o.color)) throw fallo_('Color bancario no válido.');
     if (o.logo_url && !/^https:\/\/drive\.google\.com\/thumbnail\?id=[A-Za-z0-9_-]{10,100}&sz=w800$/.test(o.logo_url)) throw fallo_('Logotipo no válido. Súbalo desde el editor.');
     if (o.correo && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(o.correo)) throw fallo_('Cuenta ' + (i + 1) + ': correo no válido.');
     return o;
