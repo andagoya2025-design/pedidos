@@ -5,13 +5,13 @@ Una copia por cliente: cada negocio tiene su propia hoja de Google y su propio s
 
 ## Versión vigente y fuente de verdad
 
-- Pantalla en MAIN: **3.1.30** (centro de avisos, timbre y voz). La versión de pantalla se declara en `js/config.js`.
-- Servidor compatible: **3.1.29 / 30129**. Fuente de instalación: `servidor/Codigo.gs`; copia de distribución: `servidor/Codigo_MiPedido_3.1.29.txt`.
-- La caché PWA se versiona de forma independiente en `sw.js` (`app-3.1.40-notificaciones`).
-- Respaldo anterior: `respaldo/main-antes-3.1.30` (3.1.29). La 3.1.30 fue publicada y probada por el operador; la última corrección de reasignación se publicó con la revalidación automática aún no confirmada. Verificar el estado de CI del commit exacto antes de nuevas publicaciones.
-- Próxima candidata prevista: 3.1.31, extensión de avisos a clientes y motorizados; no confundir con una versión publicada.
+- **MAIN / estable 3.1.41:** versión de referencia aprobada por el operador; 414/414 pruebas unitarias y navegador iPhone/WebKit, Android/Chromium y escritorio ([CI](https://github.com/andagoya2025-design/pedidos/actions/runs/45708893735)). Cancelación comprobada en prueba física; activación inicial de voz todavía puede requerir interacción.
+- **Candidata 3.1.42:** mejora de activación de voz; 420/420 pruebas unitarias y 12 escenarios nuevos de navegador aprobados ([CI](https://github.com/andagoya2025-design/pedidos/actions/runs/45714457595)); pendiente publicación y prueba física. Consultar MAIN antes de determinar estado vigente.
+- **Servidor:** mínimo compatible 30129; fuente y TXT 30130 idénticos, despliegue de Apps Script no confirmado. No instalar sin autorización coordinada.
+- **Caché estable:** app-3.1.51-cancelacion-recibo. La versión de pantalla se declara en js/config.js; la caché en sw.js.
+- **Recuperación:** rama [estable/3.1.41](https://github.com/andagoya2025-design/pedidos/tree/estable/3.1.41); 3.1.39 es histórico, no la referencia vigente.
 
-**No instalar TXT históricos ni inferir la versión por el nombre de un archivo.** Consultar [Inventario de servidor](servidor/README.md), [procedimiento de mantenimiento](docs/MANTENIMIENTO.md) y [reglas de trabajo](AGENTS.md).
+Consultar [Inventario de servidor](servidor/README.md), [mantenimiento](docs/MANTENIMIENTO.md) y [reglas de trabajo](AGENTS.md). Los TXT obsoletos se conservan en el historial Git y no en el árbol activo.
 
 `servidor/Pruebas.gs` es opcional y exclusivo de una hoja de ensayo: no instalar ni ejecutar en producción. Las pruebas automáticas de `tests/` se conservan para evitar regresiones. `MiPedido_Setup.html` es el asistente local de configuración; `instalar.html` es el instalador técnico. `herramientas-proveedor/` y `COMERCIAL.md` son recursos separados de administración comercial.
 
