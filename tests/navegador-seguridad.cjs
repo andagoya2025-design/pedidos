@@ -20,8 +20,14 @@ async function run(engine,device,label){
   await page.addScriptTag({content:read('js/configuracion.js')});
   await page.addScriptTag({content:'APP.vistas.pedidos={titulo:"Pedidos",roles:["dueno","cajero"],orden:10,pintar:c=>{c.textContent="Panel pedidos"}};APP.vistas.entregas={titulo:"Entregas",roles:["motorizado"],orden:10,pintar:c=>{c.textContent="Panel entregas"}};document.dispatchEvent(new Event("DOMContentLoaded"));'});
   await page.locator('#ingreso').waitFor({state:'visible'});
-  await page.locator('#ing-usuario').fill('demo');await page.locator('#ing-clave').fill('ficticia');await page.getByRole('button',{name:'Ingresar',exact:true}).click();
-  await page.locator('#app').waitFor({state:'visible'});
+  // El arranque real enfoca usuario con un temporizador de 50 ms. En WebKit
+  // ese foco tardío puede interrumpir el llenado/clic del simulador.
+  await page.waitForFunction(()=>document.activeElement===document.getElementById('ing-usuario'));
+  await page.locator('#ing-usuario').fill('demo');await page.locator('#ing-clave').fill('ficticia');
+  assert.equal(await page.locator('#ing-usuario').inputValue(),'demo');
+  assert.equal(await page.locator('#ing-clave').inputValue(),'ficticia');
+  await page.getByRole('button',{name:'Ingresar',exact:true}).click();
+  try { await page.locator('#app').waitFor({state:'visible'}); } catch(e) { console.error('Diagnóstico acceso',label,rol,await page.evaluate(()=>({mensaje:document.querySelector('#ingreso-mensaje').textContent,usuario:document.querySelector('#ing-usuario').value,clavePresente:!!document.querySelector('#ing-clave').value,rol:APP.sesion&&APP.sesion.rol,error:__error})),errors);throw e; }
   const home=rol==='dueno'?'inicio':rol==='cajero'?'pedidos':'entregas';
   await page.waitForFunction(h=>APP.vistaActual===h,home);
   assert.equal(await page.locator('#form-mi-clave').count(),0);
@@ -62,7 +68,13 @@ async function run(engine,device,label){
   }
   await page.locator('#btn-salir').click();await page.locator('#ingreso').waitFor({state:'visible'});
   assert.equal(new URL(page.url()).hash,'');
-  await page.locator('#ing-usuario').fill('demo');await page.locator('#ing-clave').fill('ficticia');await page.getByRole('button',{name:'Ingresar',exact:true}).click();
+  // El arranque real enfoca usuario con un temporizador de 50 ms. En WebKit
+  // ese foco tardío puede interrumpir el llenado/clic del simulador.
+  await page.waitForFunction(()=>document.activeElement===document.getElementById('ing-usuario'));
+  await page.locator('#ing-usuario').fill('demo');await page.locator('#ing-clave').fill('ficticia');
+  assert.equal(await page.locator('#ing-usuario').inputValue(),'demo');
+  assert.equal(await page.locator('#ing-clave').inputValue(),'ficticia');
+  await page.getByRole('button',{name:'Ingresar',exact:true}).click();
   await page.waitForFunction(h=>APP.vistaActual===h&&!!APP.sesion,home);
   assert.deepEqual(errors,[]);
   await context.close();
