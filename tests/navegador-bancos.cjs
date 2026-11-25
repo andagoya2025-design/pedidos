@@ -22,10 +22,14 @@ async function run(engine,device,label){
  assert.equal(await page.locator('#aj-cuenta-mas').isHidden(),true);
  await page.locator('[data-cta-ed="0"]').click();
  await page.locator('#cta-logo-quitar').click();
+ await page.locator('#cta-color').fill('#f5d325');
  await page.locator('#cta-n').fill('GB82WEST12345698765432');
  await page.getByRole('button',{name:'Listo',exact:true}).click();
  await page.locator('.ventana').waitFor({state:'hidden'});
  await page.evaluate(()=>renderPago());
+ assert.equal(await page.locator('.cuenta-banco').first().evaluate(e=>getComputedStyle(e).backgroundColor),'rgb(245, 211, 37)');
+ assert.equal(await page.locator('.cuenta-banco').first().evaluate(e=>getComputedStyle(e).color),'rgb(0, 0, 0)');
+ assert.equal(await page.locator('.cuenta-banco .banco-marca').first().evaluate(e=>getComputedStyle(e).backgroundColor),'rgb(255, 255, 255)');
  assert.match(await page.locator('.banco-admin').first().innerText(),/GB82WEST12345698765432/);
  await page.locator('[data-cuenta]').nth(1).click();
  assert.equal(await page.locator('.cuenta-banco.elegida').count(),1);
