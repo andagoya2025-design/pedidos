@@ -45,3 +45,6 @@ jobs:
           npx playwright install --with-deps chromium webkit
       - name: Interacción móvil con datos ficticios
         run: node tests/navegador-preenvio.cjs
+
+      - name: Sustitución premium en pantallas pequeñas
+        run: node tests/navegador-sustitucion.cjs
