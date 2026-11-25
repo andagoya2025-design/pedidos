@@ -30,7 +30,7 @@ async function run(engine,device,label){
  assert.equal(await modal.locator('[data-cantidad="a13"]').isVisible(),true);
  await modal.locator('[data-premium-alternativas]').click();
  assert.equal(await modal.locator('[data-cantidad="a0"]').isVisible(),true);
- const plus=modal.locator('.ux-cambio-fila').filter({has:modal.locator('[data-cantidad="a0"]')}).locator('.ux-cambio-controles [data-paso="1"]');
+ const plus=modal.locator('.ux-cambio-fila').filter({has:page.locator('[data-cantidad="a0"]')}).locator('.ux-cambio-controles [data-paso="1"]');
  await plus.click();assert.equal(await modal.locator('[data-cantidad="a0"]').inputValue(),'2');
  await modal.getByRole('button',{name:'Revisar propuesta',exact:true}).click();
  await page.getByRole('heading',{name:'Propuesta definitiva · PED-0001'}).waitFor();
