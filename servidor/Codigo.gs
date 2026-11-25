@@ -21,7 +21,7 @@
 var APP_VERSION = '3.1.21';
 // Marcador opaco, sin datos de pedidos. Una ejecución de Apps Script tiene su propio estado.
 var syncPendiente_ = false;
-var APP_VERSION_NUM = 30121; // 3.1.0 -> 30100 (la pantalla compara con su mínimo)
+var APP_VERSION_NUM = 30127; // 3.1.0 -> 30100 (la pantalla compara con su mínimo)
 var SESION_SEGUNDOS = 21600;  // 6 h; se renueva con cada uso
 var ROLES = ['dueno', 'cajero', 'motorizado'];
 
@@ -682,6 +682,7 @@ function datosPublicos_() {
   var cfg = leerConfig_();
   var pub = {};
   CONFIG_PUBLICA.forEach(function (k) { pub[k] = cfg[k] == null ? '' : cfg[k]; });
+  try { var cb = JSON.parse(pub.cuentas_bancarias || '[]'); pub.cuentas_bancarias = JSON.stringify(Array.isArray(cb) ? cb.filter(function(c){return c && c.activa !== false;}) : []); } catch(e) { pub.cuentas_bancarias = '[]'; }
   pub.licencia = estadoLicencia_(cfg);
   return pub;
 }
@@ -1387,7 +1388,7 @@ function accionPedidoCrear_(data, ctx, soloCotizar) {
       subtotal, envio, descuento, total, codigo, 'Recibido', '', ahora, '', '', '', '', '', ses ? ses.usuario : 'cliente',
       horaEst, enlaceUbic, limpiarTexto_(data.notas, 300), '', '', '', '', '', false, '', false,
       tipo, mesa, llegada || '', origen, propina, baseIva, iva, fuente, nuevo, '', '', premio, dispId,
-      ses && data.canal !== 'cliente' ? 'NO' : '', '', nuevaClaveSeguimiento_(), esDigital_(forma) ? limpiarTexto_(data.cuenta_pago, 80) : '', '',
+      ses && data.canal !== 'cliente' ? 'NO' : '', '', nuevaClaveSeguimiento_(), esDigital_(forma) ? limpiarTexto_(data.cuenta_pago, 120) : '', '',
       distancia, llegada ? new Date(llegada.getTime() + numero_(cfg.ventana_minutos) * 60000) : '', '', '']; // 3.1: pedido tomado por el personal (teléfono/mostrador): sin código. 3.1.1: si se hizo desde la página del cliente, sí lleva código
     agregarFilas_('pedidos', [fila]);
     agregarFilas_('pedido_detalle', detalleFilas.map(function (d) { return [nuevoId_('DET'), id, d.plato_id, d.nombre, d.precio, d.cantidad, d.extras, d.total_linea]; }));
@@ -2190,7 +2191,8 @@ function guardarFoto_(base64, nombreArchivo, carpeta, publica) {
 
 function accionFotoSubir_(data, ctx) {
   var moto = data.tipo === 'motorizado'; // 3.1: fotos de motorizados en su propia carpeta
-  var url = guardarFoto_(data.foto, (moto ? 'motorizado-' : 'plato-') + Utilities.formatDate(new Date(), zona_(leerConfig_()), 'yyyyMMdd-HHmmss'), moto ? 'Fotos de motorizados' : 'Fotos del menú', true);
+  var banco = data.tipo === 'banco';
+  var url = guardarFoto_(data.foto, (banco ? 'banco-' : moto ? 'motorizado-' : 'plato-') + Utilities.formatDate(new Date(), zona_(leerConfig_()), 'yyyyMMdd-HHmmss'), banco ? 'Logotipos bancarios' : moto ? 'Fotos de motorizados' : 'Fotos del menú', true);
   bitacora_(ctx.sesion, 'MENU', 'SUBIR_FOTO', '', ctx.dispositivo);
   return { ok: true, data: { url: url } };
 }
@@ -4052,13 +4054,14 @@ function cuentasLimpias_(v) {
   var limpias = lista.map(function (c, i) {
     var o = {
       banco: limpiarTexto_(c.banco, 60), tipo: String(c.tipo) === 'corriente' ? 'corriente' : 'ahorros',
-      numero: limpiarTexto_(c.numero, 30).replace(/[^\d\-]/g, ''), titular: limpiarTexto_(c.titular, 80),
-      documento: limpiarTexto_(c.documento, 13).replace(/\D/g, ''), correo: limpiarTexto_(c.correo, 80), activa: c.activa !== false
+      numero: limpiarTexto_(c.numero, 34), titular: limpiarTexto_(c.titular, 80),
+      documento: limpiarTexto_(c.documento, 32), correo: limpiarTexto_(c.correo, 80), activa: c.activa !== false, logo_url: limpiarTexto_(c.logo_url, 200)
     };
     if (!o.banco) throw fallo_('Cuenta ' + (i + 1) + ': elija el banco.');
-    if (o.numero.replace(/\D/g, '').length < 5) throw fallo_('Cuenta ' + (i + 1) + ': escriba el número de cuenta.');
+    if (!/^[A-Za-z0-9][A-Za-z0-9 -]{3,33}$/.test(o.numero) || o.numero.replace(/[ -]/g,'').length < 5) throw fallo_('Cuenta ' + (i + 1) + ': escriba el número de cuenta.');
     if (!o.titular) throw fallo_('Cuenta ' + (i + 1) + ': escriba el nombre del titular.');
-    if (o.documento && [10, 13].indexOf(o.documento.length) < 0) throw fallo_('Cuenta ' + (i + 1) + ': la cédula tiene 10 dígitos y el RUC 13.');
+    if (o.documento && !/^[A-Za-z0-9][A-Za-z0-9 .-]{0,31}$/.test(o.documento)) throw fallo_('Cuenta ' + (i + 1) + ': documento no válido.');
+    if (o.logo_url && !/^https:\/\/drive\.google\.com\/thumbnail\?id=[A-Za-z0-9_-]{10,100}&sz=w800$/.test(o.logo_url)) throw fallo_('Logotipo no válido. Súbalo desde el editor.');
     if (o.correo && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(o.correo)) throw fallo_('Cuenta ' + (i + 1) + ': correo no válido.');
     return o;
   });

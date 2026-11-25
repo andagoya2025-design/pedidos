@@ -48,3 +48,6 @@ jobs:
 
       - name: Sustitución premium en pantallas pequeñas
         run: node tests/navegador-sustitucion.cjs
+
+      - name: Bancos configurables en móvil y escritorio
+        run: node tests/navegador-bancos.cjs
