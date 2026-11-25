@@ -899,6 +899,7 @@
     var formas = efOk ? [['efectivo', '💵', 'Efectivo', entrega.tipo === 'domicilio' ? 'Pagas al recibir' : 'Pagas en el local']] : [];
     if (hayTransferencia()) formas.push(['transferencia', '🏦', 'Transferencia', cuentasBanco().length > 1 ? cuentasBanco().length + ' bancos' : 'A la cuenta del local']); // 3.1.5: sin cuenta no se ofrece
     if (c.deuna_qr_url) formas.push(['deuna', '📲', 'Deuna', 'Escaneas el QR']);
+    if(c.payphone_habilitado==='SI'&&UI.digitos(c.whatsapp))formas.push(['payphone','<svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M3 10h18M7 15h4"/></svg>','Payphone','Recibe tu enlace de pago']);
     if (!formas.length) formas.push(['transferencia', '🏦', 'Transferencia', 'Te damos los datos por WhatsApp']); // nunca sin forma de pago
     if (!formas.some(function (f) { return f[0] === pago.forma; })) pago.forma = formas[0][0];
     var conPropina = entrega.tipo === 'domicilio' && c.propinas !== 'NO';
@@ -918,7 +919,7 @@
       }).join('') + '</div>' +
       (pago.forma === 'transferencia' ? tarjetasCuentas(0, '', cuentasBanco().length > 1) : '') +
       (pago.forma === 'deuna' ? '<div class="banda" style="margin-top:10px">📲 <span>Al enviar te mostramos el QR de Deuna para pagar.</span></div>' : '') +
-      (UI.esDigital(pago.forma) ? '<div class="politica-linea">🔒 <span>Tu pedido <b>se prepara cuando confirmemos el pago en nuestra cuenta</b>. Si pagas desde otro banco puede tardar un poco.</span></div>' : '') +
+      (pago.forma==='payphone'?'<div class="politica-linea"><span>Solicita tu enlace de Payphone. Te lo enviaremos por WhatsApp y prepararemos tu pedido al verificar el pago.</span></div>':UI.esDigital(pago.forma) ? '<div class="politica-linea">🔒 <span>Tu pedido <b>se prepara cuando confirmemos el pago en nuestra cuenta</b>. Si pagas desde otro banco puede tardar un poco.</span></div>' : '') +
       (!efOk && c.efectivo_permitido !== 'NO' ? '<p class="ayuda">💵 En efectivo se aceptan pedidos de hasta ' + UI.dinero(Number(c.efectivo_maximo)) + '.</p>' : '') +
       '</div>' +
       (conPropina ? '<div class="tarjeta"><h3 style="margin-top:0">Propina para el motorizado <small style="font-weight:600;color:var(--texto-2)">(opcional)</small></h3><div class="segmento">' +
@@ -1191,7 +1192,9 @@
     }
   }
 
+  function textoSolicitudPayphone(p){return 'Hola, deseo pagar el pedido '+p.numero+' por Payphone. Total: '+UI.dinero(p.total)+'. Por favor envíame el enlace de Payphone.';}
   function textoWhatsApp(p) {
+    if(p.forma_pago==='payphone')return textoSolicitudPayphone(p);
     var lineas = (p.detalle || []).map(function (x) { return '• ' + x.cantidad + ' × ' + x.nombre + (x.extras ? ' (' + x.extras + ')' : ''); });
     var tipo = UI.tipoEntrega(p);
     return 'Hola, acabo de hacer el pedido *' + p.numero + '* en ' + (local().nombre || '') + '.\n' + lineas.join('\n') +
@@ -1217,9 +1220,9 @@
       (p.forma_pago === 'deuna' && c.deuna_qr_url ? '<div class="pago-qr"><b>Paga con Deuna</b><img src="' + UI.esc(c.deuna_qr_url) + '" alt="QR de Deuna del local" referrerpolicy="no-referrer"><small>Monto: ' + UI.dinero(p.total) + ' · Referencia: ' + UI.esc(p.numero) + '</small>' +
         '<button class="btn borde chico" type="button" id="btn-guardar-qr">💾 Guardar QR</button><small>¿Pagas desde este mismo teléfono? Guarda el QR y en Deuna elige «Escanear» → «Galería».</small></div>' : '') +
       (p.forma_pago === 'transferencia' ? '<div style="text-align:left;margin-top:12px">' + tarjetasCuentasSolo(p) + '</div>' : '') +
-      (UI.esDigital(p.forma_pago) ? '<div class="politica-linea" style="text-align:left">🔒 <span><b>Tu pedido se prepara cuando confirmemos el pago en nuestra cuenta.</b> Envía el comprobante por WhatsApp para ubicarlo más rápido. Si pagas desde otro banco puede tardar un poco.</span></div>' : '') +
+      (p.forma_pago==='payphone'?'<div class="politica-linea" style="text-align:left"><span><b>Pago pendiente de Payphone.</b> Solicita tu enlace por WhatsApp. Prepararemos tu pedido al confirmar la acreditación.</span></div>':UI.esDigital(p.forma_pago) ? '<div class="politica-linea" style="text-align:left">🔒 <span><b>Tu pedido se prepara cuando confirmemos el pago en nuestra cuenta.</b> Envía el comprobante por WhatsApp para ubicarlo más rápido. Si pagas desde otro banco puede tardar un poco.</span></div>' : '') +
       '<div class="acciones" style="margin-top:16px">' +
-      (UI.digitos(wa) ? '<button class="btn" type="button" id="btn-wa">💬 ' + (UI.esDigital(p.forma_pago) ? 'Enviar comprobante' : 'Avisar por WhatsApp') + '</button>' : '') +
+      (UI.digitos(wa) ? '<button class="btn" type="button" id="btn-wa">💬 ' + (p.forma_pago==='payphone'?'Solicitar enlace de Payphone':UI.esDigital(p.forma_pago) ? 'Enviar comprobante' : 'Avisar por WhatsApp') + '</button>' : '') +
       '<button class="btn borde" type="button" id="btn-seguir">🔎 Ver cómo va</button></div>' +
       (UI.tipoEntrega(p) === 'domicilio' && p.ubic_por_wa && UI.digitos(wa) ? '<div class="banda" style="margin-top:12px;text-align:left">💬 <span>Falta tu ubicación. Toca el botón y en el chat elige <b>📎 (o +) → Ubicación → Enviar mi ubicación actual</b>.</span></div><button class="btn bloque" type="button" id="btn-wa-ubic">📍 Enviar mi ubicación por WhatsApp</button>' : '') +
       (UI.tipoEntrega(p) !== 'domicilio' ? '<div class="qr-pedido"><img src="' + UI.esc(qrPedido) + '" alt="" width="150" height="150"><small>Muestra este código al llegar y te lo entregamos más rápido.</small></div>' : '') +
@@ -1443,7 +1446,7 @@
     });
     UI.$$('[data-seg-act]', cont).forEach(function (b) { b.addEventListener('click', function (e) { UI.trabajando(e.currentTarget, function () { return pintarSeguimiento(true); }); }); });
     UI.$$('[data-calificar]', cont).forEach(function (b) { b.addEventListener('click', function () { var x = lista.filter(function (y) { return y.n === b.getAttribute('data-calificar'); })[0]; if (x) calificar({ numero: x.n, telefono: x.tel || (checkoutMem['cliente'] || {}).telefono || '', s: x.s }); }); });
-    UI.$$('[data-comprobante]', cont).forEach(function (b) { b.addEventListener('click', function () { var p = res[b.getAttribute('data-comprobante')]; if (p) UI.abrirWhatsApp(cfg().whatsapp, 'Hola, envío el comprobante del pedido *' + p.numero + '* por ' + UI.dinero(p.total) + (p.cuenta_pago ? ' (a ' + p.cuenta_pago + ')' : '') + '. 👇'); }); });
+    UI.$$('[data-comprobante]', cont).forEach(function (b) { b.addEventListener('click', function () { var p = res[b.getAttribute('data-comprobante')]; if (p) UI.abrirWhatsApp(cfg().whatsapp,p.forma_pago==='payphone'?textoSolicitudPayphone(p): 'Hola, envío el comprobante del pedido *' + p.numero + '* por ' + UI.dinero(p.total) + (p.cuenta_pago ? ' (a ' + p.cuenta_pago + ')' : '') + '. 👇'); }); });
     UI.$$('[data-comprobante-ajuste]',cont).forEach(function(b){b.addEventListener('click',function(){var n=b.getAttribute('data-comprobante-ajuste'),p=res[n],sol=solicitudAbierta(solicitudesPorPedido[n]);if(p&&p.pago_verificado&&sol&&sol.estado==='Confirmada cliente'&&sol.cotizacion&&sol.cotizacion.adicional>0)UI.abrirWhatsApp(cfg().whatsapp,'Hola, envío comprobante del ajuste del pedido '+n+' por '+UI.dinero(sol.cotizacion.adicional)+'.');});});
     UI.$$('[data-escribir]', cont).forEach(function (b) { b.addEventListener('click', async function () {
       var numero = b.getAttribute('data-escribir');
@@ -1690,7 +1693,7 @@
         ? '<div class="pago-estado ok">✅ <span><b>Pago confirmado en nuestra cuenta.</b>' + (r.estado === 'Recibido' ? ' El restaurante ya puede revisar tu pedido.' : '') + '</span></div>'
         : '<div class="pago-estado espera">⏳ <span><b>Pago por confirmar.</b> Tu pedido se prepara cuando confirmemos el pago de <b>' + UI.esc(UI.dinero(r.total)) + '</b> en nuestra cuenta' + (r.cuenta_pago ? ' (' + UI.esc(r.cuenta_pago) + ')' : '') + '. Si pagaste desde otro banco puede tardar un poco.</span></div>' +
           (r.forma_pago === 'transferencia' ? tarjetasCuentasSolo(r) : '') +
-          (UI.digitos(cfg().whatsapp) ? '<button class="btn chico bloque" type="button" data-comprobante="' + UI.esc(r.numero) + '" style="margin-top:8px">💬 Enviar comprobante por WhatsApp</button>' : '')) : '') +
+          (UI.digitos(cfg().whatsapp) ? '<button class="btn chico bloque" type="button" data-comprobante="' + UI.esc(r.numero) + '" style="margin-top:8px">'+(r.forma_pago==='payphone'?'Solicitar enlace de Payphone':'💬 Enviar comprobante por WhatsApp')+'</button>' : '')) : '') +
       (r.motorizado ? tarjetaMoto(r.motorizado) : '') +
       (r.codigo_entrega ? '<div class="codigo-entrega"><span>🔢 Tu código de entrega</span><b>' + UI.esc(r.codigo_entrega) + '</b><small>Dáselo al motorizado solo cuando tengas tu pedido en la mano.</small></div>' : '') +
       (r.estado === 'Entregado' && !r.calificacion ? '<button class="btn chico bloque" type="button" data-calificar="' + UI.esc(r.numero) + '" style="margin-top:10px">⭐ ¿Cómo estuvo? Califícanos</button>' : '') +
