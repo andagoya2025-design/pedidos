@@ -3,9 +3,15 @@
 App instalable (iPhone, Android, tableta y computadora) para pedidos, motorizados, caja, inventario y reportes.
 Una copia por cliente: cada negocio tiene su propia hoja de Google y su propio script. El nombre y el logo de cada negocio salen de su Configuración.
 
-## Versión vigente
+## Versión vigente y fuente de verdad
 
-**MiPedido 3.1.20 — candidata financiera INCOMPLETA, NO fusionar ni instalar.** Rama aislada de 3.1.19. Cálculo en centavos para alta/cupón/checkout, validación de inventario acumulado y cotización de sólo lectura con comprobación de detalle antes de guardar. Extras de pago con máximo configurable de 1 a 10 por plato (por defecto 1), opciones gratuitas únicas. El formato histórico de nombres separados por coma se conserva; nuevos nombres no admiten comas. La nueva pantalla requiere Apps Script 30120 y no debe desplegarse sin coordinación. Caja candidata: fecha de cobro, controles de saldo, propinas digitales conciliadas por pedido, liquidación recuperable e idempotente; añade columnas al final sin borrar históricos. Las devoluciones posteriores a entrega requieren revisión manual. Pendientes: verificar migración real, conciliación histórica de propinas y liquidaciones, libro bancario por evento (ajustes y devoluciones entre días), pago de propina por efectivo, interfaz física, edición de carrito, inventario por extra, concurrencia real, zona/condiciones y rendimiento. TXT candidato exacto de Codigo.gs, no usar en producción. No se modificaron datos ni URL. Mantener 3.1.19 en main.
+- Pantalla en MAIN: **3.1.30** (centro de avisos, timbre y voz). La versión de pantalla se declara en `js/config.js`.
+- Servidor compatible: **3.1.29 / 30129**. Fuente de instalación: `servidor/Codigo.gs`; copia de distribución: `servidor/Codigo_MiPedido_3.1.29.txt`.
+- La caché PWA se versiona de forma independiente en `sw.js` (`app-3.1.40-notificaciones`).
+- Respaldo anterior: `respaldo/main-antes-3.1.30` (3.1.29). La 3.1.30 fue publicada y probada por el operador; la última corrección de reasignación se publicó con la revalidación automática aún no confirmada. Verificar el estado de CI del commit exacto antes de nuevas publicaciones.
+- Próxima candidata prevista: 3.1.31, extensión de avisos a clientes y motorizados; no confundir con una versión publicada.
+
+**No instalar TXT históricos ni inferir la versión por el nombre de un archivo.** Consultar [Inventario de servidor](servidor/README.md), [procedimiento de mantenimiento](docs/MANTENIMIENTO.md) y [reglas de trabajo](AGENTS.md).
 
 `servidor/Pruebas.gs` es opcional y exclusivo de una hoja de ensayo: no instalar ni ejecutar en producción. Las pruebas automáticas de `tests/` se conservan para evitar regresiones. `MiPedido_Setup.html` es el asistente local de configuración; `instalar.html` es el instalador técnico. `herramientas-proveedor/` y `COMERCIAL.md` son recursos separados de administración comercial.
 
@@ -34,6 +40,8 @@ Una copia por cliente: cada negocio tiene su propia hoja de Google y su propio s
 | `js/datos.js` | Única puerta a la base de datos (cambiar aquí si se pasa a Firebase/Supabase) |
 | `js/ui.js`, `js/comun.js` | Ventanas premium, avisos, formatos, WhatsApp, mapa, fotos |
 | `js/app.js` | Arranque, ingreso, locales, navegación |
+| `driver.html` | Aplicación de motorizados |
+| `js/voz.js`, `js/notificaciones.js` | Motor de voz y centro de avisos; reutilizar sin duplicar consultas |
 | `js/configuracion.js` | Configuración del negocio |
 | `js/pedidos.js` | Panel de pedidos |
 | `js/menu.js` | Menú, categorías, zonas, cupones, clientes, enlace y ajustes |
@@ -44,8 +52,9 @@ Una copia por cliente: cada negocio tiene su propia hoja de Google y su propio s
 | `manifest.json`, `iconos/` | Instalación en el teléfono |
 | `servidor/Codigo.gs` | Script del servidor (se pega en la hoja del cliente) |
 
-## Instalar para un cliente nuevo (menos de 1 hora)
+## Instalar para un cliente nuevo
 
+0. **Aislamiento:** preparar una copia independiente del producto, sin reutilizar la URL del negocio activo. No modificar MAIN ni inicializar una hoja existente. Verificar titularidad y entorno de prueba.
 1. **Hoja:** en el Drive del cliente, crear una hoja de cálculo vacía.
 2. **Script:** en esa hoja, *Extensiones → Apps Script*. Borrar lo que haya y pegar `servidor/Codigo.gs` completo. Guardar.
 3. **Publicar:** *Implementar → Nueva implementación → Tipo: Aplicación web*.
@@ -56,7 +65,7 @@ Una copia por cliente: cada negocio tiene su propia hoja de Google y su propio s
 5. **Instalar:** abrir `instalar.html`, revisar que el diagnóstico salga «Correcto» y completar nombre del negocio, dueño, usuario y clave.
 6. **Listo:** entrar con ese usuario, renombrar los locales y crear los usuarios en *Configuración*.
 
-Cuando se cambia el script: pegar el nuevo `Codigo.gs` y hacer *Implementar → Gestionar implementaciones → Editar → Nueva versión* (la dirección `/exec` no cambia).
+Solo si la actualización requiere cambiar el servidor (ver matriz de compatibilidad y autorización): pegar el nuevo `Codigo.gs` y hacer *Implementar → Gestionar implementaciones → Editar → Nueva versión* (la dirección `/exec` no cambia).
 
 ## Instalar la app en el equipo
 
