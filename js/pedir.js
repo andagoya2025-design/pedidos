@@ -845,11 +845,11 @@
     return '<div class="cuentas">' + lista.map(function (x) {
       var et = etiquetaCuenta(x), sel = elegir && elegida === et;
       return '<div class="cuenta-banco' + (sel ? ' elegida' : '') + '" style="--banco:' + colorBanco(x.banco) + '">' +
-        '<div class="cb-cabeza">'+UI.logoBanco(x.banco)+
+        '<div class="cb-cabeza">'+UI.logoBanco(x.banco,x.logo_url)+
         '<div><b>' + UI.esc(x.banco) + '</b><small>Cuenta ' + (x.tipo === 'corriente' ? 'corriente' : 'de ahorros') + '</small></div></div>' +
-        '<div class="cb-numero"><span>' + UI.esc(x.numero) + '</span><button type="button" class="cb-copiar" data-copiar="' + UI.esc(x.numero.replace(/\D/g, '')) + '" aria-label="Copiar número de cuenta">📋</button></div>' +
+        '<div class="cb-numero"><span>' + UI.esc(x.numero) + '</span><button type="button" class="cb-copiar" data-copiar="' + UI.esc(x.numero.replace(/[ -]/g, '')) + '" aria-label="Copiar número de cuenta">📋</button></div>' +
         '<div class="cb-dato"><span>Titular</span><b>' + UI.esc(x.titular) + '</b></div>' +
-        (x.documento ? '<div class="cb-dato"><span>' + (x.documento.length === 13 ? 'RUC' : 'Cédula') + '</span><b>' + UI.esc(x.documento) + '</b><button type="button" class="cb-copiar" data-copiar="' + UI.esc(x.documento) + '" aria-label="Copiar documento">📋</button></div>' : '') +
+        (x.documento ? '<div class="cb-dato"><span>' + (/^\d{13}$/.test(x.documento) ? 'RUC' : /^\d{10}$/.test(x.documento) ? 'Cédula' : 'Documento') + '</span><b>' + UI.esc(x.documento) + '</b><button type="button" class="cb-copiar" data-copiar="' + UI.esc(x.documento) + '" aria-label="Copiar documento">📋</button></div>' : '') +
         (x.correo ? '<div class="cb-dato"><span>Correo</span><b>' + UI.esc(x.correo) + '</b></div>' : '') +
         (elegir ? '<button type="button" class="btn ' + (sel ? '' : 'secundario ') + 'chico bloque cb-elegir" data-cuenta="' + UI.esc(et) + '">' + (sel ? '✓ Pagaré a esta cuenta' : 'Pagaré a esta cuenta') + '</button>' : '') +
         '</div>';
