@@ -727,3 +727,14 @@ details.otras-fechas[open] summary { margin-bottom: 10px; }
 .cuenta-banco .cb-dato{flex-wrap:wrap}
 #cta-logo-prev .banco-marca{width:112px;height:64px}
 #cta-logo-file{max-width:100%}
+
+/* Paleta bancaria accesible; el logotipo conserva blanco puro sin filtros. */
+.cuenta-banco{background:var(--banco,#334155);color:var(--banco-texto,#fff)}
+.cuenta-banco .cb-cabeza small,.cuenta-banco .cb-dato span{opacity:1}
+.cuenta-banco .cb-copiar{background:#fff;color:#182235}
+.cuenta-banco .cb-elegir,.cuenta-banco.elegida .cb-elegir{background:#fff;color:#182235}
+.cuenta-banco.elegida .cb-elegir{outline:2px solid #182235;outline-offset:-3px}
+.cuenta-banco .banco-marca,.banco-color-prev .banco-marca{width:104px;height:56px;background:#fff}
+.banco-marca img{filter:none;mix-blend-mode:normal;background:#fff;opacity:1}
+.banco-color-prev{display:flex;align-items:center;gap:10px;padding:10px;border-radius:12px;margin-top:6px;font-weight:700}
+@media(max-width:360px){.cuenta-banco .banco-marca{width:88px;height:50px}}
