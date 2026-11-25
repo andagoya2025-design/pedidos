@@ -73,7 +73,7 @@
     var panel=v.querySelector('[data-premium-ajustes]'),boton=v.querySelector('[data-premium-alternativas]'),aviso=v.querySelector('[data-premium-contador]');
     function actualizar(){
       var n=0;
-      UI.$('.ux-cambio-fila',v).forEach(function(f){
+      v.querySelectorAll('.ux-cambio-fila').forEach(function(f){
         var el=f.querySelector('[data-cantidad]'),on=!!el&&Number(el.value)>0;
         f.classList.toggle('ux-premium-seleccion',on);
         f.classList.toggle('ux-premium-alternativa',!on);
