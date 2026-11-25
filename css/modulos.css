@@ -717,3 +717,13 @@ details.otras-fechas[open] summary { margin-bottom: 10px; }
 .banco-admin-acciones .btn{display:grid;place-items:center;padding:0;width:44px;min-width:44px;height:44px}
 .cuenta-banco .banco-marca{width:76px;height:44px}
 @media(max-width:360px){.banco-admin{grid-template-columns:48px minmax(0,1fr) auto;gap:5px;padding:8px}.banco-admin .banco-marca{width:48px}.banco-admin-acciones{gap:2px}}
+
+/* Solo tarjetas de transferencia: números largos, contraste y áreas táctiles. */
+.cuenta-banco{min-width:0}
+.cuenta-banco .cb-cabeza>div{min-width:0;overflow-wrap:anywhere}
+.cuenta-banco .cb-numero>span{min-width:0;overflow-wrap:anywhere;letter-spacing:.4px}
+.cuenta-banco .cb-numero{font-size:clamp(16px,4.5vw,22px)}
+.cuenta-banco .cb-copiar,.cuenta-banco .cb-elegir{min-height:44px}
+.cuenta-banco .cb-dato{flex-wrap:wrap}
+#cta-logo-prev .banco-marca{width:112px;height:64px}
+#cta-logo-file{max-width:100%}
