@@ -23,7 +23,7 @@
       est = { datos: null, motos: [], cargadoEn: 0, verAnulados: false, diaEntregado: UI.hoy(), alertados: {} }; // 3.1.6
       var sonido = global.APP_MEMORIA.leer('sonido_pedidos') !== false;
       cont.innerHTML = '<section class="pd-premium"><div class="pd-premium-titulo"><div><h1>Pedidos</h1><p class="subtitulo">' + UI.esc(APP.nombreLocal(APP.local)) + '</p></div>' +
-        '<button class="btn secundario chico sonido-btn" type="button" id="btn-sonido" aria-pressed="' + sonido + '" aria-label="Sonido de pedido nuevo" title="Sonido de pedido nuevo">' + iconoPedido(sonido ? 'bell' : 'mute') + '</button></div>' +
+        (!global.MIP_AVISOS ? '<button class="btn secundario chico sonido-btn" type="button" id="btn-sonido" aria-pressed="' + sonido + '" aria-label="Sonido de pedido nuevo" title="Sonido de pedido nuevo">' + iconoPedido(sonido ? 'bell' : 'mute') + '</button>' : '') + '</div>' +
         '<div class="pd-premium-acciones"><button class="btn" type="button" id="btn-nuevo-pedido">' + iconoPedido('plus') + ' Crear pedido</button>' +
         '<button class="btn secundario" type="button" id="btn-cambios">' + iconoPedido('list') + ' Solicitudes <span id="pd-solic-count" aria-live="polite">—</span></button>' +
         '<button class="btn secundario" type="button" id="btn-buscar-pedido" aria-label="Buscar pedido" title="Buscar pedido">' + iconoPedido('search') + '</button>' +
@@ -33,7 +33,7 @@
       UI.$('#btn-nuevo-pedido', cont).addEventListener('click', nuevoPedido);
       UI.$('#btn-buscar-pedido', cont).addEventListener('click', buscarPedido);
       UI.$('#btn-cambios', cont).addEventListener('click', verSolicitudes);
-      UI.$('#btn-sonido', cont).addEventListener('click', function (e) {
+      if (UI.$('#btn-sonido', cont)) UI.$('#btn-sonido', cont).addEventListener('click', function (e) {
         var b = e.currentTarget;
         avisosVentana().then(function () {
           var on = global.APP_MEMORIA.leer('sonido_pedidos') !== false;
@@ -529,7 +529,7 @@
           r.pedidos.forEach(function(p) { var k = 'p:' + p.id; if (!vistosAvisos[k]) { vistosAvisos[k] = true; pedidos.push(p); } });
           r.solicitudes.forEach(function(p) { var k = 's:' + p.id + ':' + (p.estado||'Pendiente'); if (!vistosAvisos[k]) { vistosAvisos[k] = true; solicitudes.push(p); } });
           if (pedidos.length) avisarNuevo(false, pedidos.length, 0, pedidos);
-          if (solicitudes.length) avisarNuevo(true, solicitudes.length, pedidos.length ? 2200 : 0, solicitudes);
+          if (solicitudes.length) avisarNuevo(true, solicitudes.length, global.MIP_AVISOS ? 0 : (pedidos.length ? 2200 : 0), solicitudes);
         } else if (r.ultimo > ultimaMarca && (ultimaMarca || Date.now() - r.ultimo < 120000)) avisarNuevo(false, 1);
         ultimaMarca = r.ultimo || ultimaMarca;
         if (APP.vistaActual === 'pedidos' && est.datos && document.visibilityState === 'visible') {

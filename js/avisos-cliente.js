@@ -6,11 +6,11 @@
  function modo(){var m=MEM.leer('cliente_modo_avisos');return ['sonido','voz','ambos','silencio'].indexOf(m)>=0?m:'sonido';}
  function vol(){var v=MEM.leer('cliente_volumen_voz');return typeof v==='number'?Math.max(0,Math.min(100,v)):80;}
  function cancelar(){gen++;timers.forEach(function(t){g.clearTimeout(t);});timers=[];if(g.MIP_VOZ)g.MIP_VOZ.limpiar();}
- function configurar(m,v){if(['sonido','voz','ambos','silencio'].indexOf(m)<0)return;cancelar();MEM.guardar('cliente_modo_avisos',m);MEM.guardar('cliente_volumen_voz',Math.max(0,Math.min(100,Number(v)||0)));}
+ function configurar(m,v){if(['sonido','voz','ambos','silencio'].indexOf(m)<0)return;v=Math.max(0,Math.min(100,Number(v)||0));if(m===modo()&&v===vol())return;cancelar();MEM.guardar('cliente_modo_avisos',m);MEM.guardar('cliente_volumen_voz',Math.max(0,Math.min(100,Number(v)||0)));}
  function audio(texto,prueba,ref){var m=modo(),k=gen;if(m==='silencio')return;function valido(){return k===gen&&modo()!=='silencio'&&(!ref||autorizados[ref]===true);}
   function beep(){if(valido())UI.sonar();}
   function voz(){if(!valido())return;if(!g.MIP_VOZ){if(m==='voz')beep();return;}g.MIP_VOZ.hablar(texto,{volumen:vol()/100,valido:valido,fallo:function(){if(m==='voz')beep();}});}
-  if(m==='sonido'||m==='ambos')beep();if(m==='voz')voz();if(m==='ambos'){var t=g.setTimeout(function(){timers=timers.filter(function(x){return x!==t;});voz();},650);timers.push(t);}
+  if(m==='sonido'||m==='ambos')beep();if(m==='voz')voz();if(m==='ambos'){var t=g.setTimeout(function(){timers=timers.filter(function(x){return x!==t;});voz();},250);timers.push(t);}
  }
  function pintar(){var b=document.getElementById('mip-cliente-avisos'),n=document.getElementById('mip-cliente-num');if(!b||!n)return;var c=lista.filter(function(x){return !x.leido;}).length;n.hidden=!c;n.textContent=String(Math.min(c,99))+(c>99?'+':'');b.setAttribute('aria-label','Notificaciones'+(c?', '+c+' sin leer':''));}
  function ref(x){return x&&typeof x.n==='string'?JSON.stringify([x.n,x.s||'',x.f||0]):'';}
