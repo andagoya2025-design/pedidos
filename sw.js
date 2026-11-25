@@ -8,7 +8,7 @@
  * - Nunca guarda datos del negocio: los pedidos van siempre al servidor.
  * ============================================================
  */
-var VERSION = 'app-3.1.47-audio-unificado';
+var VERSION = 'app-3.1.48-activacion-latencia';
 var FOTOS = 'fotos-1';      // 3.1: fotos de platos y mapas (sobrevive a las actualizaciones)
 var MAX_FOTOS = 150;
 

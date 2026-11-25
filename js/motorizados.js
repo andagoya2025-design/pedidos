@@ -242,10 +242,10 @@
         vigiaMoto(String(s.usuario_id||s.usuario||''), function () {
           if (APP.sesion!==s || APP.vistaActual!=='entregas' || bloqueaConsultaEntregas() || DATOS.ocupado()) return false;
           return cargarMias(true);
-        },30000).catch(function(){});
+        },30000,5000).catch(function(){});
       }
       programarActualizacionEntregas();
-    }, inmediato === true ? 0 : (document.visibilityState === 'visible' ? 3000 : 30000));
+    }, inmediato === true ? 0 : (document.visibilityState === 'visible' ? 2000 : 30000));
   }
   function reanudarEntregas() {
     if (APP.vistaActual === 'entregas' && APP.sesion && APP.sesion.rol === 'motorizado' && document.visibilityState === 'visible' && navigator.onLine !== false) programarActualizacionEntregas(true);

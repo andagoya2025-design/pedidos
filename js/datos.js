@@ -133,7 +133,7 @@
   // Cada pantalla conserva su propio cursor. Una señal no sustituye la lectura autenticada.
   function crearVigiaSync() {
     var contexto = '', revision = '', ultima = 0, proximaSenal = 0, proximaCompleta = 0, ocupado = false;
-    return async function (clave, cargar, intervalo) {
+    return async function (clave, cargar, intervalo, intervaloSinSenal) {
       if (ocupado) return false;
       if (clave !== contexto) { contexto = clave; revision = ''; ultima = 0; proximaSenal = 0; proximaCompleta = 0; }
       ocupado = true;
@@ -147,7 +147,7 @@
         }
         ahora = Date.now();
         var cambio = nueva && nueva !== revision;
-        if (ahora < proximaCompleta || (!cambio && ultima && ahora - ultima < intervalo)) return false;
+        if (ahora < proximaCompleta || (!cambio && ultima && ahora - ultima < (nueva ? intervalo : (intervaloSinSenal || intervalo)))) return false;
         try {
           var ok = await cargar();
           if (ok !== true) { proximaCompleta = Date.now() + 6000; return false; }

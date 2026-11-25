@@ -512,6 +512,7 @@
       var s = APP.sesion;
       if (!s || (s.rol !== 'dueno' && s.rol !== 'cajero')) { identidadAvisos = ''; vistosAvisos = Object.create(null); ultimaMarca = 0; return; }
       vigilando = true;
+      var inicioConsulta = Date.now();
       var local = APP.local || s.local_id || 'TODOS';
       var identidad = String(s.usuario_id || s.usuario) + '|' + local;
       if (identidad !== identidadAvisos) { identidadAvisos = identidad; vistosAvisos = Object.create(null); ultimaMarca = 0; }
@@ -537,9 +538,9 @@
           return await cargar(true);
         }
         return true;
-        }, 15000);
+        }, 15000, document.visibilityState === 'visible' ? 5000 : 15000);
       } catch(e) { if (APP.sesion === s && (APP.local || s.local_id || 'TODOS') === local) actualizarEstadoSolicitudes(null, true); }
-      finally { vigilando = false; vigia = setTimeout(revisar, document.visibilityState === 'visible' ? 3000 : 15000); }
+      finally { vigilando = false; vigia = setTimeout(revisar, document.visibilityState === 'visible' ? Math.max(750,2000-(Date.now()-inicioConsulta)) : 15000); }
     }
     despertarVigia = function () {
       if (document.visibilityState !== 'visible' || navigator.onLine === false || vigilando) return;
@@ -547,7 +548,7 @@
       vigia = null;
       revisar().catch(function(){});
     };
-    vigia = setTimeout(revisar, 1500);
+    vigia = setTimeout(revisar, 0);
   }
   function avisarNuevo(solicitud, cantidad, espera, items) {
     var titulo = solicitud ? '📝 Actualización de modificación' : '🛎️ ¡Pedido nuevo!';
