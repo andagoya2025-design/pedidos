@@ -29,7 +29,7 @@
         '<button class="btn secundario chico" id="cfg-actualizar" type="button">↻ Actualizar</button></div>' +
         '<p class="subtitulo">Todo lo del negocio se cambia aquí; nada está fijo en el programa.</p>' +
         '<div class="pestanas elite-config-secciones" role="tablist">' + PESTANAS.map(function (p) {
-          return '<button class="pestana" role="tab" type="button" data-p="' + p[0] + '" aria-selected="' + (p[0] === pestanaActual) + '"><span class="elite-config-titulo">' + p[1] + '</span><small>' + ({negocio:'Identidad y contacto',locales:'Sucursales y cobertura',usuarios:'Personal y roles',seguridad:'Accesos y claves',licencia:'Estado del servicio',bitacora:'Historial de actividad'}[p[0]] || '') + '</small></button>';
+          return '<button class="pestana" role="tab" type="button" data-p="' + p[0] + '" aria-selected="' + (p[0] === pestanaActual) + '"><span class="elite-config-titulo">' + p[1].replace(/^\S+\s+/, '') + '</span><small>' + ({negocio:'Identidad y contacto',locales:'Sucursales y cobertura',usuarios:'Personal y roles',seguridad:'Accesos y claves',licencia:'Estado del servicio',bitacora:'Historial de actividad'}[p[0]] || '') + '</small></button>';
         }).join('') + '</div><div id="cfg-cuerpo"></div>';
 
       UI.$('.pestanas', cont).addEventListener('click', function (e) {

@@ -1,5 +1,5 @@
 /* 3.1.44 — presentación administrativa. Sin llamadas, dependencias ni reglas de negocio. */
-.mip-premium-admin{--elite-panel:var(--superficie);--elite-line:color-mix(in srgb,var(--acento) 17%,var(--borde));--elite-tint:color-mix(in srgb,var(--acento) 8%,var(--superficie));--elite-shadow:0 7px 24px color-mix(in srgb,var(--texto) 7%,transparent);background:var(--fondo);background:radial-gradient(ellipse at 90% 0%,var(--acento-suave),transparent 40%),var(--fondo)}
+.mip-premium-admin{--elite-panel:var(--superficie);--elite-ink:color-mix(in srgb,var(--primario) 38%,#161616);--elite-selected:color-mix(in srgb,var(--acento) 38%,#161616);--elite-icon-fg:color-mix(in srgb,var(--acento) 35%,var(--texto));--elite-line:color-mix(in srgb,var(--acento) 17%,var(--borde));--elite-tint:color-mix(in srgb,var(--acento) 8%,var(--superficie));--elite-shadow:0 7px 24px color-mix(in srgb,var(--texto) 7%,transparent);background:var(--fondo);background:radial-gradient(ellipse at 90% 0%,var(--acento-suave),transparent 40%),var(--fondo)}
 .mip-premium-admin #app .cabecera{background:var(--superficie);border-bottom:1px solid var(--elite-line);padding-top:calc(12px + var(--arriba));padding-bottom:12px}
 .mip-premium-admin #app .marca-logo{width:44px;height:44px;border:1px solid var(--elite-line);border-radius:14px}
 .mip-premium-admin #app .marca-nombre{font-size:clamp(16px,4vw,20px);font-weight:800}
@@ -7,7 +7,7 @@
 .mip-premium-admin #app .mip-avisos{background:var(--elite-tint);border-color:var(--elite-line)}
 .mip-premium-admin #contenido{padding-top:20px}
 .mip-premium-admin #contenido .titulo{font-size:clamp(27px,5vw,34px);line-height:1.15}
-.mip-premium-admin #contenido .bienvenida{background:var(--primario);color:white;border:0;border-radius:24px;box-shadow:0 10px 30px color-mix(in srgb,var(--primario) 25%,transparent);padding:24px;position:relative;overflow:hidden;isolation:isolate}
+.mip-premium-admin #contenido .bienvenida{background:var(--elite-ink);color:white;border:0;border-radius:24px;box-shadow:0 10px 30px color-mix(in srgb,var(--primario) 25%,transparent);padding:24px;position:relative;overflow:hidden;isolation:isolate}
 .mip-premium-admin #contenido .bienvenida::after{width:260px;height:260px;right:-85px;top:-75px;background:radial-gradient(circle,var(--acento),transparent 72%);opacity:.7;z-index:-1;pointer-events:none}
 .mip-premium-admin #contenido .bienvenida h2{font-size:clamp(28px,6vw,44px);letter-spacing:-.05em;line-height:1.1;margin:10px 0}
 .mip-premium-admin #contenido .bienvenida p{color:rgba(255,255,255,.88)}
@@ -23,7 +23,7 @@
 .mip-premium-admin #contenido .elite-modulos .modulo>span[aria-hidden=true]{position:absolute;right:15px;top:16px;pointer-events:none}
 .mip-premium-admin #contenido .elite-modulos .modulo h3{font-size:17px;letter-spacing:-.035em}
 .mip-premium-admin #contenido .elite-modulos .modulo p{font-size:13px;line-height:1.4}
-.mip-premium-admin #contenido .elite-modulos .modulo-ico{background:var(--acento-suave);color:var(--acento);width:54px;height:54px;border-radius:16px}
+.mip-premium-admin #contenido .elite-modulos .modulo-ico{background:var(--acento-suave);color:var(--elite-icon-fg);width:54px;height:54px;border-radius:16px}
 .mip-premium-admin :is([data-vista="inicio"],[data-ir="inicio"],.elite-config-secciones [data-p="inicio"]){--elite-icon:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.8%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M3%2010%2012%203l9%207v10H4V10m5%2010v-7h6v7%22%2F%3E%3C%2Fsvg%3E")}
 .mip-premium-admin :is([data-vista="pedidos"],[data-ir="pedidos"],.elite-config-secciones [data-p="pedidos"]){--elite-icon:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.8%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M6%203h12v18l-3-2-3%202-3-2-3%202V3m3%205h6m-6%204h6m-6%204h4%22%2F%3E%3C%2Fsvg%3E")}
 .mip-premium-admin :is([data-vista="menu"],[data-ir="menu"],.elite-config-secciones [data-p="menu"]){--elite-icon:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.8%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M4%2019h16M3%2016a9%209%200%200%201%2018%200H3m9-12v2%22%2F%3E%3C%2Fsvg%3E")}
@@ -63,9 +63,9 @@
 .mip-premium-admin :is([data-ir="bitacora"],[data-vista="bitacora"]) :is(.modulo-ico,.ico){font-size:0}
 .mip-premium-admin :is([data-ir="inicio"],[data-vista="inicio"]) :is(.modulo-ico,.ico)::before,.mip-premium-admin :is([data-ir="pedidos"],[data-vista="pedidos"]) :is(.modulo-ico,.ico)::before,.mip-premium-admin :is([data-ir="menu"],[data-vista="menu"]) :is(.modulo-ico,.ico)::before,.mip-premium-admin :is([data-ir="motorizados"],[data-vista="motorizados"]) :is(.modulo-ico,.ico)::before,.mip-premium-admin :is([data-ir="monitoreo"],[data-vista="monitoreo"]) :is(.modulo-ico,.ico)::before,.mip-premium-admin :is([data-ir="entregas"],[data-vista="entregas"]) :is(.modulo-ico,.ico)::before,.mip-premium-admin :is([data-ir="caja"],[data-vista="caja"]) :is(.modulo-ico,.ico)::before,.mip-premium-admin :is([data-ir="inventario"],[data-vista="inventario"]) :is(.modulo-ico,.ico)::before,.mip-premium-admin :is([data-ir="reportes"],[data-vista="reportes"]) :is(.modulo-ico,.ico)::before,.mip-premium-admin :is([data-ir="informeMotos"],[data-vista="informeMotos"]) :is(.modulo-ico,.ico)::before,.mip-premium-admin :is([data-ir="config"],[data-vista="config"]) :is(.modulo-ico,.ico)::before,.mip-premium-admin :is([data-ir="cuenta"],[data-vista="cuenta"]) :is(.modulo-ico,.ico)::before,.mip-premium-admin :is([data-ir="negocio"],[data-vista="negocio"]) :is(.modulo-ico,.ico)::before,.mip-premium-admin :is([data-ir="locales"],[data-vista="locales"]) :is(.modulo-ico,.ico)::before,.mip-premium-admin :is([data-ir="usuarios"],[data-vista="usuarios"]) :is(.modulo-ico,.ico)::before,.mip-premium-admin :is([data-ir="seguridad"],[data-vista="seguridad"]) :is(.modulo-ico,.ico)::before,.mip-premium-admin :is([data-ir="licencia"],[data-vista="licencia"]) :is(.modulo-ico,.ico)::before,.mip-premium-admin :is([data-ir="bitacora"],[data-vista="bitacora"]) :is(.modulo-ico,.ico)::before{content:"";width:26px;height:26px;background:currentColor;-webkit-mask:var(--elite-icon) center/contain no-repeat;mask:var(--elite-icon) center/contain no-repeat;display:block}
 .mip-premium-admin [data-vista] .ico::before{width:23px;height:23px}
-.mip-premium-admin #app .navegacion{background:var(--primario);color:#fff;border-color:transparent}
+.mip-premium-admin #app .navegacion{background:var(--elite-ink);color:#fff;border-color:transparent}
 .mip-premium-admin #app .nav-btn{color:rgba(255,255,255,.78);border-radius:13px}
-.mip-premium-admin #app .nav-btn[aria-current=page]{background:var(--acento);color:#fff;box-shadow:inset 0 0 0 1px rgba(255,255,255,.2)}
+.mip-premium-admin #app .nav-btn[aria-current=page]{background:var(--elite-selected);color:#fff;box-shadow:inset 0 0 0 1px rgba(255,255,255,.65)}
 .mip-premium-admin #app .nav-btn:focus-visible{outline-color:#fff}
 .mip-premium-admin #contenido .elite-catalogo-resumen{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:16px}
 .mip-premium-admin .elite-catalogo-resumen>div{border:1px solid var(--elite-line);background:var(--elite-panel);border-radius:15px;padding:12px;box-shadow:var(--elite-shadow);min-width:0}
@@ -81,15 +81,15 @@
 .mip-premium-admin .elite-plato-etiquetas{display:flex;gap:4px;flex-wrap:wrap;margin-top:5px}
 .mip-premium-admin .elite-plato-etiquetas .etiqueta{font-size:11px;padding:3px 7px}
 .mip-premium-admin #mn-cuerpo .elite-platos .interruptor{grid-column:1/3;justify-self:start;margin:0;background:var(--elite-tint);padding:0 10px;border-radius:10px;gap:8px}
-.mip-premium-admin #mn-cuerpo .elite-platos .plato-admin>.btn{grid-column:3;justify-self:end;margin:0;padding:0 18px;background:var(--primario);color:#fff}
+.mip-premium-admin #mn-cuerpo .elite-platos .plato-admin>.btn{grid-column:3;justify-self:end;margin:0;padding:0 18px;background:var(--elite-ink);color:#fff}
 .mip-premium-admin #mn-cuerpo .elite-platos .plato-admin:has([data-agotado]:checked){border:2px solid var(--error)}
 .mip-premium-admin #mn-cuerpo .elite-platos .plato-admin:has([data-agotado]:checked) .interruptor{background:color-mix(in srgb,var(--error) 14%,var(--superficie));color:var(--texto)}
 .mip-premium-admin #contenido .elite-config-secciones{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));overflow:visible;gap:9px;padding:0;margin:0 0 18px}
 .mip-premium-admin #contenido .elite-config-secciones .pestana{text-align:left;display:grid;grid-template-columns:1fr;align-content:start;white-space:normal;min-height:104px;padding:13px;border-radius:16px;box-shadow:var(--elite-shadow);border:1px solid var(--elite-line);color:var(--texto)}
-.mip-premium-admin .elite-config-secciones .pestana::before{content:"";width:23px;height:23px;background:var(--acento);-webkit-mask:var(--elite-icon) center/contain no-repeat;mask:var(--elite-icon) center/contain no-repeat;margin-bottom:7px}
+.mip-premium-admin .elite-config-secciones .pestana::before{content:"";width:23px;height:23px;background:var(--elite-icon-fg);-webkit-mask:var(--elite-icon) center/contain no-repeat;mask:var(--elite-icon) center/contain no-repeat;margin-bottom:7px}
 .mip-premium-admin .elite-config-titulo{font-size:14px;font-weight:800}
 .mip-premium-admin .elite-config-secciones small{font-size:11px;font-weight:600;line-height:1.25;margin-top:3px;color:var(--texto-2)}
-.mip-premium-admin #contenido .elite-config-secciones .pestana[aria-selected=true]{background:var(--primario);color:white;border-color:var(--primario)}
+.mip-premium-admin #contenido .elite-config-secciones .pestana[aria-selected=true]{background:var(--elite-ink);color:white;border-color:var(--elite-ink)}
 .mip-premium-admin .elite-config-secciones .pestana[aria-selected=true] small{color:rgba(255,255,255,.83)}
 .mip-premium-admin .elite-config-secciones .pestana[aria-selected=true]::before{background:white}
 .mip-premium-admin #cfg-cuerpo .tarjeta,.mip-premium-admin #mn-cuerpo #form-ajustes,.mip-premium-admin #mo-cuerpo .tarjeta{border:1px solid var(--elite-line);box-shadow:var(--elite-shadow);border-radius:20px;padding:18px}

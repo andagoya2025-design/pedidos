@@ -25,7 +25,7 @@ async function run(engine,device,label,old){
  async function shot(name){await page.screenshot({path:prefix+'-'+name+'.png',fullPage:true,animations:'disabled'});}
  async function noOverflow(){const v=await page.evaluate(()=>[document.documentElement.clientWidth,document.documentElement.scrollWidth]);assert.ok(v[1]<=v[0]+1,label+' overflow '+v);}
  await noOverflow();await shot('inicio');
- if(!old){assert.equal(await page.locator('.elite-contexto strong').textContent(),'Todos los locales');assert.equal(await page.locator('.elite-modulos').count(),1);const hero=await page.locator('.bienvenida').evaluate(e=>getComputedStyle(e).backgroundColor);assert.equal(hero,'rgb(37, 28, 23)');}
+ if(!old){assert.equal(await page.locator('.elite-contexto strong').textContent(),'Todos los locales');assert.equal(await page.locator('.elite-modulos').count(),1);const hero=await page.locator('.bienvenida').evaluate(e=>getComputedStyle(e).backgroundColor);assert.notEqual(hero,'rgba(0, 0, 0, 0)');}
  await page.locator('[data-vista="menu"]').click();await page.locator('[data-agotado="A"]').waitFor();
  await noOverflow();await shot('catalogo');
  if(!old){assert.deepEqual(await page.locator('.elite-catalogo-resumen strong').allTextContents(),['3','2','1']);assert.equal(await page.locator('.elite-precio').count(),3);}
@@ -40,7 +40,7 @@ async function run(engine,device,label,old){
  await page.locator('[data-p="seguridad"]').click();await page.locator('#form-seguridad').waitFor();
  assert.equal(await page.locator('#seg-moto').isChecked(),false);
  assert.deepEqual(errors,[]);
- if(!old){await page.evaluate(()=>{UI.tema('oscuro');UI.aplicarMarca({...__cfg,color_primario:'#244466',color_acento:'#be3244'})});await page.locator('[data-vista="inicio"]').click();await noOverflow();await shot('inicio-oscuro');assert.equal(await page.evaluate(()=>getComputedStyle(document.documentElement).getPropertyValue('--acento').trim()),'#be3244');}
+ if(!old){await page.evaluate(()=>{UI.tema('oscuro');UI.aplicarMarca({...__cfg,color_primario:'#244466',color_acento:'#be3244'})});await page.locator('[data-vista="inicio"]').click();await noOverflow();await shot('inicio-oscuro');assert.equal(await page.evaluate(()=>getComputedStyle(document.documentElement).getPropertyValue('--acento').trim()),'#be3244');await page.evaluate(()=>{UI.tema('claro');UI.aplicarMarca({...__cfg,color_primario:'#ffffff',color_acento:'#ffffff'})});const contrasts=await page.evaluate(()=>['.bienvenida','.navegacion','.nav-btn[aria-current=page]'].map(s=>{const c=document.createElement('canvas');c.width=c.height=1;const x=c.getContext('2d');x.fillStyle=getComputedStyle(document.querySelector(s)).backgroundColor;x.fillRect(0,0,1,1);const [r,g,b]=x.getImageData(0,0,1,1).data;const lin=v=>{v/=255;return v<=.04045?v/12.92:((v+.055)/1.055)**2.4};return 1.05/(.2126*lin(r)+.7152*lin(g)+.0722*lin(b)+.05)}));assert.ok(contrasts.every(v=>v>=4.5),JSON.stringify(contrasts));}
  console.log('ELITE '+label+' '+(old?'ANTES':'DESPUÉS')+' — pantallas reales, catálogo, guardado único, error revertido, editor de extras, seguridad, marca OK');
  await context.close();
  }finally{await browser.close()}
