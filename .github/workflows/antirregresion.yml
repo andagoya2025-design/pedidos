@@ -89,3 +89,13 @@ jobs:
           name: comparacion-premium-integral
           path: capturas-integral/
           if-no-files-found: warn
+
+      - name: Simulación aislada de revisión inicial y rendimiento
+        run: node tests/simulacion-revision-inicial.cjs
+      - name: Capturas del prototipo no publicado
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: simulacion-revision-inicial
+          path: capturas-simulacion-revision/
+          if-no-files-found: warn
