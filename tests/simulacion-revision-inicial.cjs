@@ -11,8 +11,8 @@ function fixture(n,mode='SI'){
  const platos=Array.from({length:n},(_,i)=>({id:'p'+i,nombre:'Plato ficticio '+i,categoria_id:'C',local_id:'L',precio:3+(i%7)*.5,activo:true,agotado:false,extras:i%2?[{nombre:'Aguacate',precio:.75,max_cantidad:10},{nombre:'Chifle',precio:.5,max_cantidad:10}]:[],foto_url:''}));
  const items=platos.map((p,i)=>({plato_id:p.id,cantidad:i%3+1,extras:p.extras.length?['Aguacate','Aguacate','Chifle']:[]}));
  const menu={config:{iva_porcentaje:15,precios_incluyen_iva:mode},locales:[{id:'L',nombre:'Local de prueba'}],categorias:[{id:'C',nombre:'Almuerzos'}],zonas:[{id:'Z',local_id:'L',costo:3}],platos};
- const cot=fn.cotizarLineasCreacion_(items,Object.fromEntries(platos.map(p=>[p.id,p])),'L',{});
- const q={...fn.importesCreacion_(cot.subtotal,3,0,0,.5,menu.config),detalle:cot.detalleFilas};q.firma=JSON.stringify([q.detalle,q.subtotal,q.envio,q.descuento,q.premio,q.propina,q.iva,q.total]);
+ const cot=fn.cotizarLineasCreacion_(items,Object.fromEntries(platos.map(p=>[p.id,{...p,extras_json:JSON.stringify(p.extras)}])),'L',{});
+ const q={...fn.importesCreacion_(cot.subtotal,3,0,0,.5,menu.config),subtotal:cot.subtotal,envio:3,descuento:0,premio:0,propina:.5,detalle:cot.detalleFilas};q.firma=JSON.stringify([q.detalle,q.subtotal,q.envio,q.descuento,q.premio,q.propina,q.iva,q.total]);
  return {menu,items,q};
 }
 const prototype=String.raw`
@@ -71,7 +71,8 @@ async function run(engine,device,label){
  await page.evaluate(()=>{window.__envios=[];window.__calls=[];window.__avisos=[];window.APP_MEMORIA={leer:()=>null,guardar:()=>{}};window.__quote=null;window.__delay=0;window.__fail=false;window.DATOS={crearVigiaSync:()=>async()=>false,pedir:async(a,d)=>{__calls.push({a,d});if(a!=='pedidoCotizar')throw Error('Consulta no autorizada '+a);if(__delay)await new Promise(r=>setTimeout(r,__delay));if(__fail)throw Error('Sin conexión');return __quote;}};UI.aviso=t=>__avisos.push(t);});
  await page.addScriptTag({content:patched});
  const stats=[];
- for(const n of [1,5,10,35,100]){
+ assert.throws(()=>fixture(61),/60 líneas/);
+ for(const n of [1,5,10,35,60]){
   const fix=fixture(n,n===10?'NO':'SI');
   await page.evaluate(async fix=>{__quote=fix.q;__calls=[];__envios=[];__avisos=[];__delay=0;__fail=false;document.querySelector('#fotos').innerHTML=fix.items.slice(0,5).map(x=>'<span data-sim-origen="'+x.plato_id+'"><img width="48" height="48" src="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2248%22 height=%2248%22%3E%3Crect width=%2248%22 height=%2248%22 fill=%22tan%22/%3E%3C/svg%3E"></span>').join('');await Promise.all(Array.from(document.querySelectorAll('#fotos img'),i=>i.decode()));document.querySelector('#fotos').hidden=true;preparar(fix);},fix);
   const before=network.length;
