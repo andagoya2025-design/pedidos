@@ -33,7 +33,7 @@ async function run(engine,device,label,old){
  await page.locator('[data-agotado="A"]').check();
  await page.waitForFunction(()=>!document.querySelector('[data-agotado="A"]').disabled);
  const writes=await page.evaluate(()=>__calls.filter(x=>x.guardar));assert.equal(writes.length,before+1);assert.deepEqual(writes.at(-1),{a:'platoAgotado',d:{id:'A',agotado:true},guardar:true});
- await page.evaluate(()=>{__fail=true});await page.locator('[data-agotado="A"]').uncheck();await page.waitForFunction(()=>!document.querySelector('[data-agotado="A"]').disabled);assert.equal(await page.locator('[data-agotado="A"]').isChecked(),true);
+ await page.evaluate(()=>{__fail=true});await page.locator('[data-agotado="A"]').click();await page.waitForFunction(()=>!document.querySelector('[data-agotado="A"]').disabled&&window.__err==='Fallo simulado');assert.equal(await page.locator('[data-agotado="A"]').isChecked(),true);const attempts=await page.evaluate(()=>__calls.filter(x=>x.guardar));assert.equal(attempts.length,before+2);assert.deepEqual(attempts.at(-1),{a:'platoAgotado',d:{id:'A',agotado:false},guardar:true});
  await page.locator('[data-editar="A"]').click();await page.locator('#form-plato').waitFor();assert.equal(await page.locator('#pl-precio').inputValue(),'4');assert.equal(await page.locator('[data-ex-precio]').inputValue(),'0.75');await page.locator('.ventana-x').click();
  await page.locator('[data-vista="config"]').click();await page.locator('#form-negocio').waitFor();
  assert.equal(await page.locator('#cf-negocio_nombre').inputValue(),'Restaurante Demo');await noOverflow();await shot('configuracion');
