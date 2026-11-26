@@ -8,7 +8,7 @@
  * - Nunca guarda datos del negocio: los pedidos van siempre al servidor.
  * ============================================================
  */
-var VERSION = 'app-3.1.55-iconos-originales';
+var VERSION = 'app-3.1.56-premium-integral';
 var FOTOS = 'fotos-1';      // 3.1: fotos de platos y mapas (sobrevive a las actualizaciones)
 var MAX_FOTOS = 150;
 
@@ -25,6 +25,7 @@ var ARCHIVOS = [
   'css/app.css',
   'css/modulos.css',
   'css/admin-elite.css',
+  'css/premium-integral.css',
   'js/config.js',
   'js/ui.js',
   'js/datos.js',

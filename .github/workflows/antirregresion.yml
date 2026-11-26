@@ -79,3 +79,13 @@ jobs:
           name: comparacion-premium-elite
           path: capturas-elite/
           if-no-files-found: warn
+
+      - name: Premium integral y entregas reales simuladas
+        run: node tests/navegador-integral.cjs
+      - name: Capturas cliente y motorizado
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: comparacion-premium-integral
+          path: capturas-integral/
+          if-no-files-found: warn

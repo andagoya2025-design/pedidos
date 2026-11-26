@@ -20,6 +20,9 @@ async function run(engine,device,label,url){
  assert.match(await cart.innerText(),/Carrito \(0\)/);
  assert.equal(await cart.evaluate(e=>getComputedStyle(e).backgroundColor),'rgb(255, 255, 255)');
  assert.equal(await cart.locator('svg').isVisible(),true);
+ assert.equal(await page.locator('body').evaluate(e=>getComputedStyle(e).getPropertyValue('--premium-calido').trim()),'#3d2c25');
+ assert.equal(await page.locator('article.plato').first().evaluate(e=>getComputedStyle(e).borderRadius),'20px');
+ fs.mkdirSync('capturas-integral',{recursive:true});await page.screenshot({path:'capturas-integral/cliente-'+label.replace(/[^a-zA-Z0-9]+/g,'-')+'-catalogo.png',fullPage:true});
  for(let i=0;i<cats.length;i++){
   await page.locator('[data-cat="c'+i+'"]').click();
   await page.locator('[data-agregar="p'+i+'"]').click();
@@ -43,6 +46,7 @@ async function run(engine,device,label,url){
  assert.match(await cart.innerText(),/Carrito \(8\)/);
  await cart.click();
  assert.equal(await page.locator('.ventana .preenvio-linea').count(),7);
+ await page.screenshot({path:'capturas-integral/cliente-'+label.replace(/[^a-zA-Z0-9]+/g,'-')+'-carrito.png',fullPage:true});
  const jugo=page.locator('.ventana .preenvio-linea').filter({hasText:'Jugo natural'});
  await jugo.getByRole('button',{name:'Aumentar cantidad'}).click();
  assert.equal(await jugo.locator('[data-carrito-cant]').inputValue(),'2');

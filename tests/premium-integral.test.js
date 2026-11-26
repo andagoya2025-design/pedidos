@@ -1,0 +1,4 @@
+'use strict';
+const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),read=p=>fs.readFileSync(p,'utf8');
+test('integral: hoja local presente en los tres perfiles y precache',()=>{for(const p of ['index.html','pedir.html','driver.html'])assert.match(read(p),/css\/premium-integral\.css/);assert.match(read('pedir.html'),/mip-premium-cliente/);assert.match(read('driver.html'),/mip-premium-driver/);assert.match(read('sw.js'),/'css\/premium-integral\.css'/);});
+test('integral: colores de negocio dinámicos sin esconder controles ni cambiar estados',()=>{const s=read('css/premium-integral.css');assert.match(s,/var\(--primario\)/);assert.match(s,/var\(--acento\)/);assert.doesNotMatch(s,/display\s*:\s*none|visibility\s*:\s*hidden|https?:\/\/|@import/);assert.match(s,/#en-cuerpo \.entrega-principal/);assert.match(s,/\.mip-premium-cliente \.seg-linea/);assert.match(s,/align-items:center;text-align:center/);});

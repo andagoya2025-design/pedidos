@@ -1,0 +1,87 @@
+/* 3.1.46: capa visual integral, sin nuevos scripts, fuentes ni dependencias.
+   Los colores de marca siguen siendo variables de Configuración. */
+:is(.mip-premium-admin,.mip-premium-cliente,.mip-premium-driver){
+  --premium-calido:#3d2c25;
+  --premium-cobre:#542e23;
+  --premium-ink:color-mix(in srgb,var(--primario) 24%,var(--premium-calido));
+  --premium-acento:color-mix(in srgb,var(--acento) 34%,var(--premium-cobre));
+  --premium-line:color-mix(in srgb,var(--acento) 18%,var(--borde));
+  --premium-tint:color-mix(in srgb,var(--acento) 7%,var(--superficie));
+  --premium-shadow:0 4px 17px color-mix(in srgb,var(--texto) 7%,transparent);
+  --elite-ink:var(--premium-ink);
+  --elite-selected:var(--premium-acento);
+  background-color:var(--fondo);
+}
+[data-tema="oscuro"] :is(.mip-premium-admin,.mip-premium-cliente,.mip-premium-driver){
+  --fondo:#28211e;--superficie:#352b27;--superficie-2:#433630;
+  --texto:#fff5eb;--texto-2:#d8c6b9;--borde:#614c40;
+  --premium-calido:#49342a;--premium-cobre:#592f25;
+}
+/* Administrador: conservar todos los módulos, controles y textos. */
+.mip-premium-admin #contenido .bienvenida{padding:19px;box-shadow:var(--premium-shadow);background-color:var(--premium-ink);background-image:linear-gradient(130deg,var(--premium-ink),var(--premium-acento))}
+.mip-premium-admin #contenido .bienvenida::after{opacity:0}
+.mip-premium-admin .elite-contexto{margin-top:13px}
+.mip-premium-admin #contenido .elite-modulos .modulo{align-items:center;text-align:center;min-height:148px;gap:8px;padding:14px 10px}
+.mip-premium-admin #contenido .elite-modulos .modulo>span[aria-hidden=true]{opacity:0}
+.mip-premium-admin #contenido .elite-modulos .modulo>div[style]{width:100%;min-width:0}
+.mip-premium-admin #contenido .elite-modulos .modulo h3{font-size:16px;line-height:1.25;overflow-wrap:anywhere}
+.mip-premium-admin #contenido .elite-modulos .modulo p{line-height:1.35;overflow-wrap:anywhere}
+.mip-premium-admin #contenido .elite-modulos .modulo-ico{display:grid;place-items:center;line-height:1;width:54px;height:54px;flex:none}
+.mip-premium-admin #contenido .elite-config-secciones .pestana{text-align:center;justify-items:center;align-content:start}
+.mip-premium-admin .elite-config-icono{width:38px;height:38px;display:grid;place-items:center;line-height:1;background:var(--acento-suave);border-radius:12px;margin:0 0 5px}
+.mip-premium-admin .elite-config-secciones .pestana[aria-selected=true] .elite-config-icono{background:rgba(255,255,255,.15)}
+/* Barra cálida, textos legibles; se conserva el desplazamiento horizontal. */
+:is(.mip-premium-admin,.mip-premium-driver) #app .navegacion{background:var(--premium-ink);border-color:transparent}
+:is(.mip-premium-admin,.mip-premium-driver) #app .nav-btn{color:#fff;border-radius:12px;text-align:center;line-height:1.15}
+:is(.mip-premium-admin,.mip-premium-driver) #app .nav-btn[aria-current=page]{background:var(--premium-acento);color:#fff;box-shadow:inset 0 0 0 1px rgba(255,255,255,.65)}
+:is(.mip-premium-admin,.mip-premium-driver) #app .nav-btn .ico{display:grid;place-items:center;width:28px;height:27px;flex:none;line-height:1;font-size:23px;font-family:"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif}
+@media(max-width:899px){
+  :is(.mip-premium-admin,.mip-premium-driver) #app .nav-btn{flex:0 0 78px;min-width:78px;max-width:94px;font-size:11px;padding:3px 3px;white-space:normal;overflow-wrap:anywhere}
+}
+@media(min-width:900px){
+  :is(.mip-premium-admin,.mip-premium-driver) #app .nav-btn{text-align:left}
+}
+/* Cliente: portada, catálogo y compra. Se preservan fotos completas, carrito,
+   zonas, extras, estados, tamaños táctiles y reglas de visibilidad. */
+.mip-premium-cliente .pedir-portada{background-color:var(--premium-ink);background-image:url("../img/platos/portada.svg"),linear-gradient(125deg,var(--premium-ink),var(--premium-acento));border-radius:0 0 23px 23px;box-shadow:var(--premium-shadow)}
+.mip-premium-cliente .pedir-portada::after{opacity:0;pointer-events:none}
+.mip-premium-cliente .pedir-portada h1{font-size:clamp(25px,6vw,34px);font-weight:800;line-height:1.2;margin-right:48px}
+.mip-premium-cliente .pedir-portada p{opacity:1;line-height:1.5}
+.mip-premium-cliente .pedir-portada .marca-logo{border:1px solid rgba(255,255,255,.45);border-radius:15px}
+.mip-premium-cliente .categorias-barra{border-bottom:1px solid var(--premium-line);padding-bottom:9px}
+.mip-premium-cliente .categorias-barra .pestana{border-radius:12px}
+.mip-premium-cliente .categorias-barra .pestana[aria-selected=true]{background:var(--premium-acento);color:#fff;border-color:var(--premium-acento)}
+.mip-premium-cliente article.plato{border-radius:20px;box-shadow:var(--premium-shadow);border-color:var(--premium-line)}
+.mip-premium-cliente article.plato.en-carrito{border-color:var(--acento)}
+.mip-premium-cliente .plato-foto{border-bottom:1px solid var(--premium-line)}
+.mip-premium-cliente .plato-info h3{font-weight:800;line-height:1.3;overflow-wrap:anywhere}
+.mip-premium-cliente .plato-info .precio{color:var(--texto);font-weight:800;letter-spacing:-.035em}
+.mip-premium-cliente .preenvio-subtotal-tarjeta{border-radius:12px}
+.mip-premium-cliente .pedir-app #btn-carrito-preenvio{border-color:var(--premium-acento);color:var(--premium-acento);border-radius:14px}
+.mip-premium-cliente .barra-pedido{background:var(--superficie);border-color:var(--premium-line)}
+.mip-premium-cliente .barra-pedido .btn{background:var(--premium-acento);border-radius:16px;color:#fff}
+.mip-premium-cliente .preenvio-linea{background:var(--superficie);border-color:var(--premium-line);box-shadow:var(--premium-shadow);border-radius:15px}
+.mip-premium-cliente .preenvio-opcion{border-radius:14px}
+.mip-premium-cliente .preenvio-total{padding:12px 8px;background:var(--premium-tint);border-radius:12px}
+.mip-premium-cliente .pasos li.actual{background:var(--premium-acento);color:#fff}
+.mip-premium-cliente .tipo-op.activo{border-color:var(--acento);background:var(--premium-tint)}
+.mip-premium-cliente .seg-pedido-compacto{border-color:var(--premium-line);border-radius:18px;box-shadow:var(--premium-shadow)}
+.mip-premium-cliente .seg-caja{border-radius:18px;border-color:var(--premium-line);box-shadow:var(--premium-shadow)}
+.mip-premium-cliente .seg-cabeza{border-bottom:1px solid var(--premium-line);padding-bottom:10px}
+.mip-premium-cliente .seg-linea span{min-width:0;overflow-wrap:anywhere}
+.mip-premium-cliente .seg-linea .hecho i,.mip-premium-cliente .seg-linea span.hecho::before{background:var(--premium-acento)}
+/* Motorizado: mismo diseño al ingresar por driver.html o desde index.html.
+   No se alteran bloqueos por pago, acciones, importes ni estados. */
+.mip-premium-driver #app .cabecera{background:var(--superficie);border-bottom-color:var(--premium-line)}
+.mip-premium-driver #app .marca-logo{border-radius:14px;border:1px solid var(--premium-line)}
+.mip-premium-driver #app .selector-local{background-color:var(--premium-tint)}
+:is(.mip-premium-driver,.mip-premium-admin) #en-cuerpo .pedido{border-radius:20px;box-shadow:var(--premium-shadow);padding:14px;gap:11px}
+:is(.mip-premium-driver,.mip-premium-admin) #en-cuerpo .pedido-top{border-bottom:1px solid var(--premium-line);padding-bottom:9px}
+:is(.mip-premium-driver,.mip-premium-admin) #en-cuerpo .pedido-num{font-size:20px;letter-spacing:-.025em}
+:is(.mip-premium-driver,.mip-premium-admin) #en-cuerpo .cobrar-grande{border:1px solid var(--premium-line);border-radius:16px;flex-wrap:wrap}
+:is(.mip-premium-driver,.mip-premium-admin) #en-cuerpo .cobrar-grande.efectivo{border-color:color-mix(in srgb,var(--exito) 45%,var(--borde))}
+:is(.mip-premium-driver,.mip-premium-admin) #en-cuerpo .pedido-items{background:var(--premium-tint);border-radius:12px;padding:12px 12px 12px 26px}
+:is(.mip-premium-driver,.mip-premium-admin) #en-cuerpo .entrega-grid .btn{border:1px solid var(--premium-line);border-radius:13px;background:var(--premium-tint);color:var(--texto);min-height:68px;font-size:12px;overflow-wrap:anywhere}
+:is(.mip-premium-driver,.mip-premium-admin) #en-cuerpo .entrega-principal{background:var(--premium-acento);color:white;border-radius:15px}
+:is(.mip-premium-driver,.mip-premium-admin) #en-cuerpo .turno{border-radius:18px;box-shadow:var(--premium-shadow);flex-wrap:wrap}
+:is(.mip-premium-driver,.mip-premium-admin) #en-cuerpo .debe{border-radius:18px;box-shadow:var(--premium-shadow)}
