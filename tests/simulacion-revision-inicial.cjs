@@ -49,7 +49,7 @@ patched=patched.slice(0,boot)+prototype+String.raw`
     M=fix.menu;localId='L';paso=3;carrito={};codigoEnvio='';envioPendiente=null;cotizacionEnCurso=false;checkoutMem={cliente:{nombre:'Cliente de prueba',telefono:'0990000000',direccion:'Dirección ficticia'}};
     entrega={tipo:'domicilio',zona:'Z',cuando:'ya'};pago={forma:'efectivo',propina:.5};ubic=null;cuponAplicado=null;
     fix.items.forEach(x=>{var p=plato(x.plato_id);carrito[claveItem(p,x.extras)]={plato:p,cantidad:x.cantidad,extras:x.extras};});
-    document.querySelector('#pedir-cuerpo').innerHTML='<form id="form-pedido"><label><input id="pe-privacidad" type="checkbox" checked>Privacidad</label><label><input id="pe-politicas" type="checkbox" checked>Condiciones</label><input name="cupon" value=""><input name="notas" value="Nota ficticia"><button type="submit">Revisar</button></form>';
+    document.querySelector('#pedir-cuerpo').innerHTML='<form id="form-pedido"><label class="casilla"><input id="pe-privacidad" type="checkbox" checked>Privacidad</label><label class="casilla"><input id="pe-politicas" type="checkbox" checked>Condiciones</label><input name="cupon" value=""><input name="notas" value="Nota ficticia"><button type="submit">Revisar</button></form>';
     document.querySelector('#form-pedido').addEventListener('submit',enviar);
     window.__renderFrame=0;window.__renderSync=0;
   };
