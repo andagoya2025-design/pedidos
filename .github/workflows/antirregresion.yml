@@ -37,6 +37,8 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -67,3 +69,13 @@ jobs:
 
       - name: Presentación premium administrativa sin alterar controles
         run: node tests/navegador-premium-visual.cjs
+
+      - name: Comparación élite de pantallas reales con datos ficticios
+        run: node tests/navegador-premium-elite.cjs
+      - name: Capturas antes y después
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: comparacion-premium-elite
+          path: capturas-elite/
+          if-no-files-found: warn
