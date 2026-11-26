@@ -43,12 +43,12 @@
       if (s.rol === 'dueno' && APP.guiaInicio) setTimeout(function () { APP.guiaInicio(UI.$('#guia-inicio')); }, 0);
       cont.innerHTML =
         (lic.estado === 'suspendida' ? '<div class="banda error">⛔ <span>La licencia está suspendida' + (lic.vencida ? ' (venció el ' + UI.esc(lic.vence) + ')' : '') + '. No se recibirán pedidos nuevos; sus datos están a salvo.</span></div>' : '') +
-        '<div class="tarjeta bienvenida"><h2>Hola, ' + UI.esc(s.nombre.split(' ')[0]) + ' 👋</h2>' +
-        '<p>' + UI.esc(APP.nombreRol(s.rol)) + ' · ' + UI.esc(APP.nombreLocal(APP.local)) + '</p></div>' +
+        '<div class="tarjeta bienvenida"><span class="elite-kicker">Centro de operaciones</span><h2>Hola, ' + UI.esc(s.nombre.split(' ')[0]) + '</h2>' +
+        '<p>' + UI.esc(APP.nombreRol(s.rol)) + ' · ' + UI.esc(APP.nombreLocal(APP.local)) + '</p><div class="elite-contexto"><span>Local de trabajo</span><strong>' + UI.esc(APP.nombreLocal(APP.local)) + '</strong></div></div>' +
         (s.rol !== 'motorizado' ? '<button class="btn bloque btn-enlace-clientes" type="button" id="btn-enlace-clientes"><span>📤</span><span><b>Enlace para clientes</b><small>Compártelo por WhatsApp, Instagram o QR para que pidan</small></span></button>' : '') +
         (s.rol === 'dueno' ? '<div id="guia-inicio"></div>' : '') +
-        '<h3 style="margin:22px 0 10px">Módulos</h3>' +
-        '<div class="rejilla r3">' + modulos.map(function (m) {
+        '<h3 class="elite-seccion" style="margin:22px 0 10px">Módulos operativos</h3>' +
+        '<div class="rejilla r3 elite-modulos">' + modulos.map(function (m) {
           var lista = !!APP.vistas[m[4]];
           return '<div class="tarjeta modulo' + (lista ? ' enlace' : '') + '"' + (lista ? ' role="button" tabindex="0" data-ir="' + m[4] + '"' : '') + '><div class="modulo-ico" aria-hidden="true">' + m[0] + '</div>' +
             '<div style="flex:1;min-width:0"><h3>' + UI.esc(m[1]) + '</h3><p>' + UI.esc(m[2]) + '</p></div>' +

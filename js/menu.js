@@ -90,10 +90,11 @@
     var grupos = cats.map(function (c) { return [c.nombre, d.platos.filter(function (p) { return p.categoria_id === c.id; })]; });
     if (sinCat.length) grupos.push(['Sin categoría', sinCat]);
     grupos = grupos.filter(function (g) { return g[1].length; });
+    html = '<div class="elite-catalogo-resumen"><div><strong>' + d.platos.length + '</strong><span>Platos del catálogo</span></div><div><strong>' + d.platos.filter(function(p){return p.activo;}).length + '</strong><span>Visibles</span></div><div><strong>' + d.platos.filter(function(p){return p.extras.length;}).length + '</strong><span>Con extras</span></div></div>' + html;
     html += grupos.length ? grupos.map(function (g) {
-      return '<h3 style="margin:18px 0 10px">' + UI.esc(g[0]) + '</h3><div class="lista">' + g[1].map(function (p) {
+      return '<h3 class="elite-categoria" style="margin:18px 0 10px">' + UI.esc(g[0]) + '</h3><div class="lista elite-platos">' + g[1].map(function (p) {
         return '<div class="item plato-admin">' + miniatura(p.foto_url) + '<div class="item-cuerpo"><div class="item-titulo">' + UI.esc(p.nombre) + '</div>' +
-          '<div class="item-sub">' + UI.dinero(p.precio) + ' · ' + UI.esc(nombreLocalCorto(p.local_id)) + (p.extras.length ? ' · ' + p.extras.length + ' extra(s)' : '') + (p.activo ? '' : ' · <b>oculto</b>') + (p.sugerido ? ' · 🥤 sugerido' : '') + '</div>' +
+          '<div class="elite-precio">' + UI.dinero(p.precio) + '</div><div class="item-sub">' + UI.esc(nombreLocalCorto(p.local_id)) + '</div><div class="elite-plato-etiquetas"><span class="etiqueta ' + (p.activo ? 'ok' : 'mal') + '">' + (p.activo ? 'Visible' : 'Oculto') + '</span>' + (p.extras.length ? '<span class="etiqueta">' + p.extras.length + ' extra(s)</span>' : '<span class="etiqueta">Sin extras</span>') + (p.sugerido ? '<span class="etiqueta">Sugerido</span>' : '') + '</div>' +
           (p.etiquetas ? '<div class="chips" style="margin-top:4px">' + UI.chipsEtiquetas(p.etiquetas) + '</div>' : '') + '</div>' +
           '<label class="interruptor" style="min-height:40px;font-size:13px"><input type="checkbox" data-agotado="' + UI.esc(p.id) + '"' + (p.agotado ? ' checked' : '') + '> Agotado</label>' +
           (dueno ? '<button class="btn secundario chico" type="button" data-editar="' + UI.esc(p.id) + '">Editar</button>' : '') + '</div>';
