@@ -56,7 +56,7 @@ async function run(engine,device,label){
   await page.waitForTimeout(60);
   assert.equal(await page.locator('[data-revision-linea]').count(),n);
   assert.match(await page.locator('[data-revision-total]').innerText(),new RegExp(fix.q.total.toFixed(2).replace('.','[,.]')));
-  assert.ok(await page.locator('.revision-inicial canvas:visible').count()<=6);
+  assert.equal(await page.locator('.revision-inicial canvas:visible').count(),Math.min(n,5),'Las imágenes cargadas deben aparecer como miniaturas');
   assert.equal(await page.locator('.revision-inicial img').count(),0);
   assert.equal(network.length,before,'Solicitudes de red adicionales en el resumen');
   assert.deepEqual(await page.evaluate(()=>__calls.map(x=>x.a)),['pedidoCotizar']);
