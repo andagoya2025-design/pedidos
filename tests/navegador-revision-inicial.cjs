@@ -30,6 +30,7 @@ patched=patched.slice(0,boot)+String.raw`
   // El límite de esta simulación es la entrada al envío protegido; nada se escribe.
   procesarEnvio=async function(datos){window.__envios.push(JSON.parse(JSON.stringify(datos)));};
   window.cambiarDuranteRevision=function(){pago.propina=1;};
+  window.revisionOcupada=function(){return cotizacionEnCurso;};
   window.cambiarPago=function(forma){pago.forma=forma;pago.cuenta=forma==='transferencia'?'Banco ficticio · 00000001':'';};
 })(window);
 `;
@@ -64,19 +65,19 @@ async function run(engine,device,label){
   assert.ok(v.scroll<=v.width+1,JSON.stringify(v));
   stats.push({n,...v,newRequests:network.length-before});
   if(n===5)await page.screenshot({path:'capturas-revision-final/'+label+'.png'});
-  await page.getByRole('button',{name:'Volver a editar',exact:true}).click();
+  await page.getByRole('button',{name:'Volver a editar',exact:true}).click();await page.waitForFunction(()=>!revisionOcupada());
   assert.equal(await page.evaluate(()=>__envios.length),0);
   assert.equal(await page.locator('#form-pedido [name=notas]').inputValue(),'Nota ficticia');
  }
  const fix=fixture(5);
  async function prep(opts={}){await page.evaluate(({fix,opts})=>{__quote=opts.q||fix.q;__calls=[];__envios=[];__avisos=[];__delay=opts.delay||0;__fail=!!opts.fail;preparar(fix);},{fix,opts});}
- async function open(){await page.getByRole('button',{name:'Revisar',exact:true}).click();await page.getByRole('heading',{name:'Revisa tu pedido',exact:true}).waitFor();}
- await prep({delay:200});await open();await page.evaluate(()=>document.querySelector('#form-pedido').dispatchEvent(new Event('submit',{cancelable:true})));assert.equal(await page.evaluate(()=>__calls.length),1);await page.getByRole('button',{name:'Confirmar y enviar',exact:true}).click();await page.waitForFunction(()=>__envios.length===1);assert.equal(await page.evaluate(()=>__envios[0].total_esperado),fix.q.total);assert.equal(await page.evaluate(()=>__envios[0].cotizacion_firma),fix.q.firma);
+ async function open(){await page.getByRole('button',{name:'Revisar',exact:true}).click();await page.getByRole('heading',{name:'Revisa tu pedido',exact:true}).waitFor();assert.deepEqual(await page.evaluate(()=>__avisos),[]);assert.equal(await page.evaluate(()=>revisionOcupada()),true);}
+ await prep({delay:200});await open();await page.evaluate(()=>document.querySelector('#form-pedido').dispatchEvent(new Event('submit',{cancelable:true})));assert.equal(await page.evaluate(()=>__calls.length),1,JSON.stringify(await page.evaluate(()=>({calls:__calls.map(x=>x.a),avisos:__avisos,ocupada:revisionOcupada(),modales:document.querySelectorAll('.revision-inicial').length}))));await page.getByRole('button',{name:'Confirmar y enviar',exact:true}).click();await page.waitForFunction(()=>__envios.length===1);assert.equal(await page.evaluate(()=>__envios[0].total_esperado),fix.q.total);assert.equal(await page.evaluate(()=>__envios[0].cotizacion_firma),fix.q.firma);
  await prep();await open();await page.evaluate(()=>cambiarDuranteRevision());await page.getByRole('button',{name:'Confirmar y enviar',exact:true}).click();await page.waitForFunction(()=>__avisos.length>0);assert.equal(await page.evaluate(()=>__envios.length),0);
  await prep({fail:true});await page.getByRole('button',{name:'Revisar',exact:true}).click();await page.waitForFunction(()=>__avisos.length>0);assert.equal(await page.evaluate(()=>__envios.length),0);assert.equal(await page.locator('.revision-inicial').count(),0);
  await prep();await page.locator('#pe-politicas').uncheck();await page.getByRole('button',{name:'Revisar',exact:true}).click();assert.equal(await page.evaluate(()=>__calls.length),0);
- await prep({q:{...fix.q,envio:fix.q.envio+1,total:fix.q.total+1,firma:'cotizacion-actualizada'}});await open();assert.match(await page.locator('.revision-inicial').innerText(),/actualizó el importe/);await page.getByRole('button',{name:'Volver a editar',exact:true}).click();assert.equal(await page.evaluate(()=>__envios.length),0);
- await prep();await page.evaluate(()=>{document.querySelector('#resumen-items').innerHTML='';cambiarPago('transferencia')});await open();assert.equal(await page.locator('.revision-inicial canvas:visible').count(),0);assert.match(await page.locator('.revision-datos').innerText(),/Banco ficticio/);await page.getByRole('button',{name:'Volver a editar',exact:true}).click();assert.equal(await page.evaluate(()=>__envios.length),0);
+ await prep({q:{...fix.q,envio:fix.q.envio+1,total:fix.q.total+1,firma:'cotizacion-actualizada'}});await open();assert.match(await page.locator('.revision-inicial').innerText(),/actualizó el importe/);await page.getByRole('button',{name:'Volver a editar',exact:true}).click();await page.waitForFunction(()=>!revisionOcupada());assert.equal(await page.evaluate(()=>__envios.length),0);
+ await prep();await page.evaluate(()=>{document.querySelector('#resumen-items').innerHTML='';cambiarPago('transferencia')});await open();assert.equal(await page.locator('.revision-inicial canvas:visible').count(),0);assert.match(await page.locator('.revision-datos').innerText(),/Banco ficticio/);await page.getByRole('button',{name:'Volver a editar',exact:true}).click();await page.waitForFunction(()=>!revisionOcupada());assert.equal(await page.evaluate(()=>__envios.length),0);
  await prep({q:{...fix.q,subtotal:fix.q.subtotal+1}});await page.getByRole('button',{name:'Revisar',exact:true}).click();await page.waitForFunction(()=>__avisos.length>0);assert.equal(await page.locator('.revision-inicial').count(),0);assert.equal(await page.evaluate(()=>__envios.length),0);
  assert.deepEqual(errors,[]);console.log('REVISION DEFINITIVA '+label+' '+JSON.stringify(stats)+'; regreso, confirmación, doble submit, cambio concurrente, error de red, condiciones y precio cambiado OK');
  }finally{await browser.close()}

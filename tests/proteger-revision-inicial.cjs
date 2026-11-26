@@ -9,6 +9,7 @@ module.exports=function sinRevision(s){
  const nuevo=s.replace(/  \/\* INICIO REVISION FINAL 3\.1\.47[\s\S]*?  \/\* FIN REVISION FINAL 3\.1\.47 \*\/\n\n/,'')
  .replace(/        \/\* INICIO PUERTA REVISION 3\.1\.47 \*\/[\s\S]*?        \/\* FIN PUERTA REVISION 3\.1\.47 \*\/\n/,old.slice(inicio,fin))
  .replace(` data-revision-foto="'+UI.esc(it.plato.id)+'"`,'').replace('Revisar pedido · <span id="total-boton">','Enviar pedido · <span id="total-boton">');
- assert.equal(nuevo,old,'Cambio fuera del perímetro de revisión inicial');
- return nuevo;
+ const protegido=nuevo.replace("/* GUARDIA REVISION 3.1.47 */\n    if(cotizacionEnCurso||document.querySelector('.revision-inicial'))return;","if(cotizacionEnCurso)return;");
+ assert.equal(protegido,old,'Cambio fuera del perímetro de revisión inicial');
+ return protegido;
 };

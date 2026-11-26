@@ -1092,11 +1092,13 @@
       '<small>✓ Condiciones y privacidad aceptadas</small></section>';
     return UI.ventana({titulo:'Revisa tu pedido',html:html,botones:[{texto:'Volver a editar',valor:false,clase:'secundario'},{texto:'Confirmar y enviar',valor:true}],alAbrir:function(v){
       var modal=v.querySelector('.ventana');modal.classList.add('ux-gestion-modal','ux-revision-cliente','revision-inicial');
+      try{
       var existentes=new Map();
       UI.$('#resumen-items [data-revision-foto] img').forEach(function(img){if(img.complete&&img.naturalWidth)existentes.set(img.parentElement.dataset.revisionFoto,img);});
       UI.$('canvas[data-revision-mini]',v).forEach(function(c){var img=existentes.get(c.dataset.revisionMini);if(img){try{var lado=Math.min(img.naturalWidth,img.naturalHeight);c.getContext('2d').drawImage(img,(img.naturalWidth-lado)/2,(img.naturalHeight-lado)/2,lado,lado,0,0,48,48);c.hidden=false;}catch(e){/* imagen opcional */}}});
       var titulo=modal.querySelector('h2');if(titulo)titulo.tabIndex=-1;
       setTimeout(function(){if(modal.isConnected){modal.scrollTop=0;if(titulo)titulo.focus({preventScroll:true});}},40);
+      }catch(e){/* las miniaturas y el foco no condicionan la confirmación */}
     }});
   }
   /* FIN REVISION FINAL 3.1.47 */
@@ -1106,7 +1108,8 @@
     ev.preventDefault();
     var f = ev.target, boton = f.querySelector('button[type=submit]');
     if (envioPendiente) return recuperarEnvio(boton);
-    if(cotizacionEnCurso)return;
+    /* GUARDIA REVISION 3.1.47 */
+    if(cotizacionEnCurso||document.querySelector('.revision-inicial'))return;
     var d = UI.leerFormulario(f);
     var cli = checkoutMem['cliente'] || {};
     var priv = $('#pe-privacidad'), promos = f.querySelector('[name=acepta_promos]');
