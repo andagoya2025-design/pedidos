@@ -64,3 +64,6 @@ jobs:
 
       - name: Revisión previa y cancelación independiente en los tres dispositivos
         run: node tests/navegador-revision-cambios.cjs
+
+      - name: Presentación premium administrativa sin alterar controles
+        run: node tests/navegador-premium-visual.cjs
