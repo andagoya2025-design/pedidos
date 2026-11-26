@@ -1,0 +1,84 @@
+'use strict';
+// Prototipo descartable: no cambia js/pedir.js en disco, servidor ni datos reales.
+const fs=require('node:fs'),assert=require('node:assert/strict'),{execFileSync}=require('node:child_process'),{chromium,webkit,devices}=require('playwright');
+const read=p=>fs.readFileSync(p,'utf8'),base='2f67aec5503a66d95d8f8352d3d06b5c2c0fc45d';
+for(const p of ['js/ui.js','js/app.js','js/datos.js','js/motorizados.js','js/pedidos.js','js/voz.js','js/notificaciones.js','js/avisos-cliente.js','servidor/Codigo.gs'])assert.equal(read(p),execFileSync('git',['show',base+':'+p],{encoding:'utf8'}),p);
+const source=read('js/pedir.js');
+const gs=read('servidor/Codigo.gs');
+function extract(s,n){let i=s.indexOf('function '+n+'('),j=s.indexOf('\nfunction ',i+1);assert.ok(i>=0&&j>i,n);return s.slice(i,j)}
+const fn=new Function('limpiarTexto_','claveComparar_','fallo_', ['numero_','siNo_','redondear_','maxExtra_','validarExtrasPedido_','leerExtras_','cotizarLineasCreacion_','importesCreacion_'].map(n=>extract(gs,n)).join('\n')+';return {cotizarLineasCreacion_,importesCreacion_}')((v,n)=>String(v||'').slice(0,n),v=>String(v).trim().toLowerCase(),(m,c)=>Object.assign(Error(m),{codigo:c}));
+function fixture(n,mode='SI'){
+ const platos=Array.from({length:n},(_,i)=>({id:'p'+i,nombre:'Plato ficticio '+i,categoria_id:'C',local_id:'L',precio:3+(i%7)*.5,activo:true,agotado:false,extras:i%2?[{nombre:'Aguacate',precio:.75,max_cantidad:10},{nombre:'Chifle',precio:.5,max_cantidad:10}]:[],foto_url:''}));
+ const items=platos.map((p,i)=>({plato_id:p.id,cantidad:i%3+1,extras:p.extras.length?['Aguacate','Aguacate','Chifle']:[]}));
+ const menu={config:{iva_porcentaje:15,precios_incluyen_iva:mode},locales:[{id:'L',nombre:'Local de prueba'}],categorias:[{id:'C',nombre:'Almuerzos'}],zonas:[{id:'Z',local_id:'L',costo:3}],platos};
+ const cot=fn.cotizarLineasCreacion_(items,Object.fromEntries(platos.map(p=>[p.id,{...p,extras_json:JSON.stringify(p.extras)}])),'L',{});
+ const q={...fn.importesCreacion_(cot.subtotal,3,0,0,.5,menu.config),subtotal:cot.subtotal,envio:3,descuento:0,premio:0,propina:.5,detalle:cot.detalleFilas};q.firma=JSON.stringify([q.detalle,q.subtotal,q.envio,q.descuento,q.premio,q.propina,q.iva,q.total]);
+ return {menu,items,q};
+}
+require('./proteger-revision-inicial.cjs')(source);
+let patched=source;
+let boot=patched.indexOf("  document.addEventListener('DOMContentLoaded', function () {");assert.ok(boot>0);
+patched=patched.slice(0,boot)+String.raw`
+  window.preparar=function(fix){
+    M=fix.menu;localId='L';paso=3;carrito={};codigoEnvio='';envioPendiente=null;cotizacionEnCurso=false;checkoutMem={cliente:{nombre:'Cliente de prueba',telefono:'0990000000',direccion:'Dirección ficticia'}};
+    entrega={tipo:'domicilio',zona:'Z',cuando:'ya'};pago={forma:'efectivo',propina:.5};ubic=null;cuponAplicado=null;
+    fix.items.forEach(x=>{var p=plato(x.plato_id);carrito[claveItem(p,x.extras)]={plato:p,cantidad:x.cantidad,extras:x.extras};});
+    document.querySelector('#pedir-cuerpo').innerHTML='<form id="form-pedido"><label class="casilla"><input id="pe-privacidad" type="checkbox" checked>Privacidad</label><label class="casilla"><input id="pe-politicas" type="checkbox" checked>Condiciones</label><input name="cupon" value=""><input name="notas" value="Nota ficticia"><button type="submit">Revisar</button></form>';
+    document.querySelector('#form-pedido').addEventListener('submit',enviar);
+    window.__renderFrame=0;window.__renderSync=0;
+  };
+  // El límite de esta simulación es la entrada al envío protegido; nada se escribe.
+  procesarEnvio=async function(datos){window.__envios.push(JSON.parse(JSON.stringify(datos)));};
+  window.cambiarDuranteRevision=function(){pago.propina=1;};
+  window.cambiarPago=function(forma){pago.forma=forma;pago.cuenta=forma==='transferencia'?'Banco ficticio · 00000001':'';};
+})(window);
+`;
+fs.mkdirSync('capturas-revision-final',{recursive:true});
+async function run(engine,device,label){
+ const browser=await engine.launch();try{
+ const page=await browser.newPage({...device,serviceWorkers:'block'}),errors=[],network=[];
+ page.on('pageerror',e=>errors.push(e.message));page.on('request',r=>network.push(r.url()));
+ await page.route('**/*',r=>r.abort());
+ await page.setContent('<meta name="viewport" content="width=device-width,initial-scale=1"><body class="mip-premium-cliente"><main id="pedir-cuerpo"></main><div id="resumen-items"></div></body>');
+ for(const p of ['css/app.css','css/modulos.css','css/premium-integral.css'])await page.addStyleTag({content:read(p)});
+ await page.addScriptTag({content:read('js/ui.js')});await page.addScriptTag({content:read('js/comun.js')});
+ await page.evaluate(()=>{window.__envios=[];window.__calls=[];window.__avisos=[];window.APP_MEMORIA={leer:()=>null,guardar:()=>{}};window.__quote=null;window.__delay=0;window.__fail=false;window.DATOS={crearVigiaSync:()=>async()=>false,pedir:async(a,d)=>{__calls.push({a,d});if(a!=='pedidoCotizar')throw Error('Consulta no autorizada '+a);if(__delay)await new Promise(r=>setTimeout(r,__delay));if(__fail)throw Error('Sin conexión');return __quote;}};UI.aviso=t=>__avisos.push(t);});
+ await page.addScriptTag({content:patched});
+ const stats=[];
+ assert.throws(()=>fixture(61),/60 líneas/);
+ for(const n of [1,5,10,35,60]){
+  const fix=fixture(n,n===10?'NO':'SI');
+  await page.evaluate(async fix=>{__quote=fix.q;__calls=[];__envios=[];__avisos=[];__delay=0;__fail=false;document.querySelector('#resumen-items').innerHTML=fix.items.slice(0,5).map(x=>'<span data-revision-foto="'+x.plato_id+'"><img width="48" height="48" src="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2248%22 height=%2248%22%3E%3Crect width=%2248%22 height=%2248%22 fill=%22tan%22/%3E%3C/svg%3E"></span>').join('');await Promise.all(Array.from(document.querySelectorAll('#resumen-items img'),i=>i.decode()));document.querySelector('#resumen-items').hidden=true;preparar(fix);},fix);
+  const before=network.length;
+  await page.getByRole('button',{name:'Revisar',exact:true}).click();
+  await page.getByRole('heading',{name:'Revisa tu pedido',exact:true}).waitFor();
+  await page.waitForTimeout(60);
+  assert.equal(await page.locator('[data-revision-linea]').count(),n);
+  assert.match(await page.locator('[data-revision-total]').innerText(),new RegExp(fix.q.total.toFixed(2).replace('.','[,.]')));
+  assert.ok(await page.locator('.revision-inicial canvas:visible').count()<=6);
+  assert.equal(await page.locator('.revision-inicial img').count(),0);
+  assert.equal(network.length,before,'Solicitudes de red adicionales en el resumen');
+  assert.deepEqual(await page.evaluate(()=>__calls.map(x=>x.a)),['pedidoCotizar']);
+  assert.equal(await page.evaluate(()=>__envios.length),0);
+  const v=await page.locator('.revision-inicial').evaluate(e=>({scroll:e.scrollWidth,width:e.clientWidth,dom:e.querySelectorAll('*').length,photos:e.querySelectorAll('canvas:not([hidden])').length}));
+  assert.ok(v.scroll<=v.width+1,JSON.stringify(v));
+  stats.push({n,...v,newRequests:network.length-before});
+  if(n===5)await page.screenshot({path:'capturas-revision-final/'+label+'.png'});
+  await page.getByRole('button',{name:'Volver a editar',exact:true}).click();
+  assert.equal(await page.evaluate(()=>__envios.length),0);
+  assert.equal(await page.locator('#form-pedido [name=notas]').inputValue(),'Nota ficticia');
+ }
+ const fix=fixture(5);
+ async function prep(opts={}){await page.evaluate(({fix,opts})=>{__quote=opts.q||fix.q;__calls=[];__envios=[];__avisos=[];__delay=opts.delay||0;__fail=!!opts.fail;preparar(fix);},{fix,opts});}
+ async function open(){await page.getByRole('button',{name:'Revisar',exact:true}).click();await page.getByRole('heading',{name:'Revisa tu pedido',exact:true}).waitFor();}
+ await prep({delay:200});await open();await page.evaluate(()=>document.querySelector('#form-pedido').dispatchEvent(new Event('submit',{cancelable:true})));assert.equal(await page.evaluate(()=>__calls.length),1);await page.getByRole('button',{name:'Confirmar y enviar',exact:true}).click();await page.waitForFunction(()=>__envios.length===1);assert.equal(await page.evaluate(()=>__envios[0].total_esperado),fix.q.total);assert.equal(await page.evaluate(()=>__envios[0].cotizacion_firma),fix.q.firma);
+ await prep();await open();await page.evaluate(()=>cambiarDuranteRevision());await page.getByRole('button',{name:'Confirmar y enviar',exact:true}).click();await page.waitForFunction(()=>__avisos.length>0);assert.equal(await page.evaluate(()=>__envios.length),0);
+ await prep({fail:true});await page.getByRole('button',{name:'Revisar',exact:true}).click();await page.waitForFunction(()=>__avisos.length>0);assert.equal(await page.evaluate(()=>__envios.length),0);assert.equal(await page.locator('.revision-inicial').count(),0);
+ await prep();await page.locator('#pe-politicas').uncheck();await page.getByRole('button',{name:'Revisar',exact:true}).click();assert.equal(await page.evaluate(()=>__calls.length),0);
+ await prep({q:{...fix.q,envio:fix.q.envio+1,total:fix.q.total+1,firma:'cotizacion-actualizada'}});await open();assert.match(await page.locator('.revision-inicial').innerText(),/actualizó el importe/);await page.getByRole('button',{name:'Volver a editar',exact:true}).click();assert.equal(await page.evaluate(()=>__envios.length),0);
+ await prep();await page.evaluate(()=>{document.querySelector('#resumen-items').innerHTML='';cambiarPago('transferencia')});await open();assert.equal(await page.locator('.revision-inicial canvas:visible').count(),0);assert.match(await page.locator('.revision-datos').innerText(),/Banco ficticio/);await page.getByRole('button',{name:'Volver a editar',exact:true}).click();assert.equal(await page.evaluate(()=>__envios.length),0);
+ await prep({q:{...fix.q,subtotal:fix.q.subtotal+1}});await page.getByRole('button',{name:'Revisar',exact:true}).click();await page.waitForFunction(()=>__avisos.length>0);assert.equal(await page.locator('.revision-inicial').count(),0);assert.equal(await page.evaluate(()=>__envios.length),0);
+ assert.deepEqual(errors,[]);console.log('REVISION DEFINITIVA '+label+' '+JSON.stringify(stats)+'; regreso, confirmación, doble submit, cambio concurrente, error de red, condiciones y precio cambiado OK');
+ }finally{await browser.close()}
+}
+(async()=>{for(const [e,d,l] of [[webkit,devices['iPhone SE'],'iphone-se'],[webkit,devices['iPhone 13'],'iphone-13'],[chromium,devices['Pixel 7'],'android'],[chromium,{viewport:{width:1366,height:768}},'escritorio']])await run(e,d,l)})().catch(e=>{console.error(e);process.exitCode=1});

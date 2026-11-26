@@ -28,7 +28,7 @@
   global.APP_CONFIG = Object.freeze({
     url: valida(URL_SCRIPT) ? String(URL_SCRIPT).trim() : '',
     configurada: valida(URL_SCRIPT),
-    versionPantalla: '3.1.46',
+    versionPantalla: '3.1.47',
     versionScriptMinima: 30129, // candidato: cotización previa obligatoria; no desplegar sin coordinación
     tiempoEsperaMs: 25000
   });

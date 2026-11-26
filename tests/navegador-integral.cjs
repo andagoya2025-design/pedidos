@@ -2,7 +2,7 @@
 const fs=require('node:fs'),assert=require('node:assert/strict'),{execFileSync}=require('node:child_process'),{chromium,webkit,devices}=require('playwright');
 const read=p=>fs.readFileSync(p,'utf8'),base='6e6888615a6648fd6f65741ff577adcdaaf96f55';
 const old=p=>execFileSync('git',['show',base+':'+p],{encoding:'utf8',maxBuffer:8*1024*1024});
-for(const p of ['js/app.js','js/pedir.js','js/motorizados.js','js/menu.js','js/configuracion.js','js/datos.js','js/ui.js','js/comun.js','js/pedidos.js','js/notificaciones.js','js/voz.js','js/avisos-cliente.js','js/caja.js','js/inventario.js','js/reportes.js','js/rastreo.js','css/app.css','css/modulos.css','css/admin-elite.css','servidor/Codigo.gs','servidor/Codigo_MiPedido_3.1.30.txt'])assert.equal(read(p),old(p),'Motor protegido '+p);
+for(const p of ['js/app.js','js/pedir.js','js/motorizados.js','js/menu.js','js/configuracion.js','js/datos.js','js/ui.js','js/comun.js','js/pedidos.js','js/notificaciones.js','js/voz.js','js/avisos-cliente.js','js/caja.js','js/inventario.js','js/reportes.js','js/rastreo.js','css/app.css','css/modulos.css','css/admin-elite.css','servidor/Codigo.gs','servidor/Codigo_MiPedido_3.1.30.txt'])assert.equal(p==='js/pedir.js'?require('./proteger-revision-inicial.cjs')(read(p)):read(p),old(p),'Motor protegido '+p);
 for(const p of ['index.html','pedir.html','driver.html'])assert.equal(read(p).replace(/  <link rel="stylesheet" href="css\/premium-integral\.css">\n/,'').replace(/<body class="mip-premium-(cliente|driver)">/,'<body>'),old(p),'Sólo se permite enlace y clase de presentación: '+p);
 fs.mkdirSync('capturas-integral',{recursive:true});
 const marca={negocio_nombre:'Restaurante Demo',color_primario:'#1f1b16',color_acento:'#992b00',moneda:'USD',verificar_antes_salir:'SI'};

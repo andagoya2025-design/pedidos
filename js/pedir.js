@@ -929,7 +929,7 @@
       '<label class="casilla"><input type="checkbox" name="acepta_privacidad" id="pe-privacidad"' + (checkoutMem['acepta_privacidad'] ? ' checked' : '') + '> <span>Acepto que usen mi nombre, celular y dirección solo para este pedido. <a href="privacidad.html" target="_blank" rel="noopener">Aviso de privacidad</a></span></label>' +
       '<label class="casilla"><input type="checkbox" id="pe-politicas"' + (checkoutMem['acepta_politicas'] ? ' checked' : '') + '> <span>Leí <a href="#" id="ver-politicas">cómo funciona el pedido</a> (pago, entrega y cambios).</span></label>' +
       '<label class="casilla"><input type="checkbox" name="acepta_promos"' + (checkoutMem['acepta_promos'] ? ' checked' : '') + '> <span>Quiero recibir promociones por WhatsApp (opcional).</span></label>' +
-      '<button class="btn bloque btn-enviar" type="submit">Enviar pedido · <span id="total-boton"></span></button>' +
+      '<button class="btn bloque btn-enviar" type="submit">Revisar pedido · <span id="total-boton"></span></button>' +
       '<p class="ayuda" style="text-align:center;margin-top:8px">Recibirás tu número de pedido al instante.</p></div>' +
       '<button class="btn secundario" type="button" id="btn-atras">← Volver</button>' + botonVaciarCheckoutPreenvio() +
       '</form>';
@@ -1021,7 +1021,7 @@
     var lista = items();
     if (!lista.length) return irA(1);
     $('#resumen-items').innerHTML = '<div class="resumen-cabeza"><h3 style="margin:0">Tu pedido</h3><button class="btn secundario chico" type="button" id="btn-mas-platos">＋ Agregar más</button></div>' + lista.map(function (it, i) {
-      return '<div class="preenvio-linea"><div class="preenvio-cabecera"><div class="preenvio-mini">'+fotoHtml(it.plato)+'</div><div><b>' + UI.esc(it.plato.nombre) + '</b><div class="item-sub">'+UI.dinero(unitario(it))+' c/u con extras</div></div></div>'+
+      return '<div class="preenvio-linea"><div class="preenvio-cabecera"><div class="preenvio-mini" data-revision-foto="'+UI.esc(it.plato.id)+'">'+fotoHtml(it.plato)+'</div><div><b>' + UI.esc(it.plato.nombre) + '</b><div class="item-sub">'+UI.dinero(unitario(it))+' c/u con extras</div></div></div>'+
         '<div class="preenvio-importe"><span>'+it.cantidad+' × plato base</span><span>'+UI.dinero(Math.round(Number(it.plato.precio)*100)*it.cantidad/100)+'</span></div>'+desgloseExtrasPreenvio(it)+
         '<div class="preenvio-importe preenvio-total"><b>Subtotal</b><b>'+UI.dinero(unitario(it)*it.cantidad)+'</b></div><div class="preenvio-acciones">'+
         '<div class="contador"><button type="button" data-r-menos="' + i + '" aria-label="Quitar uno">' + (it.cantidad === 1 ? '🗑' : '−') + '</button><input type="number" min="0" max="1000" inputmode="numeric" data-r-cant="' + i + '" value="' + it.cantidad + '" aria-label="Cantidad de ' + UI.esc(it.plato.nombre) + '"><button type="button" data-r-mas="' + i + '" aria-label="Agregar uno">＋</button></div>'+
@@ -1046,6 +1046,60 @@
       });
     });
   }
+
+  /* INICIO REVISION FINAL 3.1.47 — presentación sin escrituras ni nuevas descargas. */
+  async function revisarPedidoInicial(q,datos,localItems,cambioDetalle,importeMostrado){
+    var cent=function(n){return Math.round(Number(n)*100);},mon=function(n){return UI.esc(UI.dinero(n));},esc=UI.esc;
+    var grav=cent(q.subtotal)+cent(q.envio)-cent(q.descuento)-cent(q.premio),sinIva=grav+cent(q.propina);
+    var incluido=cent(q.total)===sinIva;
+    if(grav<0||(!incluido&&cent(q.total)!==sinIva+cent(q.iva)))throw Error('No se pudo verificar el desglose del importe.');
+    var fotos=new Set(),lineas=q.detalle.map(function(d,i){
+      var it=localItems[i],extras=String(d.extras||'');
+      var exacto=it&&String(it.plato.id)===String(d.plato_id)&&it.cantidad===Number(d.cantidad)&&cent(unitario(it))===cent(d.precio)&&it.extras.slice().sort().join(', ')===extras;
+      var foto='';
+      if(fotos.size<6&&!fotos.has(String(d.plato_id))){fotos.add(String(d.plato_id));foto='<canvas width="48" height="48" data-revision-mini="'+esc(d.plato_id)+'" hidden aria-hidden="true"></canvas>';}
+      var det='';
+      if(exacto){
+        var grupos=new Map();it.extras.forEach(function(n){grupos.set(n,(grupos.get(n)||0)+1);});
+        det='<div class="ux-resumen-item"><span>'+esc(d.cantidad+' × '+UI.dinero(it.plato.precio))+'</span><b>'+mon(cent(it.plato.precio)*d.cantidad/100)+'</b></div>'+
+          Array.from(grupos,function(par){var e=it.plato.extras.find(function(x){return x.nombre===par[0];}),n=par[1]*d.cantidad;return '<div class="ux-resumen-item revision-extra"><span>'+esc(n+' × '+par[0]+(e?' · '+UI.dinero(e.precio)+' c/u':''))+'</span><b>'+ (e?mon(importeExtraPreenvio(e,n)):'—')+'</b></div>';}).join('');
+      }else{
+        det='<div class="ux-resumen-item"><span>'+esc(d.cantidad+' × '+UI.dinero(d.precio)+' c/u con extras')+(extras?'<small>'+esc(extras)+'</small>':'')+'</span><b>'+mon(d.total_linea)+'</b></div>';
+      }
+      return '<section class="ux-comparacion-grupo" data-revision-linea><div class="revision-producto">'+foto+'<b>'+esc(d.nombre)+'</b></div>'+det+'<div class="ux-resumen-item revision-subtotal"><span>Subtotal del producto</span><b>'+mon(d.total_linea)+'</b></div></section>';
+    }).join('');
+    function importe(t,n){return '<div class="ux-resumen-item"><span>'+esc(t)+'</span><b>'+mon(n)+'</b></div>';}
+    var actualizado=cambioDetalle||cent(q.total)!==cent(importeMostrado);
+    var tipo=datos.tipo_entrega==='domicilio'?'A domicilio':datos.tipo_entrega==='mesa'?'Mesa '+datos.mesa:'Retiro en el local';
+    var forma=(UI.NOMBRE_PAGO&&UI.NOMBRE_PAGO[datos.forma_pago])||datos.forma_pago;
+    var direccion=datos.tipo_entrega==='domicilio'?(datos.cliente.direccion||'Ubicación seleccionada'):'';
+    var html='<p>Último paso. Tu pedido aún no se ha enviado.</p><div class="ux-total-nuevo revision-total" data-revision-total><small>Total a pagar</small><strong>'+mon(q.total)+'</strong><small>Importe validado por el restaurante</small></div>'+
+      (actualizado?'<div class="banda" role="status"><span>El restaurante actualizó el importe. Total anterior: '+mon(importeMostrado)+'. Revisa el nuevo total.</span></div>':'')+
+      '<h3>Tu selección · '+q.detalle.reduce(function(n,d){return n+Number(d.cantidad);},0)+' unidades</h3>'+lineas+
+      '<p class="ayuda">Los precios individuales de los extras se muestran según el menú; el subtotal de cada producto y el total provienen de la cotización.</p>'+
+      '<section class="ux-comparacion-grupo"><h4>Detalle económico</h4>'+importe('Subtotal productos',q.subtotal)+
+      (datos.tipo_entrega==='domicilio'||q.envio?importe('Envío',q.envio):'')+
+      (q.descuento?importe('Descuento',-q.descuento):'')+(q.premio?importe('Premio',-q.premio):'')+
+      (q.propina?importe('Propina',q.propina):'')+
+      importe(incluido?'IVA incluido (informativo)':'IVA',q.iva)+
+      '<div class="revision-cierre ux-resumen-item"><b>Total definitivo</b><b>'+mon(q.total)+'</b></div></section>'+
+      '<section class="ux-comparacion-grupo revision-datos"><h4>Entrega y pago</h4><b>'+esc(local().nombre||'')+'</b><div>'+esc(tipo)+'</div>'+
+      (direccion?'<small>'+esc(direccion)+'</small>':'')+(datos.cliente.referencia?'<small>'+esc(datos.cliente.referencia)+'</small>':'')+
+      (datos.hora_llegada?'<small>'+esc(ventanaTexto(datos.hora_llegada))+' aprox.</small>':'')+
+      '<small>'+esc(datos.cliente.nombre||'')+' · '+esc(datos.cliente.telefono||'')+'</small><b>'+esc(forma)+'</b>'+
+      (datos.cuenta_pago?'<small>'+esc(datos.cuenta_pago)+'</small>':'')+
+      (datos.notas?'<small>Nota: '+esc(datos.notas)+'</small>':'')+
+      '<small>✓ Condiciones y privacidad aceptadas</small></section>';
+    return UI.ventana({titulo:'Revisa tu pedido',html:html,botones:[{texto:'Volver a editar',valor:false,clase:'secundario'},{texto:'Confirmar y enviar',valor:true}],alAbrir:function(v){
+      var modal=v.querySelector('.ventana');modal.classList.add('ux-gestion-modal','ux-revision-cliente','revision-inicial');
+      var existentes=new Map();
+      UI.$('#resumen-items [data-revision-foto] img').forEach(function(img){if(img.complete&&img.naturalWidth)existentes.set(img.parentElement.dataset.revisionFoto,img);});
+      UI.$('canvas[data-revision-mini]',v).forEach(function(c){var img=existentes.get(c.dataset.revisionMini);if(img){try{var lado=Math.min(img.naturalWidth,img.naturalHeight);c.getContext('2d').drawImage(img,(img.naturalWidth-lado)/2,(img.naturalHeight-lado)/2,lado,lado,0,0,48,48);c.hidden=false;}catch(e){/* imagen opcional */}}});
+      var titulo=modal.querySelector('h2');if(titulo)titulo.tabIndex=-1;
+      setTimeout(function(){if(modal.isConnected){modal.scrollTop=0;if(titulo)titulo.focus({preventScroll:true});}},40);
+    }});
+  }
+  /* FIN REVISION FINAL 3.1.47 */
 
   var cotizacionEnCurso=false;
   async function enviar(ev) {
@@ -1093,15 +1147,12 @@
       else {
         if(!q||typeof q.total!=='number'||!Number.isFinite(q.total)||q.total<0||!Array.isArray(q.detalle)||typeof q.firma!=='string')throw Error('No se recibió una cotización válida.');
         var localItems=items(),cambioDetalle=q.detalle.length!==localItems.length||q.detalle.some(function(d,i){var it=localItems[i];return !it||String(d.plato_id)!==String(it.plato.id)||Number(d.cantidad)!==it.cantidad||Math.round(d.precio*100)!==Math.round(unitario(it)*100);});
-        if(cambioDetalle||Math.round(q.total*100)!==Math.round(importeMostrado*100)){
-          var ok=await UI.ventana({titulo:'Confirma el importe actualizado',html:
-            '<p>El restaurante calculó el importe definitivo. Revisa antes de enviar.</p>'+q.detalle.map(function(d){return '<p>'+UI.esc(d.cantidad+' × '+d.nombre+' · '+UI.dinero(d.precio)+' c/u · '+UI.dinero(d.total_linea))+(d.extras?'<br><small>'+UI.esc(d.extras)+'</small>':'')+'</p>';}).join('')+
-            '<p>Subtotal: '+UI.esc(UI.dinero(q.subtotal))+' · Envío: '+UI.esc(UI.dinero(q.envio))+'</p>'+
-            '<p>Descuento: '+UI.esc(UI.dinero(q.descuento))+' · Premio: '+UI.esc(UI.dinero(q.premio))+' · Propina: '+UI.esc(UI.dinero(q.propina))+'</p>'+
-            '<p>IVA: '+UI.esc(UI.dinero(q.iva))+'</p><p><b>Total anterior: '+UI.esc(UI.dinero(importeMostrado))+'</b><br><b>Total actualizado: '+UI.esc(UI.dinero(q.total))+'</b></p>',
-            botones:[{texto:'Volver',valor:false,clase:'secundario'},{texto:'Aceptar '+UI.dinero(q.total),valor:true}]});
-          if(!ok)return;
-        }
+        /* INICIO PUERTA REVISION 3.1.47 */
+        if(!['subtotal','envio','descuento','premio','propina','iva'].every(function(k){return typeof q[k]==='number'&&Number.isFinite(q[k])&&q[k]>=0;})||
+          !q.detalle.length||q.detalle.length>60||q.detalle.some(function(d){return !d||!Number.isInteger(d.cantidad)||d.cantidad<1||d.cantidad>1000||typeof d.precio!=='number'||!Number.isFinite(d.precio)||d.precio<0||typeof d.total_linea!=='number'||!Number.isFinite(d.total_linea)||Math.round(d.total_linea*100)!==Math.round(d.precio*100)*d.cantidad;})||
+          q.detalle.reduce(function(n,d){return n+Math.round(d.total_linea*100);},0)!==Math.round(q.subtotal*100))throw Error('No se recibió el detalle completo del importe.');
+        if(!(await revisarPedidoInicial(q,datos,localItems,cambioDetalle,importeMostrado)))return;
+        /* FIN PUERTA REVISION 3.1.47 */
         datos.total_esperado=q.total;datos.cotizacion_firma=q.firma;
       }
       if(!sigueIgual()){UI.aviso('El pedido cambió durante la confirmación. No se envió.','error');return;}

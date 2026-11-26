@@ -85,3 +85,22 @@
 :is(.mip-premium-driver,.mip-premium-admin) #en-cuerpo .entrega-principal{background:var(--premium-acento);color:white;border-radius:15px}
 :is(.mip-premium-driver,.mip-premium-admin) #en-cuerpo .turno{border-radius:18px;box-shadow:var(--premium-shadow);flex-wrap:wrap}
 :is(.mip-premium-driver,.mip-premium-admin) #en-cuerpo .debe{border-radius:18px;box-shadow:var(--premium-shadow)}
+
+/* INICIO REVISION FINAL 3.1.47 — solo la nueva ventana del cliente. */
+.mip-premium-cliente .ventana.revision-inicial{padding-bottom:max(8px,var(--abajo));}
+.mip-premium-cliente .revision-inicial .revision-total{padding:16px;text-align:center;margin:12px 0;background:var(--acento-suave);border-color:var(--acento)}
+.mip-premium-cliente .revision-inicial .revision-total strong{display:block;font-size:clamp(26px,8vw,34px);font-variant-numeric:tabular-nums;line-height:1.25}
+.mip-premium-cliente .revision-inicial .revision-total small{display:block;color:var(--texto-2)}
+.mip-premium-cliente .revision-inicial .revision-producto{display:flex;gap:9px;align-items:center;overflow-wrap:anywhere}
+.mip-premium-cliente .revision-inicial canvas{width:48px;height:48px;flex:0 0 48px;border-radius:9px;background:var(--superficie-2)}
+.mip-premium-cliente .revision-inicial canvas[hidden]{display:none}
+.mip-premium-cliente .revision-inicial .revision-extra{padding-left:7px;font-size:.84rem;color:var(--texto-2)}
+.mip-premium-cliente .revision-inicial .revision-subtotal{border-bottom:0;font-weight:700}
+.mip-premium-cliente .revision-inicial .ux-comparacion-grupo{margin:8px 0;padding:12px;border-color:var(--premium-line)}
+.mip-premium-cliente .revision-inicial .revision-cierre{font-size:1.05rem;border-bottom:0}
+.mip-premium-cliente .revision-inicial .revision-datos{display:grid;gap:4px;overflow-wrap:anywhere}
+.mip-premium-cliente .revision-inicial .revision-datos small{color:var(--texto-2)}
+.mip-premium-cliente .revision-inicial>.acciones{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;padding:10px 0 max(8px,env(safe-area-inset-bottom));}
+.mip-premium-cliente .revision-inicial>.acciones .btn{min-width:0;min-height:48px;padding:10px 5px;white-space:normal;line-height:1.2;font-size:14px;overflow-wrap:anywhere}
+.mip-premium-cliente .revision-inicial h2:focus{outline:none}
+/* FIN REVISION FINAL 3.1.47 */

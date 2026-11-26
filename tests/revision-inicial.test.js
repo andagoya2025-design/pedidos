@@ -1,0 +1,6 @@
+'use strict';
+const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),read=p=>fs.readFileSync(p,'utf8');
+const s=read('js/pedir.js'),css=read('css/premium-integral.css');
+test('revisión obligatoria usa cotización y la puerta precede al envío',()=>{const i=s.indexOf("var q=await DATOS.pedir('pedidoCotizar',datos)"),j=s.indexOf('await revisarPedidoInicial(q,datos,localItems,cambioDetalle,importeMostrado)',i),k=s.indexOf('await procesarEnvio(datos, boton)',j);assert.ok(i>0&&j>i&&k>j);assert.match(s,/if\(!\(await revisarPedidoInicial\(/);assert.match(s,/datos\.cotizacion_firma=q\.firma/);assert.match(s,/if\(!sigueIgual\(\)\)/);});
+test('revisión: miniaturas opcionales sin nuevas solicitudes ni imágenes remotas',()=>{const x=s.slice(s.indexOf('/* INICIO REVISION FINAL'),s.indexOf('/* FIN REVISION FINAL'));assert.match(x,/fotos\.size<6/);assert.match(x,/img\.complete&&img\.naturalWidth/);assert.match(x,/drawImage/);assert.doesNotMatch(x,/<img|\.src\s*=|fetch\(|DATOS\.pedir|new Image/);assert.match(css,/\.revision-inicial>\.acciones/);});
+test('revisión: desglose económico y extras según menú',()=>{assert.match(s,/IVA incluido \(informativo\)/);assert.match(s,/importeExtraPreenvio\(e,n\)/);assert.match(s,/Subtotal del producto/);assert.match(s,/No se recibió el detalle completo del importe/);});
