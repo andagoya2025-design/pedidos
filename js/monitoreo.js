@@ -132,14 +132,16 @@
   }
 
   async function verRuta(id, numero) {
+    var local = APP.local, sesion = APP.sesion;
     try {
       var r = await DATOS.pedir('rutaPedido', { pedido_id: id });
+      if (local !== APP.local || sesion !== APP.sesion || !UI.$('#mn-cuerpo')) return;
       UI.ventana({
         icono: '🗺️', titulo: 'Recorrido de ' + numero,
         html: (r.puntos.length ? UI.mapaPuntos(r.puntos, { ruta: true, ancho: 340, alto: 260 }) +
           '<p class="ayuda">🔵 salida · 🟢 último punto · ' + r.puntos.length + ' punto(s), uno por minuto.</p>' : '<p>Aún no hay puntos: el motorizado debe tener la app abierta mientras lleva el pedido.</p>'),
         botones: [{ texto: 'Cerrar', valor: true, clase: 'secundario' }]
       });
-    } catch (err) { UI.error('No se pudo abrir', err.message); }
+    } catch (err) { if (local === APP.local && sesion === APP.sesion && UI.$('#mn-cuerpo')) UI.error('No se pudo abrir', err.message); }
   }
 })(window);

@@ -84,15 +84,16 @@
   function pedirPosicionFresca() {
     if (buscando || !global.navigator.geolocation) return;
     buscando = true;
-    global.navigator.geolocation.getCurrentPosition(function (pos) { buscando = false; alPosicion(pos); enviar(); },
-      function (err) { buscando = false; alError(err); }, { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 });
+    var turno = generacion;
+    global.navigator.geolocation.getCurrentPosition(function (pos) { if (turno !== generacion) return; buscando = false; alPosicion(pos); enviar(); },
+      function (err) { if (turno !== generacion) return; buscando = false; alError(err); }, { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 });
   }
 
   function enviar() {
     if (!sesionActiva()) { reiniciarTodo(); return Promise.resolve(); }
     if (!pedidos.length || global.document.hidden || enviando) return Promise.resolve();
     if (!fresca()) { // nunca se envía una posición vieja como si fuera de ahora
-      if (estado === 'ok' || estado === 'red') cambiar('buscando');
+      if (estado === 'ok' || estado === 'red' || estado === 'parcial' || estado === 'pendiente') cambiar('buscando');
       pedirPosicionFresca();
       return Promise.resolve();
     }
@@ -121,16 +122,18 @@
   }
 
   async function mantenerPantalla() {
-    try { if ('wakeLock' in global.navigator && !candadoPantalla) { candadoPantalla = await global.navigator.wakeLock.request('screen'); candadoPantalla.addEventListener('release', function () { candadoPantalla = null; }); } } catch (e) { /* no disponible */ }
+    var turno = generacion;
+    try { if ('wakeLock' in global.navigator && !candadoPantalla) { var nuevo = await global.navigator.wakeLock.request('screen'); if (turno !== generacion || !pedidos.length || !sesionActiva() || candadoPantalla) { nuevo.release(); return; } candadoPantalla = nuevo; nuevo.addEventListener('release', function () { if (candadoPantalla === nuevo) candadoPantalla = null; }); } } catch (e) { /* no disponible */ }
   }
 
   function iniciar() {
     if (vigilancia !== null) return;
     if (!global.navigator.geolocation) { cambiar('gps'); return; }
     primeroPendiente = true;
-    vigilancia = global.navigator.geolocation.watchPosition(alPosicion, alError, { enableHighAccuracy: true, maximumAge: 20000, timeout: 30000 });
-    temporizador = setInterval(enviar, 60000); // una vez por minuto, solo durante la entrega
-    setTimeout(enviar, 8000);
+    var turno = generacion;
+    vigilancia = global.navigator.geolocation.watchPosition(function (p) { if (turno === generacion) alPosicion(p); }, function (e) { if (turno === generacion) alError(e); }, { enableHighAccuracy: true, maximumAge: 20000, timeout: 30000 });
+    temporizador = setInterval(function () { if (turno === generacion) enviar(); }, 60000);
+    setTimeout(function () { if (turno === generacion) enviar(); }, 8000);
     mantenerPantalla();
   }
 

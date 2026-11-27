@@ -170,3 +170,25 @@ test('ayuda: el código no envía nada solo y no guarda datos nuevos', () => {
   assert.doesNotMatch(fuente, /localStorage|sessionStorage/, 'no guarda nada en el teléfono');
   assert.match(fuente, /mejorPosicion\(\)/, 'solo usa una ubicación reciente');
 });
+
+
+// 3.1.50 — cada pedido necesita una confirmación real.
+test('rastreo múltiple: respuesta parcial no pinta verde y recupera al confirmar ambos', async () => {
+  const e=entorno(); e.win.DATOS.pedir=async (a,d)=>{e.llamadas.push(d); return d.pedido_id==='P1'?{guardado:true}:{guardado:false};};
+  e.R.actualizar(['P1','P2']); e.posicion(-0.18,-78.48); await e.vaciar();
+  assert.equal(e.llamadas.length,2); assert.equal(e.R.estado(),'parcial'); assert.doesNotMatch(e.banda.className,/\bok\b/);
+  e.win.DATOS.pedir=async()=>({guardado:true}); e.timers.find(t=>t.ms===60000).f(); await e.vaciar(); assert.equal(e.R.estado(),'ok');
+});
+test('rastreo múltiple: respuesta ambigua antigua nunca confirma', async () => {
+  const e=entorno(); e.respuesta={guardado:false}; e.R.actualizar(['P1']); e.posicion(-0.18,-78.48); await e.vaciar(); assert.equal(e.R.estado(),'pendiente');
+});
+test('rastreo múltiple: intervalo mínimo solo confirma fecha reciente del servidor', async () => {
+  const e=entorno(); e.respuesta={guardado:false,motivo:'intervalo_minimo',fecha:new Date(e.ahora-2000).toISOString()}; e.R.actualizar(['P1']);e.posicion(-0.18,-78.48);await e.vaciar();assert.equal(e.R.estado(),'ok');
+  e.respuesta={guardado:false,motivo:'intervalo_minimo',fecha:new Date(e.ahora-100000).toISOString()};e.timers.find(t=>t.ms===60000).f();await e.vaciar();assert.equal(e.R.estado(),'pendiente');
+});
+test('rastreo: no solapa envíos y descarta respuesta de sesión anterior',async()=>{
+ const e=entorno();let resolver;e.win.DATOS.pedir=(a,d)=>{e.llamadas.push(d);return new Promise(r=>resolver=r)};
+ e.R.actualizar(['P1']);e.posicion(-0.18,-78.48);e.timers.find(t=>t.ms===60000).f();assert.equal(e.llamadas.length,1);
+ const watcher=e.watch; e.R.detener();e.R.actualizar(['P2']);watcher.ok({coords:{latitude:1,longitude:2,accuracy:1},timestamp:e.ahora});
+ resolver({guardado:true});await e.vaciar();assert.equal(e.R.estado(),'buscando');assert.equal(e.llamadas.length,1);
+});
