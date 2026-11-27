@@ -290,7 +290,7 @@
     var abiertos = mias.pedidos.filter(function (p) { return p.estado !== 'Entregado'; });
     var hechos = mias.pedidos.filter(function (p) { return p.estado === 'Entregado'; });
     var enCamino = abiertos.filter(function (p) { return p.estado === 'En camino'; });
-    if (global.RASTREO) global.RASTREO.actualizar(enCamino.map(function (p) { return p.id; }));
+    if (global.RASTREO) global.RASTREO.actualizar(enCamino.map(function (p) { return p.id; }), enCamino.reduce(function (r, p) { if (p.gps_tramo) r[p.id] = p.gps_tramo; return r; }, Object.create(null)));
     c.innerHTML =
       turnoHtml() +
       '<div class="banda" id="banda-rastreo" hidden></div>' +
@@ -306,7 +306,7 @@
     var tb = UI.$('#btn-turno', c); if (tb) tb.addEventListener('click', function () { cambiarTurno(tb); });
     var gm = UI.$('#btn-ubic-vivo', c); if (gm) gm.addEventListener('click', guiaUbicacionVivo);
     UI.$$('[data-foto]', c).forEach(function (b) { b.addEventListener('click', function () { UI.verFotoEntrega(b.getAttribute('data-foto'), b.getAttribute('data-num')); }); }); // 3.1.3
-    if (global.RASTREO) global.RASTREO.actualizar(enCamino.map(function (p) { return p.id; }));
+    if (global.RASTREO) global.RASTREO.actualizar(enCamino.map(function (p) { return p.id; }), enCamino.reduce(function (r, p) { if (p.gps_tramo) r[p.id] = p.gps_tramo; return r; }, Object.create(null)));
   }
 
   /* 3.1: turno del motorizado (hora y lugar de inicio y fin). */

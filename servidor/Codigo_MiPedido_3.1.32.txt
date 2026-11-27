@@ -2061,6 +2061,7 @@ function etaMoto316_(p, cfg) {
   var ultimo = puntos.reduce(function (u, r) { return !u || r.fecha > u.fecha ? r : u; }, null);
   if (!ultimo && (!corte || p.en_camino instanceof Date && p.en_camino > corte) && coord_(p.sali_lat, -90, 90) !== '' && coord_(p.sali_lng, -180, 180) !== '') ultimo = { lat: p.sali_lat, lng: p.sali_lng };
   if (!ultimo) return null;
+  if (ahora - (ultimo.fecha || p.en_camino) > (numero_(cfg.minutos_alerta_senal) || 5) * 60000) return null;
   var n = distanciaKm_(ultimo, p) * 1.4 / Math.max(5, numero_(cfg.velocidad_moto_kmh) || 20) * 60;
   return { desde: Math.max(2, Math.floor(n * 0.85)), hasta: Math.max(6, Math.ceil(n * 1.35 + 3)) };
 }
@@ -2733,7 +2734,7 @@ function accionMisEntregas_(data, ctx) {
   var deuda = deudaMotorizado_(String(m.id), cajas, pedidos);
   return { ok: true, data: {
     motorizado: { id: String(m.id), nombre: String(m.nombre) },
-    pedidos: mios.map(function (p) { var salida = pedidoSalida_(p, det[String(p.id)] || []); salida.cambios_pendientes = !!bloqueos[String(p.id)]; return salida; }).sort(function (a, b) { return a.creado < b.creado ? -1 : 1; }),
+    pedidos: mios.map(function (p) { var salida = pedidoSalida_(p, det[String(p.id)] || []); salida.cambios_pendientes = !!bloqueos[String(p.id)]; if (String(p.estado) === 'En camino') salida.gps_tramo = gpsTramoId_(p, corteGps_(p)); return salida; }).sort(function (a, b) { return a.creado < b.creado ? -1 : 1; }),
     debe: { fondo: deuda.fondo, efectivo: deuda.efectivo, total: deuda.total },
     turno: turnoSalida_(turnoAbierto_(String(m.id))), // 3.1
     exigir_turno: siNo_(cfg.exigir_turno), codigo_entrega: siNo_(cfg.codigo_entrega)
@@ -3703,7 +3704,8 @@ function accionTurnoTerminar_(data, ctx) {
 function registrarCorteGps_(p, ctx) {
   // Marcador duradero en la bitácora existente: no añade columnas ni puntos falsos al mapa.
   var s = ctx.sesion || {};
-  agregarFilas_('bitacora', [[new Date(), s.usuario || '', s.rol || '', String(p.local_id), 'GPS', 'CORTE', 'GPS_CORTE:' + String(p.id), '']]);
+  var anterior = corteGps_(p), marca = new Date(Math.max(Date.now(), anterior ? anterior.getTime() + 1 : 0, p.ultima_senal instanceof Date ? p.ultima_senal.getTime() + 1 : 0));
+  agregarFilas_('bitacora', [[marca, s.usuario || '', s.rol || '', String(p.local_id), 'GPS', 'CORTE', 'GPS_CORTE:' + String(p.id), '']]);
   SpreadsheetApp.flush();
 }
 
@@ -3715,6 +3717,10 @@ function corteGps_(p) {
   var fila = coincidencias.reduce(function (mayor, r) { return Math.max(mayor, r.getRow()); }, 2);
   var v = sh.getRange(fila, 1, 1, 7).getValues()[0];
   return v[4] === 'GPS' && v[5] === 'CORTE' && v[0] instanceof Date ? v[0] : null;
+}
+
+function gpsTramoId_(p, corte) {
+  return String(p.en_camino instanceof Date ? p.en_camino.getTime() : 0) + '.' + String(corte ? corte.getTime() : 0) + '.' + String(p.motorizado_id);
 }
 
 function puntoGpsVigente_(r, p, corte, ahora) {
@@ -3760,6 +3766,8 @@ function guardarRastreoGps_(data, ids, ctx) {
       resultados.push(salida);
       if (!p || String(p.motorizado_id) !== String(m.id) || String(p.estado) !== 'En camino' || !(p.en_camino instanceof Date)) { salida.motivo = 'sin_pedido_en_camino'; return; }
       var corte = corteGps_(p), inicio = Math.max(p.en_camino.getTime(), corte ? corte.getTime() + 1 : 0);
+      if (data.gps_tramos && (!Object.prototype.hasOwnProperty.call(data.gps_tramos,id) || String(data.gps_tramos[id]) !== gpsTramoId_(p,corte))) { salida.motivo = 'tramo_cambiado'; return; }
+      if (ahora.getTime() < inicio) { salida.motivo = 'ubicacion_antigua'; return; }
       if (muestra && (capturado < inicio || ahora.getTime() - capturado > 90000 || capturado - ahora.getTime() > 15000)) { salida.motivo = 'ubicacion_antigua'; return; }
       var senal = p.ultima_senal instanceof Date && p.ultima_senal.getTime() >= inicio && p.ultima_senal <= ahora ? p.ultima_senal : null;
       var ultimo = recientes.reduce(function (u, r) { return puntoGpsVigente_(r, p, corte, ahora) && (!u || r.fecha >= u.fecha) ? r : u; }, null);
@@ -3788,7 +3796,7 @@ function guardarRastreoGps_(data, ids, ctx) {
     // Escribir primero los puntos, después las confirmaciones. Ante un fallo la fila persistida permite recuperar sin repetir.
     if (filas.length || cambios.length) {
       escritura = true;
-      if (filas.length) agregarFilas_('rastreo', filas);
+      if (filas.length) { agregarFilas_('rastreo', filas); SpreadsheetApp.flush(); }
       cambios.forEach(function (c) { actualizarCampos_('pedidos', c.p._fila, c.p, { ultima_senal:c.fecha }); });
       SpreadsheetApp.flush();
     }
@@ -3845,7 +3853,7 @@ function accionMonitoreo_(data, ctx) {
       var corte = corteGps_(p);
       var confirmado = p.ultima_senal instanceof Date && p.en_camino instanceof Date && p.ultima_senal >= p.en_camino && (!corte || p.ultima_senal > corte) && p.ultima_senal <= ahora;
       var actual = confirmado ? puntos.filter(function (r) { return puntoGpsVigente_(r, p, corte, ahora) && r.fecha <= p.ultima_senal; }).sort(function (a, b) { return a.fecha - b.fecha; }) : [];
-      porPedido[String(p.id)] = { fecha: confirmado ? p.ultima_senal : null, puntos: actual };
+      porPedido[String(p.id)] = { fecha: actual.length ? actual[actual.length - 1].fecha : null, desde: corte && corte > p.en_camino ? corte : p.en_camino, puntos: actual };
     });
     // Nunca pintar un punto histórico como posición actual de otro recorrido.
     if (enRuta.length) {
@@ -3857,7 +3865,7 @@ function accionMonitoreo_(data, ctx) {
     } else if (local !== 'TODOS' && String(m.local_id) === 'TODOS') { ultimo = null; }
     var alertas = [];
     enRuta.forEach(function (p) {
-      var senal = porPedido[String(p.id)].fecha || p.en_camino;
+      var senal = porPedido[String(p.id)].fecha || porPedido[String(p.id)].desde;
       if (p.hora_estimada instanceof Date && ahora > p.hora_estimada) alertas.push({ tipo: 'atraso', texto: p.numero + ': atrasado ' + Math.round((ahora - p.hora_estimada) / 60000) + ' min' });
       if (senal instanceof Date && (ahora - senal) / 60000 > minSen) alertas.push({ tipo: 'senal', texto: p.numero + ': sin señal hace ' + Math.round((ahora - senal) / 60000) + ' min' });
       var recientes = porPedido[String(p.id)].puntos.filter(function (r) { return (ahora - r.fecha) / 60000 <= minDet + 1 && r.fecha <= ahora; });
