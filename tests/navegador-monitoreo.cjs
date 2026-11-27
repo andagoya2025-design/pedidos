@@ -9,7 +9,16 @@ const L1={gps_version:2,ahora,alertas:0,motorizados:[moto('A',[pedido('01','En c
 async function run(engine,device,label){
  const browser=await engine.launch();try{
   const page=await browser.newPage({...device,serviceWorkers:'block'}),errors=[];page.setDefaultTimeout(8000);page.on('pageerror',e=>errors.push(e.message));
-  await page.route('**/*',r=>r.request().url()==='https://demo.invalid/monitoreo'?r.fulfill({contentType:'text/html',body:'<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><main id="contenido"></main></body></html>'}):r.abort());
+  let tileOK=false,tile403=0,tile200=0;
+  await page.route('**/*',r=>{
+   const url=r.request().url();
+   if(url==='https://demo.invalid/monitoreo')return r.fulfill({contentType:'text/html',body:'<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><main id="contenido"></main></body></html>'});
+   if(url.startsWith('https://tile.openstreetmap.org/')){
+    if(!tileOK){tile403++;return r.fulfill({status:403,contentType:'text/plain',headers:{'access-control-allow-origin':'*','cache-control':'no-store'},body:'Access blocked'});}
+    tile200++;return r.fulfill({status:200,contentType:'image/png',headers:{'access-control-allow-origin':'*','cache-control':'no-store'},body:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jR2kAAAAASUVORK5CYII=','base64')});
+   }
+   return r.abort();
+  });
   await page.goto('https://demo.invalid/monitoreo');
   for(const p of ['css/app.css','css/modulos.css','css/admin-elite.css','css/premium-integral.css'])await page.addStyleTag({content:read(p)});
   await page.addScriptTag({content:read('js/ui.js')});await page.addScriptTag({content:read('js/comun.js')});
@@ -23,8 +32,15 @@ async function run(engine,device,label){
   await pintar();await page.getByText('GPS confirmado',{exact:true}).waitFor();
   for(const t of ['Señal interrumpida','Esperando salida','Esperando señal GPS'])assert.equal(await page.getByText(t,{exact:true}).count(),1);
   await page.locator('.mapa-puntos .mapa-error').waitFor({state:'visible'});
-  assert.ok(await page.locator('.mapa-puntos img').evaluateAll(es=>es.length>0&&es.every(e=>e.referrerPolicy==='strict-origin-when-cross-origin'&&e.crossOrigin==='anonymous')));
+  const tiles=await page.locator('.mapa-puntos img[src^="https://tile.openstreetmap.org/"]').evaluateAll(es=>es.map(e=>({referer:e.getAttribute('referrerpolicy'),cors:e.getAttribute('crossorigin')})));
+  assert.ok(tiles.length>0,'debe dibujar cuadros del mapa');
+  for(const t of tiles)assert.deepEqual(t,{referer:'strict-origin-when-cross-origin',cors:'anonymous'},'atributos efectivos del cuadro');
   assert.ok(await page.locator('.mapa-puntos svg circle').count()>0);
+  assert.ok(tile403>0,'simular respuesta HTTP 403 real');
+  tileOK=true;await pintar();await page.getByText('GPS confirmado',{exact:true}).waitFor();
+  await page.waitForFunction(()=>{const es=[...document.querySelectorAll('.mapa-puntos img')];return es.length>0&&es.every(e=>e.complete&&e.naturalWidth>0);});
+  assert.ok(tile200>0,'simular recuperación de los cuadros');assert.equal(await page.locator('.mapa-puntos .mapa-error').isVisible(),false);
+
   assert.equal(await page.locator('#mn-cuerpo .monitor').count(),3);assert.equal(await page.locator('.monitor-resumen>div').count(),4);
   for(const tema of ['claro','oscuro']){await page.evaluate(t=>UI.tema(t),tema);assert.ok(await page.locator('#mn-cuerpo .btn').evaluateAll(es=>es.every(e=>e.getBoundingClientRect().height>=44)));assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=document.documentElement.clientWidth+1));fs.mkdirSync('capturas-monitoreo',{recursive:true});await page.screenshot({path:'capturas-monitoreo/'+label+'-'+tema+'.png',fullPage:true});}
   assert.equal(await page.locator('.monitor-cobertura').first().textContent(),'Señal confirmada1 de 2');
