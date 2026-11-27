@@ -28,9 +28,11 @@
   var vigilancia = null, temporizador = null, pedidos = [], ultimo = null, candadoPantalla = null;
   var estado = 'buscando'; // buscando | ok | permiso | gps | red
   var ultimoEnvio = null, buscando = false, primeroPendiente = false, enviando = false, generacion = 0, confirmaciones = Object.create(null);
+  var versiones = Object.create(null), secuencia = 0, epocaRed = 0, solicitudGps = 0, reenviar = false;
 
   function ahora() { return Date.now(); }
-  function fresca() { return !!ultimo && ahora() - ultimo.t <= VIEJA_MS; }
+  function fresca() { return !!ultimo && ahora() - ultimo.t <= VIEJA_MS && ultimo.t - ahora() <= 15000; }
+  function sinRed() { return global.navigator.onLine === false; }
   function dos(n) { return ('0' + n).slice(-2); }
   function hhmm(ms) { var d = new Date(ms); return dos(d.getHours()) + ':' + dos(d.getMinutes()); }
   function sesionActiva() { return !global.APP || !!global.APP.sesion; }
@@ -41,6 +43,7 @@
     gps: ['📍', 'No encontramos tu GPS. Revisa que la ubicación esté activada y sal a un lugar abierto. Se reintenta solo.'],
     parcial: ['📡', 'Ubicación confirmada solo para parte de tus pedidos. Reintentando… Deja esta pantalla abierta.'],
     pendiente: ['📡', 'Esperando confirmación del servidor. Deja esta pantalla abierta.'],
+    servidor: ['📡', 'Para varios pedidos, el local necesita actualizar el servidor de rastreo. Avísale al administrador.'],
     red: ['📶', 'Sin conexión: el local no recibió tu ubicación. Se reintenta cada minuto. Deja esta pantalla abierta.']
   };
 
@@ -65,13 +68,13 @@
 
   function alPosicion(pos) {
     var c = pos && pos.coords;
-    if (!c) return;
-    ultimo = {
-      lat: Math.round(c.latitude * 1e6) / 1e6, lng: Math.round(c.longitude * 1e6) / 1e6,
-      precision: Math.round(c.accuracy || 0),
-      t: typeof pos.timestamp === 'number' && pos.timestamp > 0 ? pos.timestamp : ahora()
-    };
-    if (estado === 'permiso' || estado === 'gps') cambiar('buscando');
+    if (!c || typeof c.latitude !== 'number' || typeof c.longitude !== 'number' || !isFinite(c.latitude) || !isFinite(c.longitude) || Math.abs(c.latitude) > 90 || Math.abs(c.longitude) > 180) { if (!fresca()) cambiar('gps'); return; }
+    var t = typeof pos.timestamp === 'number' && pos.timestamp > 0 ? pos.timestamp : ahora();
+    if (t - ahora() > 15000 || ahora() - t > VIEJA_MS || ultimo && t < ultimo.t) return;
+    var lat = Math.round(c.latitude * 1e6) / 1e6, lng = Math.round(c.longitude * 1e6) / 1e6;
+    var id = ultimo && ultimo.t === t && ultimo.lat === lat && ultimo.lng === lng ? ultimo.id : t.toString(36) + '-' + Math.random().toString(36).slice(2, 12) + '-' + (++secuencia).toString(36);
+    ultimo = { lat:lat, lng:lng, precision:Math.round(c.accuracy || 0), t:t, id:id };
+    if (!sinRed() && (estado === 'permiso' || estado === 'gps')) cambiar('buscando');
     if (primeroPendiente && pedidos.length && !global.document.hidden) enviar(); // primer punto apenas haya GPS
   }
 
@@ -82,43 +85,55 @@
 
   /* Pide una lectura nueva (sin usar la memoria del teléfono). */
   function pedirPosicionFresca() {
-    if (buscando || !global.navigator.geolocation) return;
+    if (buscando || !global.navigator.geolocation || sinRed()) return;
     buscando = true;
-    var turno = generacion;
-    global.navigator.geolocation.getCurrentPosition(function (pos) { if (turno !== generacion) return; buscando = false; alPosicion(pos); enviar(); },
-      function (err) { if (turno !== generacion) return; buscando = false; alError(err); }, { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 });
+    var turno = generacion, solicitud = ++solicitudGps;
+    global.navigator.geolocation.getCurrentPosition(function (pos) { if (turno !== generacion || solicitud !== solicitudGps) return; buscando = false; alPosicion(pos); enviar(); },
+      function (err) { if (turno !== generacion || solicitud !== solicitudGps) return; buscando = false; alError(err); }, { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 });
   }
 
   function enviar() {
     if (!sesionActiva()) { reiniciarTodo(); return Promise.resolve(); }
     if (!pedidos.length || global.document.hidden || enviando) return Promise.resolve();
-    if (!fresca()) { // nunca se envía una posición vieja como si fuera de ahora
+    if (sinRed()) { cambiar('red'); return Promise.resolve(); }
+    if (!fresca()) {
       if (estado === 'ok' || estado === 'red' || estado === 'parcial' || estado === 'pendiente') cambiar('buscando');
-      pedirPosicionFresca();
-      return Promise.resolve();
+      pedirPosicionFresca(); return Promise.resolve();
     }
-    var punto = ultimo, lista = pedidos.slice(), turno = generacion;
+    var punto = ultimo, lista = pedidos.slice(), turno = generacion, red = epocaRed, vigentes = Object.create(null);
+    lista.forEach(function (id) { vigentes[id] = versiones[id]; });
     enviando = true;
-    return Promise.all(lista.map(function (id) {
-      return DATOS.pedir('rastreoPunto', { pedido_id: id, lat: punto.lat, lng: punto.lng, precision: punto.precision }).then(function (respuesta) {
-        return { id: id, respuesta: respuesta };
-      }, function () { return { id: id, error: true }; });
-    })).then(function (resultados) {
-      if (turno !== generacion || !sesionActiva() || !pedidos.length) return;
-      var fallos = 0;
+    var datos = { lat:punto.lat, lng:punto.lng, precision:punto.precision, muestra_id:punto.id, capturado_ms:punto.t };
+    var operacion = lista.length === 1 ?
+      DATOS.pedir('rastreoPunto', Object.assign({ pedido_id:lista[0] }, datos)).then(function (v) { return [{ id:lista[0], respuesta:v }]; }) :
+      DATOS.pedir('rastreoLote', Object.assign({ pedido_ids:lista }, datos)).then(function (v) {
+        var porId = Object.create(null);
+        (v && Array.isArray(v.resultados) ? v.resultados : []).forEach(function (x) { porId[String(x.pedido_id)] = x; });
+        return lista.map(function (id) { return { id:id, respuesta:porId[id] }; });
+      });
+    return operacion.catch(function (e) {
+      return lista.map(function (id) { return { id:id, error:true, servidor:e && e.codigo === 'ACCION' }; });
+    }).then(function (resultados) {
+      if (turno !== generacion || red !== epocaRed || sinRed() || !sesionActiva() || !pedidos.length) return;
+      var fallos = 0, servidor = false, antigua = false;
       resultados.forEach(function (x) {
-        if (pedidos.indexOf(x.id) < 0) return;
+        if (pedidos.indexOf(x.id) < 0 || vigentes[x.id] !== versiones[x.id]) return;
         var v = x.respuesta, fecha = v && v.fecha ? Date.parse(v.fecha) : NaN;
-        if (v && v.guardado === true) confirmaciones[x.id] = ahora();
-        else if (v && v.motivo === 'intervalo_minimo' && isFinite(fecha) && Math.abs(ahora() - fecha) <= VIEJA_MS) confirmaciones[x.id] = fecha;
-        else { delete confirmaciones[x.id]; if (x.error) fallos++; }
+        if (v && (v.guardado === true || v.motivo === 'intervalo_minimo') && isFinite(fecha) && ahora() - fecha <= VIEJA_MS && fecha - ahora() <= 15000) confirmaciones[x.id] = fecha;
+        else if (v && v.guardado === true && !v.fecha) confirmaciones[x.id] = ahora(); // respuesta válida del servidor anterior para un solo pedido
+        else { delete confirmaciones[x.id]; if (x.error) fallos++; if (x.servidor) servidor = true; if (v && v.motivo === 'ubicacion_antigua') antigua = true; }
       });
       var n = pedidos.filter(function (id) { return confirmaciones[id] !== undefined && ahora() - confirmaciones[id] <= VIEJA_MS; }).length;
       primeroPendiente = false;
       if (n === pedidos.length) { ultimoEnvio = Math.min.apply(null, pedidos.map(function (id) { return confirmaciones[id]; })); cambiar('ok'); }
       else if (n) cambiar('parcial');
-      else cambiar(fallos ? 'red' : 'pendiente');
-    }).finally(function () { if (turno === generacion) enviando = false; });
+      else cambiar(servidor ? 'servidor' : fallos ? 'red' : 'pendiente');
+      if (antigua && ultimo === punto) ultimo = null;
+    }).finally(function () {
+      if (turno !== generacion) return;
+      enviando = false;
+      if (reenviar) { reenviar = false; enviar(); }
+    });
   }
 
   async function mantenerPantalla() {
@@ -140,7 +155,7 @@
   function detener() {
     if (vigilancia !== null && global.navigator.geolocation) global.navigator.geolocation.clearWatch(vigilancia);
     if (temporizador) clearInterval(temporizador);
-    generacion++; enviando = false; confirmaciones = Object.create(null);
+    generacion++; solicitudGps++; epocaRed++; enviando = false; reenviar = false; confirmaciones = Object.create(null); versiones = Object.create(null);
     vigilancia = null; temporizador = null; ultimo = null; ultimoEnvio = null; buscando = false; primeroPendiente = false;
     estado = 'buscando';
     try { if (candadoPantalla) candadoPantalla.release(); } catch (e) { /* ya liberado */ }
@@ -290,6 +305,18 @@
 
   function reiniciarTodo() { pedidos = []; detener(); quitarAyuda(); }
 
+  function cambioRed(enLinea) {
+    if (!pedidos.length || !sesionActiva()) return;
+    epocaRed++; solicitudGps++; buscando = false; ultimo = null; confirmaciones = Object.create(null);
+    if (!enLinea) { reenviar = false; cambiar('red'); return; }
+    cambiar('buscando');
+    if (global.document.hidden) return;
+    if (enviando) reenviar = true;
+    pedirPosicionFresca();
+  }
+  global.addEventListener('online', function () { cambioRed(true); });
+  global.addEventListener('offline', function () { cambioRed(false); });
+
   global.document.addEventListener('visibilitychange', function () {
     if (global.document.hidden || !pedidos.length) return;
     mantenerPantalla();
@@ -310,10 +337,19 @@
   global.RASTREO = {
     actualizar: function (lista) {
       var nueva = (lista || []).filter(function (id, i, arr) { return arr.indexOf(id) === i; });
-      var cambio = nueva.length !== pedidos.length || nueva.some(function (id) { return pedidos.indexOf(id) < 0; });
+      var agregados = nueva.filter(function (id) { return pedidos.indexOf(id) < 0; });
+      var estabaActivo = pedidos.length > 0;
       pedidos = nueva;
-      Object.keys(confirmaciones).forEach(function (id) { if (pedidos.indexOf(id) < 0) delete confirmaciones[id]; });
-      if (pedidos.length) { iniciar(); if (cambio && fresca()) { cambiar('buscando'); enviar(); } } else detener();
+      Object.keys(versiones).forEach(function (id) { if (pedidos.indexOf(id) < 0) { delete confirmaciones[id]; delete versiones[id]; } });
+      agregados.forEach(function (id) { versiones[id] = ++secuencia; });
+      if (pedidos.length) {
+        iniciar();
+        if (estabaActivo && agregados.length) {
+          ultimo = null; solicitudGps++; buscando = false; cambiar('buscando');
+          if (enviando) reenviar = true;
+          if (!global.document.hidden) pedirPosicionFresca();
+        }
+      } else detener();
       pintarBanda();
       asegurarAyuda();
     },

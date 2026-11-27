@@ -11,7 +11,7 @@
 (function (global) {
   'use strict';
   var UI = global.UI, DATOS = global.DATOS, APP = global.APP;
-  var T = 256, reloj = null, datos = null, solicitud = 0;
+  var T = 256, reloj = null, datos = null, solicitud = 0, ultimoContexto = null;
 
   /* ---------- Mapa liviano de puntos y ruta ---------- */
   function aPixel(lat, lng, z) {
@@ -75,28 +75,34 @@
     try {
       var respuesta = await DATOS.pedir('monitoreoSeguro', { local_id: local });
       if (n !== solicitud || local !== APP.local || sesion !== APP.sesion || !UI.$('#mn-cuerpo')) return;
-      datos = respuesta; pintar();
+      datos = respuesta; ultimoContexto = {local:local,sesion:sesion}; pintar();
     } catch (err) {
-      if (n === solicitud && local === APP.local && sesion === APP.sesion && UI.$('#mn-cuerpo')) UI.$('#mn-cuerpo').innerHTML = '<div class="banda error">⚠️ <span>' + UI.esc(err.codigo === 'ACCION' ? 'El centro de monitoreo necesita el servidor 3.1.31. Contacta al administrador. Los demás módulos siguen disponibles.' : err.message) + '</span></div>';
+      if (n !== solicitud || local !== APP.local || sesion !== APP.sesion || !UI.$('#mn-cuerpo')) return;
+      // Mantener los últimos datos del mismo local con aviso inequívoco de desconexión; jamás reutilizar otro contexto.
+      var c = UI.$('#mn-cuerpo');
+      if (err.codigo !== 'ACCION' && datos && ultimoContexto && ultimoContexto.local === local && ultimoContexto.sesion === sesion) {
+        pintar(true);
+      } else c.innerHTML = '<div class="banda error">⚠️ <span>' + UI.esc(err.codigo === 'ACCION' ? 'El centro de monitoreo necesita el servidor 3.1.32. Contacta al administrador. Los demás módulos siguen disponibles.' : err.message) + '</span></div>';
     }
   }
 
-  function pintar() {
+  function pintar(sinConexion) {
     var c = UI.$('#mn-cuerpo');
     if (!c) return;
     var m = datos.motorizados || [];
     var cuenta = function (e) { return m.filter(function (x) { return x.estado === e; }).length; };
     var puntos = m.filter(function (x) { return x.ultimo_punto && x.estado === 'en_camino'; }).map(function (x) {
-      return { lat: x.ultimo_punto.lat, lng: x.ultimo_punto.lng, etiqueta: String(x.nombre).split(' ')[0], color: x.pedidos.every(function (p) { return p.estado !== 'En camino' || p.gps_estado === 'confirmado'; }) && !x.alertas.length ? '#2b8a3e' : '#d97706' };
+      return { lat: x.ultimo_punto.lat, lng: x.ultimo_punto.lng, etiqueta: String(x.nombre).split(' ')[0], color: !sinConexion && x.pedidos.every(function (p) { return p.estado !== 'En camino' || p.gps_estado === 'confirmado'; }) && !x.alertas.length ? '#2b8a3e' : '#d97706' };
     });
     c.innerHTML =
+      (sinConexion ? '<div class="banda error monitor-desconexion" role="status">⚠️ <span>Sin actualización. Mostrando la última consulta de este local; el GPS no está confirmado en vivo.</span></div>' : '') +
       '<div class="resumen-mini monitor-resumen">' +
       '<div><b>' + cuenta('en_camino') + '</b><span>En camino</span></div>' +
       '<div><b>' + cuenta('asignado') + '</b><span>Por salir</span></div>' +
       '<div><b>' + cuenta('libre') + '</b><span>Disponibles</span></div>' +
       '<div class="' + (datos.alertas ? 'mal' : '') + '"><b>' + datos.alertas + '</b><span>alertas</span></div></div>' +
       '<div class="tarjeta monitor-mapa"><div class="item-titulo">Ubicación de entregas activas</div><div class="item-sub">Última consulta: ' + UI.esc(UI.hora(datos.ahora)) + ' · Verde: señal confirmada; ámbar: revisar estado.</div>' + (puntos.length ? UI.mapaPuntos(puntos, { ancho: Math.max(220, Math.min(600, (c.clientWidth || 340) - 28)), alto: 240 }) : '<div class="mapa-vacio">Sin puntos GPS confirmados de entregas activas.</div>') + '</div>' +
-      (m.length ? '<div class="lista" style="margin-top:12px">' + m.map(tarjeta).join('') + '</div>' : UI.vacio('🛵', 'No hay motorizados activos.')) +
+      (m.length ? '<div class="lista" style="margin-top:12px">' + m.map(function (x) { return tarjeta(x, sinConexion); }).join('') + '</div>' : UI.vacio('🛵', 'No hay motorizados activos.')) +
       '<details class="tarjeta guia-gps" style="margin-top:16px"><summary>💡 ¿Cómo ver al motorizado aunque tenga el teléfono bloqueado?</summary>' +
       '<p>Esta app avisa la ubicación cada minuto <b>solo mientras lleva un pedido y tiene la app abierta</b>. Para verlo todo el turno, pídale que comparta su ubicación con usted en <b>Google Maps</b> (foto → Compartir ubicación → su cuenta) y que la apague al terminar. Es lo más confiable y es gratis.</p>' +
       '<p class="ayuda">Por la ley de protección de datos: solo durante el turno, nunca fuera de él, y avíseles por escrito que se hace.</p></details>';
@@ -105,12 +111,13 @@
     UI.$$('[data-ruta]', c).forEach(function (b) { b.addEventListener('click', function () { verRuta(b.getAttribute('data-ruta'), b.getAttribute('data-num')); }); });
   }
 
-  function estadoGps(p) {
+  function estadoGps(p, sinConexion) {
     var e = { confirmado: ['GPS confirmado', 'ok'], sin_senal: ['Señal interrumpida', 'aviso'], esperando: ['Esperando señal GPS', 'aviso'], pendiente: ['Esperando salida', ''] }[p.gps_estado] || ['GPS sin confirmar', 'aviso'];
+    if (sinConexion && p.estado === 'En camino') e = ['Última señal sin actualizar', 'aviso'];
     return '<span class="etiqueta ' + e[1] + '">' + e[0] + '</span>' + (p.gps_fecha ? '<span class="item-sub"> · ' + UI.esc(UI.hora(p.gps_fecha)) + '</span>' : '');
   }
 
-  function tarjeta(m) {
+  function tarjeta(m, sinConexion) {
     var e = ESTADO[m.estado] || ESTADO.fuera;
     var nombre = String(m.nombre).split(' ')[0];
     var hace = m.ultimo_punto ? UI.minutosDesde(m.ultimo_punto.fecha, datos.ahora) : null;
@@ -122,7 +129,7 @@
       m.pedidos.map(function (p) {
         return '<div class="monitor-pedido"><div class="monitor-linea"><b>' + UI.esc(p.numero) + '</b><span>' + UI.esc(p.cliente) + '</span>' + UI.chipEstado(p.estado) + '</div>' +
           (p.en_camino ? '<div class="item-sub">Salió ' + UI.esc(UI.hora(p.en_camino)) + ' (' + UI.minutosDesde(p.en_camino, datos.ahora) + ' min)' + (p.hora_estimada ? ' · llega ' + UI.esc(UI.hora(p.hora_estimada)) : '') + '</div>' : '') +
-          '<div class="monitor-linea monitor-gps">' + estadoGps(p) + '</div>' +
+          '<div class="monitor-linea monitor-gps">' + estadoGps(p, sinConexion) + '</div>' +
           (p.estado === 'En camino' ? '<button class="btn borde chico" type="button" data-ruta="' + UI.esc(p.id) + '" data-num="' + UI.esc(p.numero) + '">🗺️ Ver recorrido</button>' : '') + '</div>';
       }).join('') +
       '<div class="monitor-datos"><span>Hoy: <b>' + m.hoy.entregas + '</b> entregas</span>' + (m.hoy.minutos !== null ? '<span>⏱️ ' + m.hoy.minutos + ' min</span>' : '') + (m.hoy.estrellas !== null ? '<span>⭐ ' + m.hoy.estrellas + '</span>' : '') +
@@ -131,6 +138,8 @@
       '<div class="acciones"><button class="btn secundario chico" type="button" data-llamar="' + UI.esc(m.celular) + '">📞 Llamar</button>' +
       '<button class="btn secundario chico" type="button" data-wa="' + UI.esc(m.celular) + '" data-nombre="' + UI.esc(nombre) + '">💬 WhatsApp</button></div></article>';
   }
+
+  global.addEventListener('online', function () { if (UI.$('#mn-cuerpo') && !document.hidden) cargar(); });
 
   async function verRuta(id, numero) {
     var local = APP.local, sesion = APP.sesion;

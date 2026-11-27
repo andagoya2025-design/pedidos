@@ -29,7 +29,7 @@ async function run(engine,device,label){
   await page.evaluate(()=>{__defer=true});await page.locator('[data-actualizar]').click();await page.waitForFunction(()=>window.__resolver);
   await page.evaluate(()=>{APP.local='L2'});await pintar();await page.getByText('PED-99',{exact:true}).waitFor();
   await page.evaluate(()=>{__resolver()});await page.waitForTimeout(150);assert.equal(await page.getByText('PED-01',{exact:true}).count(),0);
-  await page.evaluate(()=>{__error=true});await pintar();await page.getByText(/necesita el servidor 3.1.31/).waitFor();assert.ok(await page.evaluate(()=>__calls.every(c=>c[0]!=='monitoreo')));assert.deepEqual(errors,[]);
+  await page.evaluate(()=>{__error=true});await pintar();await page.getByText(/necesita el servidor 3.1.32/).waitFor();assert.ok(await page.evaluate(()=>__calls.every(c=>c[0]!=='monitoreo')));assert.deepEqual(errors,[]);
   console.log('MONITOREO '+label+' OK');
  }finally{await browser.close()}
 }

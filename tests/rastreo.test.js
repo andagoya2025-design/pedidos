@@ -61,7 +61,7 @@ test('rastreo: sin lectura de GPS la banda no dice que comparte y no se envía n
 test('rastreo: primer punto apenas hay GPS y la banda verde muestra la hora del último envío', async () => {
   const e = entorno(); e.R.actualizar(['P1']); e.posicion(-0.18, -78.48); await e.vaciar();
   assert.equal(e.llamadas.length, 1); assert.equal(e.llamadas[0].accion, 'rastreoPunto');
-  assert.deepEqual(Object.assign({}, e.llamadas[0].datos), { pedido_id: 'P1', lat: -0.18, lng: -78.48, precision: 12 });
+  const datos=e.llamadas[0].datos; assert.match(datos.muestra_id,/^[A-Za-z0-9_-]{1,64}$/); assert.deepEqual(Object.assign({}, datos), { pedido_id: 'P1', lat: -0.18, lng: -78.48, precision: 12, muestra_id:datos.muestra_id, capturado_ms:e.ahora });
   assert.equal(e.R.estado(), 'ok'); assert.match(e.banda.className, /\bok\b/); assert.match(e.banda.lastChild.textContent, /Compartiendo tu ubicación con el local\. Último envío: \d\d:\d\d/);
   assert.equal(e.banda.attrs['data-estado'], 'ok');
 });
@@ -174,10 +174,10 @@ test('ayuda: el código no envía nada solo y no guarda datos nuevos', () => {
 
 // 3.1.50 — cada pedido necesita una confirmación real.
 test('rastreo múltiple: respuesta parcial no pinta verde y recupera al confirmar ambos', async () => {
-  const e=entorno(); e.win.DATOS.pedir=async (a,d)=>{e.llamadas.push(d); return d.pedido_id==='P1'?{guardado:true}:{guardado:false};};
+  const e=entorno(); e.win.DATOS.pedir=async (a,d)=>{e.llamadas.push({a,d}); assert.equal(a,'rastreoLote'); return {resultados:[{pedido_id:'P1',guardado:true},{pedido_id:'P2',guardado:false}]};};
   e.R.actualizar(['P1','P2']); e.posicion(-0.18,-78.48); await e.vaciar();
-  assert.equal(e.llamadas.length,2); assert.equal(e.R.estado(),'parcial'); assert.doesNotMatch(e.banda.className,/\bok\b/);
-  e.win.DATOS.pedir=async()=>({guardado:true}); e.timers.find(t=>t.ms===60000).f(); await e.vaciar(); assert.equal(e.R.estado(),'ok');
+  assert.equal(e.llamadas.length,1); assert.deepEqual(Array.from(e.llamadas[0].d.pedido_ids),['P1','P2']); assert.equal(e.R.estado(),'parcial'); assert.doesNotMatch(e.banda.className,/\bok\b/);
+  e.win.DATOS.pedir=async()=>({resultados:[{pedido_id:'P1',guardado:true},{pedido_id:'P2',guardado:true}]}); e.timers.find(t=>t.ms===60000).f(); await e.vaciar(); assert.equal(e.R.estado(),'ok');
 });
 test('rastreo múltiple: respuesta ambigua antigua nunca confirma', async () => {
   const e=entorno(); e.respuesta={guardado:false}; e.R.actualizar(['P1']); e.posicion(-0.18,-78.48); await e.vaciar(); assert.equal(e.R.estado(),'pendiente');
@@ -191,4 +191,27 @@ test('rastreo: no solapa envíos y descarta respuesta de sesión anterior',async
  e.R.actualizar(['P1']);e.posicion(-0.18,-78.48);e.timers.find(t=>t.ms===60000).f();assert.equal(e.llamadas.length,1);
  const watcher=e.watch; e.R.detener();e.R.actualizar(['P2']);watcher.ok({coords:{latitude:1,longitude:2,accuracy:1},timestamp:e.ahora});
  resolver({guardado:true});await e.vaciar();assert.equal(e.R.estado(),'buscando');assert.equal(e.llamadas.length,1);
+});
+
+test('GPS red: desconexión no envía y volver en línea pide coordenadas frescas sin esperar minuto',async()=>{
+ const e=entorno();e.R.actualizar(['P1']);e.posicion(-.18,-78.48);await e.vaciar();const id=e.llamadas[0].datos.muestra_id;e.win.navigator.onLine=false;e.eventos.offline.forEach(f=>f());assert.equal(e.R.estado(),'red');e.timers.find(t=>t.ms===60000).f();await e.vaciar();assert.equal(e.llamadas.length,1);
+ e.ahora+=2000;e.win.navigator.onLine=true;e.eventos.online.forEach(f=>f());assert.equal(e.R.estado(),'buscando');assert.equal(e.actual.length,1);e.actual[0].ok({coords:{latitude:-.19,longitude:-78.49,accuracy:9},timestamp:e.ahora});await e.vaciar();assert.equal(e.llamadas.length,2);assert.notEqual(e.llamadas[1].datos.muestra_id,id);assert.equal(e.llamadas[1].datos.lat,-.19);assert.equal(e.R.estado(),'ok');
+});
+test('GPS red: respuesta tardía Wi-Fi no confirma después de cambiar a datos móviles',async()=>{
+ const e=entorno();let resolver;e.win.DATOS.pedir=(a,d)=>{e.llamadas.push({a,d});if(e.llamadas.length===1)return new Promise(r=>resolver=r);return Promise.resolve({guardado:true});};e.R.actualizar(['P1']);e.posicion(-.18,-78.48);e.win.navigator.onLine=false;e.eventos.offline.forEach(f=>f());e.win.navigator.onLine=true;e.eventos.online.forEach(f=>f());e.ahora+=2000;e.actual[0].ok({coords:{latitude:-.2,longitude:-78.5,accuracy:10},timestamp:e.ahora});assert.equal(e.llamadas.length,1);resolver({guardado:true});await e.vaciar();assert.equal(e.llamadas.length,2);assert.equal(e.llamadas[1].d.lat,-.2);assert.equal(e.R.estado(),'ok');
+});
+test('GPS muestra conserva identidad cuando se reintenta el mismo punto y cambia con nueva lectura',async()=>{
+ const e=entorno();e.R.actualizar(['P1']);e.posicion(-.18,-78.48);await e.vaciar();e.timers.find(t=>t.ms===60000).f();await e.vaciar();assert.equal(e.llamadas[0].datos.muestra_id,e.llamadas[1].datos.muestra_id);e.ahora+=60000;e.posicion(-.19,-78.49);e.timers.find(t=>t.ms===60000).f();await e.vaciar();assert.notEqual(e.llamadas[1].datos.muestra_id,e.llamadas[2].datos.muestra_id);
+});
+test('GPS no pinta verde con una recuperación antigua aunque guardado sea true',async()=>{
+ const e=entorno();e.respuesta={guardado:true,recuperado:true,fecha:new Date(e.ahora-120000).toISOString()};e.R.actualizar(['P1']);e.posicion(-.18,-78.48);await e.vaciar();assert.equal(e.R.estado(),'pendiente');
+});
+test('GPS inválido: no envía coordenadas fuera de rango, NaN ni tiempo futuro',async()=>{
+ const e=entorno();e.R.actualizar(['P1']);e.posicion(91,-78);e.posicion(NaN,-78);e.posicion(-.18,-78.48,e.ahora+16000);await e.vaciar();assert.equal(e.llamadas.length,0);
+});
+test('GPS lote sin servidor compatible avisa y no cae al rastreo inseguro individual',async()=>{
+ const e=entorno();e.win.DATOS.pedir=async(a,d)=>{e.llamadas.push(a);throw Object.assign(Error('Acción no reconocida'),{codigo:'ACCION'})};e.R.actualizar(['P1','P2']);e.posicion(-.18,-78.48);await e.vaciar();assert.deepEqual(e.llamadas,['rastreoLote']);assert.equal(e.R.estado(),'servidor');
+});
+test('GPS nuevo pedido exige muestra posterior, no confirma respuesta tardía para otro recorrido',async()=>{
+ const e=entorno();let resolve;e.win.DATOS.pedir=(a,d)=>{e.llamadas.push({a,d});if(e.llamadas.length===1)return new Promise(r=>resolve=r);return Promise.resolve({resultados:[{pedido_id:'P1',guardado:true},{pedido_id:'P2',guardado:true}]})};e.R.actualizar(['P1']);e.posicion(-.18,-78.48);e.R.actualizar(['P1','P2']);assert.equal(e.actual.length,1);e.ahora+=2000;e.actual[0].ok({coords:{latitude:-.2,longitude:-78.5,accuracy:9},timestamp:e.ahora});resolve({guardado:true});await e.vaciar();assert.equal(e.llamadas.length,2);assert.equal(e.llamadas[1].a,'rastreoLote');assert.deepEqual(Array.from(e.llamadas[1].d.pedido_ids),['P1','P2']);assert.equal(e.R.estado(),'ok');
 });

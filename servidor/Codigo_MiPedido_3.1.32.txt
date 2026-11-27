@@ -2059,7 +2059,7 @@ function etaMoto316_(p, cfg) {
   var confirmado = p.ultima_senal instanceof Date && (!corte || p.ultima_senal > corte);
   var puntos = confirmado ? leerTabla_('rastreo').filter(function (r) { return puntoGpsVigente_(r, p, corte, ahora) && r.fecha <= p.ultima_senal; }) : [];
   var ultimo = puntos.reduce(function (u, r) { return !u || r.fecha > u.fecha ? r : u; }, null);
-  if (!ultimo && p.sali_lat !== '' && p.sali_lng !== '') ultimo = { lat: p.sali_lat, lng: p.sali_lng };
+  if (!ultimo && (!corte || p.en_camino instanceof Date && p.en_camino > corte) && coord_(p.sali_lat, -90, 90) !== '' && coord_(p.sali_lng, -180, 180) !== '') ultimo = { lat: p.sali_lat, lng: p.sali_lng };
   if (!ultimo) return null;
   var n = distanciaKm_(ultimo, p) * 1.4 / Math.max(5, numero_(cfg.velocidad_moto_kmh) || 20) * 60;
   return { desde: Math.max(2, Math.floor(n * 0.85)), hasta: Math.max(6, Math.ceil(n * 1.35 + 3)) };
@@ -3708,7 +3708,6 @@ function registrarCorteGps_(p, ctx) {
 }
 
 function corteGps_(p) {
-  if (!p.incidencia_motivo) return null;
   var sh = hoja_('bitacora'), n = sh.getLastRow();
   if (n < 2) return null;
   var coincidencias = sh.getRange(2, 7, n - 1, 1).createTextFinder('GPS_CORTE:' + String(p.id)).matchCase(true).matchEntireCell(true).findAll();
@@ -3719,7 +3718,7 @@ function corteGps_(p) {
 }
 
 function puntoGpsVigente_(r, p, corte, ahora) {
-  return r && String(r.pedido_id) === String(p.id) && String(r.motorizado_id) === String(p.motorizado_id) && tienePunto_(r) &&
+  return r && String(r.pedido_id) === String(p.id) && String(r.motorizado_id) === String(p.motorizado_id) && tienePunto_(r) && coord_(r.lat, -90, 90) !== '' && coord_(r.lng, -180, 180) !== '' &&
     r.fecha instanceof Date && p.en_camino instanceof Date && r.fecha >= p.en_camino && (!corte || r.fecha > corte) && r.fecha <= ahora;
 }
 
@@ -3771,7 +3770,8 @@ function guardarRastreoGps_(data, ids, ctx) {
       if (clave && !exacto && (!senal || ahora - senal >= 40000)) exacto = buscarMuestraGps_(clave);
       if (exacto && !puntoGpsVigente_(exacto, p, corte, ahora)) { salida.motivo = 'ubicacion_antigua'; return; }
       var huerfano = ultimo && (!senal || ultimo.fecha > senal) && (corte || !p.incidencia_motivo || String(ultimo.id).indexOf('RAS-GPS-') === 0);
-      var recuperado = exacto && (!senal || exacto.fecha > senal) ? exacto : huerfano ? ultimo : null;
+      var recuperado = exacto && (!senal || exacto.fecha > senal) ? exacto : null;
+      if (huerfano && (!recuperado || ultimo.fecha > recuperado.fecha)) recuperado = ultimo;
       if (recuperado) {
         cambios.push({ p:p, fecha:recuperado.fecha });
         senal = recuperado.fecha;
@@ -3801,7 +3801,11 @@ function guardarRastreoGps_(data, ids, ctx) {
 
 function accionRutaPedido_(data, ctx) {
   var p = buscarPedido_(limpiarTexto_(data.pedido_id, 40), ctx);
-  var puntos = leerTabla_('rastreo').filter(function (r) { return String(r.pedido_id) === String(p.id) && tienePunto_(r) && r.fecha instanceof Date; }).sort(function (a, b) { return a.fecha - b.fecha; }).map(function (r) {
+  var activo = String(p.estado) === 'En camino', corte = activo ? corteGps_(p) : null, ahora = new Date();
+  var puntos = leerTabla_('rastreo').filter(function (r) {
+    if (String(r.pedido_id) !== String(p.id) || !tienePunto_(r) || !(r.fecha instanceof Date)) return false;
+    return !activo || p.ultima_senal instanceof Date && puntoGpsVigente_(r, p, corte, ahora) && r.fecha <= p.ultima_senal;
+  }).sort(function (a, b) { return a.fecha - b.fecha; }).map(function (r) {
     return { fecha: iso_(r.fecha), lat: Number(r.lat), lng: Number(r.lng) };
   });
   return { ok: true, data: { puntos: puntos } };

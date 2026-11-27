@@ -15,8 +15,8 @@ module.exports=function(src){
  const baseAsign=base.match(/    if \(String\(p\.motorizado_id\) !== motoId\) actualizarCampos_\('pedidos'[^\n]+/)[0];
  const cambioAsign="    if (String(p.motorizado_id) !== motoId) {\n      if (String(p.estado) === 'En camino') registrarCorteGps_(p, ctx);\n      "+baseAsign.trim().replace("if (String(p.motorizado_id) !== motoId) ","")+"\n    }";
  assert.ok(restored.includes(cambioAsign),'Corte GPS exacto');restored=restored.replace(cambioAsign,baseAsign);
- const viejoEta=base.slice(base.indexOf("  var puntos = leerTabla_('rastreo')",base.indexOf('function etaMoto316_(')),base.indexOf("  if (!ultimo",base.indexOf('function etaMoto316_(')));
- const nuevoEta="  var corte = corteGps_(p), ahora = new Date();\n  var confirmado = p.ultima_senal instanceof Date && (!corte || p.ultima_senal > corte);\n  var puntos = confirmado ? leerTabla_('rastreo').filter(function (r) { return puntoGpsVigente_(r, p, corte, ahora) && r.fecha <= p.ultima_senal; }) : [];\n  var ultimo = puntos.reduce(function (u, r) { return !u || r.fecha > u.fecha ? r : u; }, null);\n";
+ const viejoEta=base.slice(base.indexOf("  var puntos = leerTabla_('rastreo')",base.indexOf('function etaMoto316_(')),base.indexOf("  if (!ultimo) return null;",base.indexOf('function etaMoto316_(')));
+ const nuevoEta="  var corte = corteGps_(p), ahora = new Date();\n  var confirmado = p.ultima_senal instanceof Date && (!corte || p.ultima_senal > corte);\n  var puntos = confirmado ? leerTabla_('rastreo').filter(function (r) { return puntoGpsVigente_(r, p, corte, ahora) && r.fecha <= p.ultima_senal; }) : [];\n  var ultimo = puntos.reduce(function (u, r) { return !u || r.fecha > u.fecha ? r : u; }, null);\n  if (!ultimo && (!corte || p.en_camino instanceof Date && p.en_camino > corte) && coord_(p.sali_lat, -90, 90) !== '' && coord_(p.sali_lng, -180, 180) !== '') ultimo = { lat: p.sali_lat, lng: p.sali_lng };\n";
  assert.ok(restored.includes(nuevoEta),'ETA GPS exacta');restored=restored.replace(nuevoEta,viejoEta);
  assert.equal(restored,base,'Servidor fuera del alcance monitoreo intacto');
  return restored;
