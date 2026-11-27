@@ -24,12 +24,14 @@ async function run(engine,device,label){
   for(const t of ['Señal interrumpida','Esperando salida','Esperando señal GPS'])assert.equal(await page.getByText(t,{exact:true}).count(),1);
   assert.equal(await page.locator('#mn-cuerpo .monitor').count(),3);assert.equal(await page.locator('.monitor-resumen>div').count(),4);
   for(const tema of ['claro','oscuro']){await page.evaluate(t=>UI.tema(t),tema);assert.ok(await page.locator('#mn-cuerpo .btn').evaluateAll(es=>es.every(e=>e.getBoundingClientRect().height>=44)));assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=document.documentElement.clientWidth+1));fs.mkdirSync('capturas-monitoreo',{recursive:true});await page.screenshot({path:'capturas-monitoreo/'+label+'-'+tema+'.png',fullPage:true});}
+  assert.equal(await page.locator('.monitor-cobertura').first().textContent(),'Señal confirmada1 de 2');
+  await page.evaluate(()=>window.dispatchEvent(new Event('offline')));await page.getByText(/Sin conexión. Esperando datos actualizados/).waitFor();assert.equal(await page.locator('#mn-cuerpo .monitor').count(),0);await page.evaluate(()=>window.dispatchEvent(new Event('online')));await page.getByText('GPS confirmado',{exact:true}).waitFor();
   await page.locator('[data-ruta="01"]').click();await page.waitForFunction(()=>window.__ventana);assert.match(await page.evaluate(()=>__ventana.html),/polyline/);
   await page.locator('[data-wa]').first().click();assert.equal(await page.evaluate(()=>__wa[0]),'0990000000');
   await page.evaluate(()=>{__defer=true});await page.locator('[data-actualizar]').click();await page.waitForFunction(()=>window.__resolver);
   await page.evaluate(()=>{APP.local='L2'});await pintar();await page.getByText('PED-99',{exact:true}).waitFor();
   await page.evaluate(()=>{__resolver()});await page.waitForTimeout(150);assert.equal(await page.getByText('PED-01',{exact:true}).count(),0);
-  await page.evaluate(()=>{__error=true});await pintar();await page.getByText(/necesita el servidor 3.1.31/).waitFor();assert.ok(await page.evaluate(()=>__calls.every(c=>c[0]!=='monitoreo')));assert.deepEqual(errors,[]);
+  await page.evaluate(()=>{__error=true});await pintar();await page.getByText(/necesita el servidor 3.1.32/).waitFor();assert.ok(await page.evaluate(()=>__calls.every(c=>c[0]!=='monitoreo')));assert.deepEqual(errors,[]);
   console.log('MONITOREO '+label+' OK');
  }finally{await browser.close()}
 }

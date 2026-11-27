@@ -11,7 +11,7 @@
 (function (global) {
   'use strict';
   var UI = global.UI, DATOS = global.DATOS, APP = global.APP;
-  var T = 256, reloj = null, datos = null, solicitud = 0;
+  var T = 256, reloj = null, datos = null, solicitud = 0, activa = null;
 
   /* ---------- Mapa liviano de puntos y ruta ---------- */
   function aPixel(lat, lng, z) {
@@ -70,15 +70,28 @@
     }
   };
 
+  function sinRed() {
+    solicitud++; activa = null; datos = null;
+    var c = UI.$('#mn-cuerpo');
+    if (c) c.innerHTML = '<div class="banda error" role="status">📶 <span>Sin conexión. Esperando datos actualizados del monitoreo.</span></div>';
+  }
+  global.addEventListener('offline', function () { if (UI.$('#mn-cuerpo')) sinRed(); });
+  global.addEventListener('online', function () { if (UI.$('#mn-cuerpo') && !document.hidden) cargar(); });
+  document.addEventListener('visibilitychange', function () { if (!document.hidden && UI.$('#mn-cuerpo')) cargar(); });
+
   async function cargar() {
-    var n = ++solicitud, local = APP.local, sesion = APP.sesion;
+    if (!UI.$('#mn-cuerpo') || !APP.sesion) return;
+    if (global.navigator.onLine === false) { sinRed(); return; }
+    var local = APP.local, sesion = APP.sesion, cuerpo = UI.$('#mn-cuerpo');
+    if (activa && activa.local === local && activa.sesion === sesion && activa.cuerpo === cuerpo) return;
+    var n = ++solicitud; activa = {local:local,sesion:sesion,cuerpo:cuerpo};
     try {
       var respuesta = await DATOS.pedir('monitoreoSeguro', { local_id: local });
       if (n !== solicitud || local !== APP.local || sesion !== APP.sesion || !UI.$('#mn-cuerpo')) return;
       datos = respuesta; pintar();
     } catch (err) {
-      if (n === solicitud && local === APP.local && sesion === APP.sesion && UI.$('#mn-cuerpo')) UI.$('#mn-cuerpo').innerHTML = '<div class="banda error">⚠️ <span>' + UI.esc(err.codigo === 'ACCION' ? 'El centro de monitoreo necesita el servidor 3.1.31. Contacta al administrador. Los demás módulos siguen disponibles.' : err.message) + '</span></div>';
-    }
+      if (n === solicitud && local === APP.local && sesion === APP.sesion && UI.$('#mn-cuerpo')) UI.$('#mn-cuerpo').innerHTML = '<div class="banda error" role="status">⚠️ <span>' + UI.esc(err.codigo === 'ACCION' ? 'El centro de monitoreo necesita el servidor 3.1.32. Contacta al administrador. Los demás módulos siguen disponibles.' : err.message) + '</span></div>';
+    } finally { if (n === solicitud) activa = null; }
   }
 
   function pintar() {
@@ -114,10 +127,13 @@
     var e = ESTADO[m.estado] || ESTADO.fuera;
     var nombre = String(m.nombre).split(' ')[0];
     var hace = m.ultimo_punto ? UI.minutosDesde(m.ultimo_punto.fecha, datos.ahora) : null;
+    var activos = m.pedidos.filter(function (p) { return p.estado === 'En camino'; });
+    var confirmados = activos.filter(function (p) { return p.gps_estado === 'confirmado'; }).length;
     return '<article class="tarjeta monitor ' + (m.alertas.length ? 'con-alerta' : '') + '">' +
       '<div class="monitor-cabeza"><div class="avatar">' + (m.foto_url ? '<img src="' + UI.esc(m.foto_url) + '" alt="" referrerpolicy="no-referrer" onerror="this.remove()">' : '') + UI.esc(UI.iniciales(m.nombre)) + '</div>' +
       '<div class="item-cuerpo"><div class="item-titulo">' + UI.esc(m.nombre) + (m.placa ? ' <small>' + UI.esc(m.placa) + '</small>' : '') + '</div>' +
       '<div class="item-sub"><span class="etiqueta ' + e.c + '">' + e.t + '</span>' + (m.turno_inicio ? ' · turno desde ' + UI.esc(UI.hora(m.turno_inicio)) : '') + '</div></div></div>' +
+      (activos.length ? '<div class="monitor-cobertura" role="status"><span>Señal confirmada</span><b>' + confirmados + ' de ' + activos.length + '</b></div>' : '') +
       (m.alertas.length ? '<div class="alertas">' + m.alertas.map(function (a) { return '<div class="alerta ' + a.tipo + '">' + (ICONO_ALERTA[a.tipo] || '⚠️') + ' ' + UI.esc(a.texto) + '</div>'; }).join('') + '</div>' : '') +
       m.pedidos.map(function (p) {
         return '<div class="monitor-pedido"><div class="monitor-linea"><b>' + UI.esc(p.numero) + '</b><span>' + UI.esc(p.cliente) + '</span>' + UI.chipEstado(p.estado) + '</div>' +
@@ -139,7 +155,7 @@
       if (local !== APP.local || sesion !== APP.sesion || !UI.$('#mn-cuerpo')) return;
       UI.ventana({
         icono: '🗺️', titulo: 'Recorrido de ' + numero,
-        html: (r.puntos.length ? UI.mapaPuntos(r.puntos, { ruta: true, ancho: 340, alto: 260 }) +
+        html: (r.puntos.length ? UI.mapaPuntos(r.puntos, { ruta: true, ancho: Math.max(220, Math.min(340, (global.innerWidth || 360) - 48)), alto: 260 }) +
           '<p class="ayuda">🔵 salida · 🟢 último punto · ' + r.puntos.length + ' punto(s), uno por minuto.</p>' : '<p>Aún no hay puntos: el motorizado debe tener la app abierta mientras lleva el pedido.</p>'),
         botones: [{ texto: 'Cerrar', valor: true, clase: 'secundario' }]
       });

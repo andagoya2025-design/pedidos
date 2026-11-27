@@ -28,9 +28,10 @@
   var vigilancia = null, temporizador = null, pedidos = [], ultimo = null, candadoPantalla = null;
   var estado = 'buscando'; // buscando | ok | permiso | gps | red
   var ultimoEnvio = null, buscando = false, primeroPendiente = false, enviando = false, generacion = 0, confirmaciones = Object.create(null);
+  var tramos = Object.create(null), red = global.navigator.onLine !== false, epocaRed = 0, pendienteEnvio = false;
 
   function ahora() { return Date.now(); }
-  function fresca() { return !!ultimo && ahora() - ultimo.t <= VIEJA_MS; }
+  function fresca() { return !!ultimo && ahora() - ultimo.t <= VIEJA_MS && ultimo.t <= ahora() + 5000; }
   function dos(n) { return ('0' + n).slice(-2); }
   function hhmm(ms) { var d = new Date(ms); return dos(d.getHours()) + ':' + dos(d.getMinutes()); }
   function sesionActiva() { return !global.APP || !!global.APP.sesion; }
@@ -76,7 +77,7 @@
   }
 
   function alError(err) {
-    if (err && err.code === 1) return cambiar('permiso'); // PERMISSION_DENIED
+    if (err && err.code === 1) { ultimo = null; confirmaciones = Object.create(null); epocaRed++; primeroPendiente = true; return cambiar('permiso'); } // PERMISSION_DENIED
     if (!fresca()) cambiar('gps'); // sin señal o tiempo agotado: avisar solo si no hay una lectura reciente
   }
 
@@ -91,26 +92,48 @@
 
   function enviar() {
     if (!sesionActiva()) { reiniciarTodo(); return Promise.resolve(); }
-    if (!pedidos.length || global.document.hidden || enviando) return Promise.resolve();
+    if (!pedidos.length || global.document.hidden) return Promise.resolve();
+    if (!red || global.navigator.onLine === false) { cambiar('red'); return Promise.resolve(); }
+    if (enviando) return Promise.resolve();
     if (!fresca()) { // nunca se envía una posición vieja como si fuera de ahora
       if (estado === 'ok' || estado === 'red' || estado === 'parcial' || estado === 'pendiente') cambiar('buscando');
       pedirPosicionFresca();
       return Promise.resolve();
     }
-    var punto = ultimo, lista = pedidos.slice(), turno = generacion;
+    var punto = ultimo, lista = pedidos.slice(), turno = generacion, redActual = epocaRed, rutas = Object.assign({}, tramos);
+    var usaLote = lista.some(function (id) { return !!rutas[id]; });
     enviando = true;
-    return Promise.all(lista.map(function (id) {
-      return DATOS.pedir('rastreoPunto', { pedido_id: id, lat: punto.lat, lng: punto.lng, precision: punto.precision }).then(function (respuesta) {
-        return { id: id, respuesta: respuesta };
-      }, function () { return { id: id, error: true }; });
-    })).then(function (resultados) {
-      if (turno !== generacion || !sesionActiva() || !pedidos.length) return;
+    var consultar = async function () {
+      if (!usaLote) return Promise.all(lista.map(function (id) {
+        return DATOS.pedir('rastreoPunto', { pedido_id: id, lat: punto.lat, lng: punto.lng, precision: punto.precision }).then(function (respuesta) {
+          return { id: id, respuesta: respuesta };
+        }, function () { return { id: id, error: true }; });
+      }));
+      var resultados = [];
+      for (var i = 0; i < lista.length; i += 30) {
+        var grupo = lista.slice(i, i + 30), validos = grupo.filter(function (id) { return !!rutas[id]; });
+        if (turno !== generacion || redActual !== epocaRed || !red || global.document.hidden || !sesionActiva()) break;
+        try {
+          var v = validos.length ? await DATOS.pedir('rastreoLote', { pedidos: validos.map(function (id) { return {id:id, tramo:rutas[id]}; }), op_id: String(Math.round(punto.t)), lat:punto.lat, lng:punto.lng, precision:punto.precision }, {sinReintento:true}) : {};
+          grupo.forEach(function (id) {
+            var x = (v.resultados || []).filter(function (z) { return z.id === id; })[0];
+            resultados.push({ id:id, respuesta:x && x.respuesta, servidor:v.ahora });
+          });
+        } catch (err) { grupo.forEach(function (id) { resultados.push({id:id, error:true}); }); }
+      }
+      return resultados;
+    };
+    return consultar().then(function (resultados) {
+      if (turno !== generacion || redActual !== epocaRed || !red || !sesionActiva() || !pedidos.length) return;
       var fallos = 0;
       resultados.forEach(function (x) {
-        if (pedidos.indexOf(x.id) < 0) return;
+        if (pedidos.indexOf(x.id) < 0 || tramos[x.id] !== rutas[x.id]) return;
         var v = x.respuesta, fecha = v && v.fecha ? Date.parse(v.fecha) : NaN;
-        if (v && v.guardado === true) confirmaciones[x.id] = ahora();
-        else if (v && v.motivo === 'intervalo_minimo' && isFinite(fecha) && Math.abs(ahora() - fecha) <= VIEJA_MS) confirmaciones[x.id] = fecha;
+        var referencia = x.servidor ? Date.parse(x.servidor) : ahora();
+        var edad = referencia - fecha;
+        var confirmada = v && (v.guardado === true || ['intervalo_minimo','repetido','recuperado'].indexOf(v.motivo) >= 0);
+        if (!usaLote && v && v.guardado === true && !v.fecha) confirmaciones[x.id] = ahora();
+        else if (confirmada && isFinite(edad) && edad >= -5000 && edad <= VIEJA_MS) confirmaciones[x.id] = ahora() - Math.max(0, edad);
         else { delete confirmaciones[x.id]; if (x.error) fallos++; }
       });
       var n = pedidos.filter(function (id) { return confirmaciones[id] !== undefined && ahora() - confirmaciones[id] <= VIEJA_MS; }).length;
@@ -118,7 +141,11 @@
       if (n === pedidos.length) { ultimoEnvio = Math.min.apply(null, pedidos.map(function (id) { return confirmaciones[id]; })); cambiar('ok'); }
       else if (n) cambiar('parcial');
       else cambiar(fallos ? 'red' : 'pendiente');
-    }).finally(function () { if (turno === generacion) enviando = false; });
+    }).finally(function () {
+      if (turno !== generacion) return;
+      enviando = false;
+      if (pendienteEnvio) { pendienteEnvio = false; enviar(); }
+    });
   }
 
   async function mantenerPantalla() {
@@ -140,7 +167,7 @@
   function detener() {
     if (vigilancia !== null && global.navigator.geolocation) global.navigator.geolocation.clearWatch(vigilancia);
     if (temporizador) clearInterval(temporizador);
-    generacion++; enviando = false; confirmaciones = Object.create(null);
+    generacion++; enviando = false; confirmaciones = Object.create(null); tramos = Object.create(null); pendienteEnvio = false;
     vigilancia = null; temporizador = null; ultimo = null; ultimoEnvio = null; buscando = false; primeroPendiente = false;
     estado = 'buscando';
     try { if (candadoPantalla) candadoPantalla.release(); } catch (e) { /* ya liberado */ }
@@ -290,11 +317,19 @@
 
   function reiniciarTodo() { pedidos = []; detener(); quitarAyuda(); }
 
-  global.document.addEventListener('visibilitychange', function () {
-    if (global.document.hidden || !pedidos.length) return;
+  function reanudar() {
+    if (global.document.hidden || !pedidos.length || !sesionActiva()) return;
+    if (!red || global.navigator.onLine === false) { cambiar('red'); return; }
     mantenerPantalla();
-    if (fresca()) enviar(); else { if (estado === 'ok' || estado === 'red') cambiar('buscando'); pedirPosicionFresca(); }
+    if (enviando) { pendienteEnvio = true; return; }
+    if (fresca()) enviar(); else { cambiar('buscando'); pedirPosicionFresca(); }
+  }
+  global.document.addEventListener('visibilitychange', reanudar);
+  global.addEventListener('offline', function () {
+    red = false; epocaRed++; confirmaciones = Object.create(null); pendienteEnvio = false;
+    if (pedidos.length) cambiar('red');
   });
+  global.addEventListener('online', function () { red = true; epocaRed++; reanudar(); });
 
   // Cerrar sesión o vencer la sesión apaga el GPS al instante (privacidad).
   global.addEventListener('app:sesion-terminada', reiniciarTodo);
@@ -308,12 +343,19 @@
   }
 
   global.RASTREO = {
-    actualizar: function (lista) {
+    actualizar: function (lista, rutas) {
       var nueva = (lista || []).filter(function (id, i, arr) { return arr.indexOf(id) === i; });
-      var cambio = nueva.length !== pedidos.length || nueva.some(function (id) { return pedidos.indexOf(id) < 0; });
-      pedidos = nueva;
-      Object.keys(confirmaciones).forEach(function (id) { if (pedidos.indexOf(id) < 0) delete confirmaciones[id]; });
-      if (pedidos.length) { iniciar(); if (cambio && fresca()) { cambiar('buscando'); enviar(); } } else detener();
+      var nuevosTramos = Object.create(null);
+      nueva.forEach(function (id) { if (rutas && rutas[id]) nuevosTramos[id] = String(rutas[id]); });
+      var cambiaTramo = nueva.some(function (id) { return pedidos.indexOf(id) >= 0 && nuevosTramos[id] !== tramos[id]; });
+      var cambio = cambiaTramo || nueva.length !== pedidos.length || nueva.some(function (id) { return pedidos.indexOf(id) < 0; });
+      Object.keys(confirmaciones).forEach(function (id) { if (nueva.indexOf(id) < 0 || nuevosTramos[id] !== tramos[id]) delete confirmaciones[id]; });
+      pedidos = nueva; tramos = nuevosTramos;
+      if (pedidos.length) {
+        iniciar();
+        if (cambiaTramo) { ultimo = null; primeroPendiente = true; cambiar('buscando'); reanudar(); }
+        else if (cambio && fresca()) { cambiar('buscando'); reanudar(); }
+      } else detener();
       pintarBanda();
       asegurarAyuda();
     },

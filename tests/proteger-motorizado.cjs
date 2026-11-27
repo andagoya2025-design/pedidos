@@ -10,5 +10,7 @@ module.exports=function sinCambiosMotorizado(actual){
  assert.ok(a>=0&&b>a&&oa>=0&&ob>oa,'bloque de turno no encontrado');
  const sinTurno=actual.slice(0,a)+viejo.slice(oa,ob)+actual.slice(b);
  assert.equal(sinTurno.split('Ubicación marcada por el cliente').length,2,'el texto de ubicación debe aparecer una sola vez');
- return sinTurno.replace('Ubicación marcada por el cliente','Ver en el mapa');
+ const gps="global.RASTREO.actualizar(enCamino.map(function (p) { return p.id; }), enCamino.reduce(function (r, p) { if (p.gps_tramo) r[p.id] = p.gps_tramo; return r; }, Object.create(null)));";
+ assert.equal(sinTurno.split(gps).length,3,'exactamente dos conexiones de tramos GPS autorizadas');
+ return sinTurno.replaceAll(gps,"global.RASTREO.actualizar(enCamino.map(function (p) { return p.id; }));").replace('Ubicación marcada por el cliente','Ver en el mapa');
 };
