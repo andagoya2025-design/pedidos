@@ -140,3 +140,19 @@
 .ayuda-avisar:focus-visible,.ayuda-cancelar:focus-visible{outline:3px solid #1f1b16;outline-offset:2px}
 @media(prefers-reduced-motion:reduce){.btn-ayuda.pulsando::before{animation-duration:2s}}
 /* FIN AYUDA Y MENÚ 3.1.48 */
+
+
+/* 3.1.50: capa aislada del centro de monitoreo. */
+#mn-cuerpo .monitor-resumen{grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+#mn-cuerpo .monitor-resumen>div{min-width:0;border-radius:18px;padding:14px 8px;box-shadow:var(--premium-shadow);overflow-wrap:anywhere}
+#mn-cuerpo .monitor-resumen b{font-size:26px;line-height:1.1;color:var(--primario)}
+#mn-cuerpo .monitor-resumen .mal b{color:var(--error)}
+#mn-cuerpo .monitor-mapa{border-radius:20px;display:grid;gap:10px;min-width:0}
+#mn-cuerpo .monitor-mapa .mapa-puntos{max-width:100%;border-radius:16px}
+#mn-cuerpo .monitor{border-radius:20px;padding:16px;min-width:0;box-shadow:var(--premium-shadow)}
+#mn-cuerpo .monitor .monitor-pedido{border:1px solid var(--borde);border-radius:14px;padding:10px 12px;min-width:0;background:var(--superficie-2)}
+#mn-cuerpo .monitor-linea{width:100%;min-width:0;overflow-wrap:anywhere}
+#mn-cuerpo .monitor .btn{min-height:44px;white-space:normal}
+#mn-cuerpo .monitor .acciones{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+#mn-cuerpo .monitor-gps .etiqueta{font-weight:800}
+@media(max-width:540px){#mn-cuerpo .monitor-resumen{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}#mn-cuerpo .monitor{padding:12px}}

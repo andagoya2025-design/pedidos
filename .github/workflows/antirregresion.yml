@@ -88,6 +88,15 @@ jobs:
 
       - name: Premium integral y entregas reales simuladas
         run: node tests/navegador-integral.cjs
+      - name: Monitoreo seguro y estados GPS en cuatro pantallas
+        run: node tests/navegador-monitoreo.cjs
+      - name: Capturas del monitoreo
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: monitoreo-3.1.50
+          path: capturas-monitoreo/
+          if-no-files-found: warn
       - name: Capturas cliente y motorizado
         if: always()
         uses: actions/upload-artifact@v4

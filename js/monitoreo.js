@@ -90,11 +90,12 @@
       return { lat: x.ultimo_punto.lat, lng: x.ultimo_punto.lng, etiqueta: String(x.nombre).split(' ')[0], color: x.pedidos.every(function (p) { return p.estado !== 'En camino' || p.gps_estado === 'confirmado'; }) && !x.alertas.length ? '#2b8a3e' : '#d97706' };
     });
     c.innerHTML =
-      '<div class="resumen-mini">' +
-      '<div><b>' + cuenta('en_camino') + '</b><span>en camino</span></div>' +
-      '<div><b>' + (cuenta('libre') + cuenta('asignado')) + '</b><span>libres o por salir</span></div>' +
+      '<div class="resumen-mini monitor-resumen">' +
+      '<div><b>' + cuenta('en_camino') + '</b><span>En camino</span></div>' +
+      '<div><b>' + cuenta('asignado') + '</b><span>Por salir</span></div>' +
+      '<div><b>' + cuenta('libre') + '</b><span>Disponibles</span></div>' +
       '<div class="' + (datos.alertas ? 'mal' : '') + '"><b>' + datos.alertas + '</b><span>alertas</span></div></div>' +
-      '<div class="tarjeta"><div class="item-titulo">Ubicación de entregas activas</div><div class="item-sub">Última consulta: ' + UI.esc(UI.hora(datos.ahora)) + ' · Verde: señal confirmada; ámbar: revisar estado.</div>' + (puntos.length ? UI.mapaPuntos(puntos, { ancho: Math.max(220, Math.min(600, (c.clientWidth || 340) - 28)), alto: 240 }) : '<div class="mapa-vacio">Sin puntos GPS confirmados de entregas activas.</div>') + '</div>' +
+      '<div class="tarjeta monitor-mapa"><div class="item-titulo">Ubicación de entregas activas</div><div class="item-sub">Última consulta: ' + UI.esc(UI.hora(datos.ahora)) + ' · Verde: señal confirmada; ámbar: revisar estado.</div>' + (puntos.length ? UI.mapaPuntos(puntos, { ancho: Math.max(220, Math.min(600, (c.clientWidth || 340) - 28)), alto: 240 }) : '<div class="mapa-vacio">Sin puntos GPS confirmados de entregas activas.</div>') + '</div>' +
       (m.length ? '<div class="lista" style="margin-top:12px">' + m.map(tarjeta).join('') + '</div>' : UI.vacio('🛵', 'No hay motorizados activos.')) +
       '<details class="tarjeta guia-gps" style="margin-top:16px"><summary>💡 ¿Cómo ver al motorizado aunque tenga el teléfono bloqueado?</summary>' +
       '<p>Esta app avisa la ubicación cada minuto <b>solo mientras lleva un pedido y tiene la app abierta</b>. Para verlo todo el turno, pídale que comparta su ubicación con usted en <b>Google Maps</b> (foto → Compartir ubicación → su cuenta) y que la apague al terminar. Es lo más confiable y es gratis.</p>' +
@@ -121,11 +122,11 @@
       m.pedidos.map(function (p) {
         return '<div class="monitor-pedido"><div class="monitor-linea"><b>' + UI.esc(p.numero) + '</b><span>' + UI.esc(p.cliente) + '</span>' + UI.chipEstado(p.estado) + '</div>' +
           (p.en_camino ? '<div class="item-sub">Salió ' + UI.esc(UI.hora(p.en_camino)) + ' (' + UI.minutosDesde(p.en_camino, datos.ahora) + ' min)' + (p.hora_estimada ? ' · llega ' + UI.esc(UI.hora(p.hora_estimada)) : '') + '</div>' : '') +
-          '<div class="monitor-linea">' + estadoGps(p) + '</div>' +
+          '<div class="monitor-linea monitor-gps">' + estadoGps(p) + '</div>' +
           (p.estado === 'En camino' ? '<button class="btn borde chico" type="button" data-ruta="' + UI.esc(p.id) + '" data-num="' + UI.esc(p.numero) + '">🗺️ Ver recorrido</button>' : '') + '</div>';
       }).join('') +
       '<div class="monitor-datos"><span>Hoy: <b>' + m.hoy.entregas + '</b> entregas</span>' + (m.hoy.minutos !== null ? '<span>⏱️ ' + m.hoy.minutos + ' min</span>' : '') + (m.hoy.estrellas !== null ? '<span>⭐ ' + m.hoy.estrellas + '</span>' : '') +
-      '<span>💵 Debe ' + UI.esc(UI.dinero(m.debe)) + '</span></div>' +
+      '<span>💵 Debe' + (APP.local && APP.local !== 'TODOS' ? ' en este local' : '') + ' ' + UI.esc(UI.dinero(m.debe)) + '</span></div>' +
       (m.ultimo_punto ? '<div class="item-sub">📍 Último punto: hace ' + hace + ' min · <a target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=' + m.ultimo_punto.lat + ',' + m.ultimo_punto.lng + '">abrir en Maps</a></div>' : '') +
       '<div class="acciones"><button class="btn secundario chico" type="button" data-llamar="' + UI.esc(m.celular) + '">📞 Llamar</button>' +
       '<button class="btn secundario chico" type="button" data-wa="' + UI.esc(m.celular) + '" data-nombre="' + UI.esc(nombre) + '">💬 WhatsApp</button></div></article>';
