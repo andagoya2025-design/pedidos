@@ -29,4 +29,4 @@ MAIN contiene el código publicado, no una candidata. Leer primero js/config.js 
 - Depuración: eliminar del árbol activo solo documentos obsoletos verificados, con recuperación por SHA y sin afectar pruebas ni instalación. No eliminar ramas con commits únicos ni reescribir historial.
 - Caja anual y comercialización: cambios separados.
 
-- Candidata 3.1.50: servidor 30131 obligatorio para habilitar monitoreoSeguro; mínimo comercial 30129, pantalla 3.1.50, caché app-3.1.60-monitoreo. No publicar hasta confirmar CI del SHA, respaldo de hoja/script y prueba GPS física. La fuente estable sigue intacta.
+- Candidata 3.1.50: servidor 30132 obligatorio para habilitar monitoreo y GPS por lote; mínimo comercial 30129, pantalla 3.1.50, caché app-3.1.61-monitoreo-seguro. No publicar hasta confirmar CI del SHA, respaldo de hoja/script y prueba GPS física. La fuente estable sigue intacta.

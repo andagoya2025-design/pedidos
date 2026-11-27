@@ -18,10 +18,10 @@
  * ============================================================
  */
 
-var APP_VERSION = '3.1.31';
+var APP_VERSION = '3.1.32';
 // Marcador opaco, sin datos de pedidos. Una ejecución de Apps Script tiene su propio estado.
 var syncPendiente_ = false;
-var APP_VERSION_NUM = 30131; // 3.1.0 -> 30100 (la pantalla compara con su mínimo)
+var APP_VERSION_NUM = 30132; // 3.1.0 -> 30100 (la pantalla compara con su mínimo)
 var SESION_SEGUNDOS = 21600;  // 6 h; se renueva con cada uso
 var ROLES = ['dueno', 'cajero', 'motorizado'];
 
@@ -216,6 +216,7 @@ var ACCIONES = {
   turnoIniciar:       { tipo: 'sesion',  roles: ['motorizado'], fn: accionTurnoIniciar_ },
   turnoTerminar:      { tipo: 'sesion',  roles: ['motorizado'], fn: accionTurnoTerminar_ },
   rastreoPunto:       { tipo: 'sesion',  roles: ['motorizado'], fn: accionRastreoPunto_ },
+  rastreoLote:        { tipo: 'sesion',  roles: ['motorizado'], fn: accionRastreoLote_ },
   monitoreo:          { tipo: 'sesion',  roles: ['dueno', 'cajero'], fn: accionMonitoreo_ },
   monitoreoSeguro:    { tipo: 'sesion',  roles: ['dueno', 'cajero'], fn: accionMonitoreo_ },
   informeMotorizados: { tipo: 'dueno',   fn: accionInformeMotorizados_ },
@@ -2054,8 +2055,10 @@ function accionPedidoConsultar_(data) {
 /* ETA aproximado: último punto GPS del motorizado de ESTE pedido, sin mostrar las coordenadas. */
 function etaMoto316_(p, cfg) {
   if (String(p.estado) !== 'En camino' || !tienePunto_(p)) return null;
-  var puntos = leerTabla_('rastreo').filter(function (r) { return String(r.pedido_id) === String(p.id) && String(r.motorizado_id) === String(p.motorizado_id) && tienePunto_(r) && p.en_camino instanceof Date && r.fecha instanceof Date && r.fecha >= p.en_camino; });
-  var ultimo = puntos.length ? puntos[puntos.length - 1] : null;
+  var corte = corteGps_(p), ahora = new Date();
+  var confirmado = p.ultima_senal instanceof Date && (!corte || p.ultima_senal > corte);
+  var puntos = confirmado ? leerTabla_('rastreo').filter(function (r) { return puntoGpsVigente_(r, p, corte, ahora) && r.fecha <= p.ultima_senal; }) : [];
+  var ultimo = puntos.reduce(function (u, r) { return !u || r.fecha > u.fecha ? r : u; }, null);
   if (!ultimo && p.sali_lat !== '' && p.sali_lng !== '') ultimo = { lat: p.sali_lat, lng: p.sali_lng };
   if (!ultimo) return null;
   var n = distanciaKm_(ultimo, p) * 1.4 / Math.max(5, numero_(cfg.velocidad_moto_kmh) || 20) * 60;
@@ -2505,7 +2508,10 @@ function accionPedidoAsignar_(data, ctx) {
     m = leerTabla_('motorizados').filter(function (x) { return String(x.id) === motoId; })[0];
     if (!m || m.activo !== true) throw fallo_('Ese motorizado no está activo.');
     if (m.local_id && String(m.local_id) !== 'TODOS' && String(m.local_id) !== String(p.local_id)) throw fallo_('Ese motorizado es de otro local.');
-    if (String(p.motorizado_id) !== motoId) actualizarCampos_('pedidos', p._fila, p, { motorizado_id: motoId, incidencia_motivo: motivoCambio, ultima_senal: '', sali_lat: String(p.estado) === 'En camino' ? '' : p.sali_lat, sali_lng: String(p.estado) === 'En camino' ? '' : p.sali_lng });
+    if (String(p.motorizado_id) !== motoId) {
+      if (String(p.estado) === 'En camino') registrarCorteGps_(p, ctx);
+      actualizarCampos_('pedidos', p._fila, p, { motorizado_id: motoId, incidencia_motivo: motivoCambio, ultima_senal: '', sali_lat: String(p.estado) === 'En camino' ? '' : p.sali_lat, sali_lng: String(p.estado) === 'En camino' ? '' : p.sali_lng });
+    }
     p = buscarPedido_(data.id, ctx);
   } finally { lock.releaseLock(); }
   bitacora_(ctx.sesion, 'PEDIDOS', 'ASIGNAR', p.numero + ' → ' + m.nombre + (motivoCambio ? ' · Motivo: ' + motivoCambio : ''), ctx.dispositivo);
@@ -3694,22 +3700,102 @@ function accionTurnoTerminar_(data, ctx) {
 }
 
 /* ---------- 13.3 Rastreo: SOLO con pedido «En camino» (privacidad) ---------- */
+function registrarCorteGps_(p, ctx) {
+  // Marcador duradero en la bitácora existente: no añade columnas ni puntos falsos al mapa.
+  var s = ctx.sesion || {};
+  agregarFilas_('bitacora', [[new Date(), s.usuario || '', s.rol || '', String(p.local_id), 'GPS', 'CORTE', 'GPS_CORTE:' + String(p.id), '']]);
+  SpreadsheetApp.flush();
+}
+
+function corteGps_(p) {
+  if (!p.incidencia_motivo) return null;
+  var sh = hoja_('bitacora'), n = sh.getLastRow();
+  if (n < 2) return null;
+  var coincidencias = sh.getRange(2, 7, n - 1, 1).createTextFinder('GPS_CORTE:' + String(p.id)).matchCase(true).matchEntireCell(true).findAll();
+  if (!coincidencias.length) return null;
+  var fila = coincidencias.reduce(function (mayor, r) { return Math.max(mayor, r.getRow()); }, 2);
+  var v = sh.getRange(fila, 1, 1, 7).getValues()[0];
+  return v[4] === 'GPS' && v[5] === 'CORTE' && v[0] instanceof Date ? v[0] : null;
+}
+
+function puntoGpsVigente_(r, p, corte, ahora) {
+  return r && String(r.pedido_id) === String(p.id) && String(r.motorizado_id) === String(p.motorizado_id) && tienePunto_(r) &&
+    r.fecha instanceof Date && p.en_camino instanceof Date && r.fecha >= p.en_camino && (!corte || r.fecha > corte) && r.fecha <= ahora;
+}
+
+function buscarMuestraGps_(id) {
+  var sh = hoja_('rastreo'), n = sh.getLastRow();
+  if (n < 2) return null;
+  var celda = sh.getRange(2, 1, n - 1, 1).createTextFinder(id).matchCase(true).matchEntireCell(true).findNext();
+  if (!celda) return null;
+  var v = sh.getRange(celda.getRow(), 1, 1, 7).getValues()[0];
+  return { id:v[0], pedido_id:v[1], motorizado_id:v[2], fecha:v[3], lat:v[4], lng:v[5], precision:v[6] };
+}
+
 function accionRastreoPunto_(data, ctx) {
+  var resultados = guardarRastreoGps_(data, [limpiarTexto_(data.pedido_id, 40)], ctx);
+  var r = resultados[0]; delete r.pedido_id;
+  return { ok: true, data: r };
+}
+
+function accionRastreoLote_(data, ctx) {
+  if (!Array.isArray(data.pedido_ids) || !data.pedido_ids.length || data.pedido_ids.length > 50) throw fallo_('Lista de pedidos no válida.');
+  var ids = data.pedido_ids.map(function (id) { return limpiarTexto_(id, 40); }).filter(function (id, i, arr) { return id && arr.indexOf(id) === i; });
+  if (!ids.length) throw fallo_('Lista de pedidos no válida.');
+  return { ok: true, data: { resultados: guardarRastreoGps_(data, ids, ctx) } };
+}
+
+function guardarRastreoGps_(data, ids, ctx) {
   var lat = coord_(data.lat, -90, 90), lng = coord_(data.lng, -180, 180);
   if (lat === '' || lng === '') throw fallo_('Ubicación no válida.');
-  var lock = candado_();
+  var muestra = data.muestra_id == null ? '' : String(data.muestra_id), capturado = Number(data.capturado_ms);
+  if (muestra && (!/^[A-Za-z0-9_-]{1,64}$/.test(muestra) || !isFinite(capturado) || capturado <= 0)) throw fallo_('Lectura GPS no válida.');
+  var lock = candado_(), escritura = false;
   try {
-    var m = miMotorizado_(ctx);
-    var p = leerTabla_('pedidos').filter(function (x) { return String(x.id) === limpiarTexto_(data.pedido_id, 40); })[0];
-    if (!p || String(p.motorizado_id) !== String(m.id) || String(p.estado) !== 'En camino') return { ok: true, data: { guardado: false, motivo: 'sin_pedido_en_camino' } };
-    var ahora = new Date();
-    // Límite por pedido persistente, incluso si se pierde la caché. La reasignación y el regreso limpian ultima_senal.
-    if (p.ultima_senal instanceof Date && p.en_camino instanceof Date && p.ultima_senal >= p.en_camino && ahora >= p.ultima_senal && ahora - p.ultima_senal < 40000)
-      return { ok: true, data: { guardado: false, motivo: 'intervalo_minimo', fecha: iso_(p.ultima_senal) } };
-    agregarFilas_('rastreo', [[nuevoId_('RAS'), String(p.id), String(m.id), ahora, lat, lng, Math.round(numero_(data.precision))]]);
-    actualizarCampos_('pedidos', p._fila, p, { ultima_senal: ahora });
-    SpreadsheetApp.flush();
-    return { ok: true, data: { guardado: true, fecha: iso_(ahora) } };
+    var m = miMotorizado_(ctx), ahora = new Date(), porId = Object.create(null), resultados = [], filas = [], cambios = [];
+    leerTabla_('pedidos').forEach(function (p) { porId[String(p.id)] = p; });
+    // Una lectura acotada por lote; la búsqueda exacta de la muestra protege reintentos aun fuera de esta ventana.
+    var recientes = rastreoReciente_(300);
+    ids.forEach(function (id) {
+      var p = porId[id], salida = { pedido_id: id, guardado: false };
+      resultados.push(salida);
+      if (!p || String(p.motorizado_id) !== String(m.id) || String(p.estado) !== 'En camino' || !(p.en_camino instanceof Date)) { salida.motivo = 'sin_pedido_en_camino'; return; }
+      var corte = corteGps_(p), inicio = Math.max(p.en_camino.getTime(), corte ? corte.getTime() + 1 : 0);
+      if (muestra && (capturado < inicio || ahora.getTime() - capturado > 90000 || capturado - ahora.getTime() > 15000)) { salida.motivo = 'ubicacion_antigua'; return; }
+      var senal = p.ultima_senal instanceof Date && p.ultima_senal.getTime() >= inicio && p.ultima_senal <= ahora ? p.ultima_senal : null;
+      var ultimo = recientes.reduce(function (u, r) { return puntoGpsVigente_(r, p, corte, ahora) && (!u || r.fecha >= u.fecha) ? r : u; }, null);
+      var clave = muestra ? 'RAS-GPS-' + String(p.id) + ':' + String(m.id) + ':' + muestra : '';
+      var exacto = clave ? recientes.filter(function (r) { return String(r.id) === clave; })[0] : null;
+      // Si la fecha está confirmada, la frecuencia de 40 s se conserva sin más búsquedas.
+      // Una fila huérfana más nueva que la confirmación siempre se concilia antes de confirmar.
+      if (clave && !exacto && (!senal || ahora - senal >= 40000)) exacto = buscarMuestraGps_(clave);
+      if (exacto && !puntoGpsVigente_(exacto, p, corte, ahora)) { salida.motivo = 'ubicacion_antigua'; return; }
+      var huerfano = ultimo && (!senal || ultimo.fecha > senal) && (corte || !p.incidencia_motivo || String(ultimo.id).indexOf('RAS-GPS-') === 0);
+      var recuperado = exacto && (!senal || exacto.fecha > senal) ? exacto : huerfano ? ultimo : null;
+      if (recuperado) {
+        cambios.push({ p:p, fecha:recuperado.fecha });
+        senal = recuperado.fecha;
+        // No duplicar ni inventar otra lectura. La siguiente muestra podrá actualizar el punto.
+        salida.guardado = true; salida.recuperado = true; salida.fecha = iso_(senal); return;
+      }
+      if (exacto || (senal && ahora - senal < 40000)) {
+        salida.motivo = 'intervalo_minimo'; salida.fecha = iso_(senal || exacto.fecha); return;
+      }
+      filas.push([clave || nuevoId_('RAS'), id, String(m.id), ahora, lat, lng, Math.round(numero_(data.precision))]);
+      cambios.push({ p:p, fecha:ahora });
+      salida.guardado = true; salida.fecha = iso_(ahora);
+    });
+    // Escribir primero los puntos, después las confirmaciones. Ante un fallo la fila persistida permite recuperar sin repetir.
+    if (filas.length || cambios.length) {
+      escritura = true;
+      if (filas.length) agregarFilas_('rastreo', filas);
+      cambios.forEach(function (c) { actualizarCampos_('pedidos', c.p._fila, c.p, { ultima_senal:c.fecha }); });
+      SpreadsheetApp.flush();
+    }
+    return resultados;
+  } catch (e) {
+    if (escritura) { try { SpreadsheetApp.flush(); } catch (ignorado) {} }
+    throw e;
   } finally { lock.releaseLock(); }
 }
 
@@ -3752,8 +3838,9 @@ function accionMonitoreo_(data, ctx) {
     var enRuta = abiertos.filter(function (p) { return String(p.estado) === 'En camino'; });
     var porPedido = Object.create(null);
     enRuta.forEach(function (p) {
-      var confirmado = p.ultima_senal instanceof Date && p.en_camino instanceof Date && p.ultima_senal >= p.en_camino && p.ultima_senal <= ahora;
-      var actual = confirmado ? puntos.filter(function (r) { return String(r.pedido_id) === String(p.id) && r.fecha >= p.en_camino && r.fecha <= p.ultima_senal; }).sort(function (a, b) { return a.fecha - b.fecha; }) : [];
+      var corte = corteGps_(p);
+      var confirmado = p.ultima_senal instanceof Date && p.en_camino instanceof Date && p.ultima_senal >= p.en_camino && (!corte || p.ultima_senal > corte) && p.ultima_senal <= ahora;
+      var actual = confirmado ? puntos.filter(function (r) { return puntoGpsVigente_(r, p, corte, ahora) && r.fecha <= p.ultima_senal; }).sort(function (a, b) { return a.fecha - b.fecha; }) : [];
       porPedido[String(p.id)] = { fecha: confirmado ? p.ultima_senal : null, puntos: actual };
     });
     // Nunca pintar un punto histórico como posición actual de otro recorrido.
