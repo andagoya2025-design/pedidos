@@ -23,7 +23,8 @@ MAIN contiene el código publicado, no una candidata. Leer primero js/config.js 
 - La voz depende del dispositivo y permisos. No prometer avisos con aplicación cerrada sin infraestructura de push.
 
 ## Hoja de ruta
-- Estable de referencia: 3.1.41; conservar rama estable/3.1.41 y recuperación histórica 3.1.39.
-- Candidata de audio 3.1.42: validar en teléfonos reales antes de consolidar. Consultar MAIN y CI exactos; no inferir publicación.
+- Estable de referencia 3.1.49 (`bf445362ecf1109b6c343acebcaf0f0fb50b7282`); conservar ramas estable/3.1.49, estable/3.1.48 y estable/3.1.47. CI 445/445 y 13 suites de navegador; Pages exitoso.
+- Candidata 3.1.50: monitoreo, previa coordinación de servidor; validar GPS real y entregas múltiples. MAIN debe permanecer intacta hasta superar pruebas y recibir autorización expresa de publicación.
+- Archivo histórico `archivo/historico-2026-11-27` (`918f5361fcaf0810bdfd1407c72107dac92db469`) conserva el inventario de las ramas y los cuatro tips independientes. No integrar a MAIN. Retirar ramas antiguas solo tras verificar cada SHA y su alcance en el archivo; las pruebas usan SHA históricos que permanecen accesibles. No borrar datos, archivos ni historial Git.
 - Depuración: eliminar del árbol activo solo documentos obsoletos verificados, con recuperación por SHA y sin afectar pruebas ni instalación. No eliminar ramas con commits únicos ni reescribir historial.
 - Caja anual y comercialización: cambios separados.
