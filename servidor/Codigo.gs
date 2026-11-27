@@ -18,10 +18,10 @@
  * ============================================================
  */
 
-var APP_VERSION = '3.1.31';
+var APP_VERSION = '3.1.32';
 // Marcador opaco, sin datos de pedidos. Una ejecución de Apps Script tiene su propio estado.
 var syncPendiente_ = false;
-var APP_VERSION_NUM = 30131; // 3.1.0 -> 30100 (la pantalla compara con su mínimo)
+var APP_VERSION_NUM = 30132; // 3.1.0 -> 30100 (la pantalla compara con su mínimo)
 var SESION_SEGUNDOS = 21600;  // 6 h; se renueva con cada uso
 var ROLES = ['dueno', 'cajero', 'motorizado'];
 
@@ -216,6 +216,7 @@ var ACCIONES = {
   turnoIniciar:       { tipo: 'sesion',  roles: ['motorizado'], fn: accionTurnoIniciar_ },
   turnoTerminar:      { tipo: 'sesion',  roles: ['motorizado'], fn: accionTurnoTerminar_ },
   rastreoPunto:       { tipo: 'sesion',  roles: ['motorizado'], fn: accionRastreoPunto_ },
+  rastreoLote:        { tipo: 'sesion',  roles: ['motorizado'], fn: accionRastreoLote_ },
   monitoreo:          { tipo: 'sesion',  roles: ['dueno', 'cajero'], fn: accionMonitoreo_ },
   monitoreoSeguro:    { tipo: 'sesion',  roles: ['dueno', 'cajero'], fn: accionMonitoreo_ },
   informeMotorizados: { tipo: 'dueno',   fn: accionInformeMotorizados_ },
@@ -2054,10 +2055,10 @@ function accionPedidoConsultar_(data) {
 /* ETA aproximado: último punto GPS del motorizado de ESTE pedido, sin mostrar las coordenadas. */
 function etaMoto316_(p, cfg) {
   if (String(p.estado) !== 'En camino' || !tienePunto_(p)) return null;
-  var puntos = leerTabla_('rastreo').filter(function (r) { return String(r.pedido_id) === String(p.id) && String(r.motorizado_id) === String(p.motorizado_id) && tienePunto_(r) && p.en_camino instanceof Date && r.fecha instanceof Date && r.fecha >= p.en_camino; });
+  var tramo = gpsTramo_(p), puntos = gpsPuntosTramo_(p, tramo, leerTabla_('rastreo'));
   var ultimo = puntos.length ? puntos[puntos.length - 1] : null;
-  if (!ultimo && p.sali_lat !== '' && p.sali_lng !== '') ultimo = { lat: p.sali_lat, lng: p.sali_lng };
-  if (!ultimo) return null;
+  if (!ultimo && tramo.desde === tramo.salida && coord_(p.sali_lat, -90, 90) !== '' && coord_(p.sali_lng, -180, 180) !== '') ultimo = { lat: p.sali_lat, lng: p.sali_lng, fecha: p.en_camino };
+  if (!ultimo || !(ultimo.fecha instanceof Date) || Date.now() - ultimo.fecha.getTime() > (numero_(cfg.minutos_alerta_senal) || 5) * 60000) return null;
   var n = distanciaKm_(ultimo, p) * 1.4 / Math.max(5, numero_(cfg.velocidad_moto_kmh) || 20) * 60;
   return { desde: Math.max(2, Math.floor(n * 0.85)), hasta: Math.max(6, Math.ceil(n * 1.35 + 3)) };
 }
@@ -2505,6 +2506,7 @@ function accionPedidoAsignar_(data, ctx) {
     m = leerTabla_('motorizados').filter(function (x) { return String(x.id) === motoId; })[0];
     if (!m || m.activo !== true) throw fallo_('Ese motorizado no está activo.');
     if (m.local_id && String(m.local_id) !== 'TODOS' && String(m.local_id) !== String(p.local_id)) throw fallo_('Ese motorizado es de otro local.');
+    if (String(p.motorizado_id) !== motoId && String(p.estado) === 'En camino') gpsMarcarTramo_(p);
     if (String(p.motorizado_id) !== motoId) actualizarCampos_('pedidos', p._fila, p, { motorizado_id: motoId, incidencia_motivo: motivoCambio, ultima_senal: '', sali_lat: String(p.estado) === 'En camino' ? '' : p.sali_lat, sali_lng: String(p.estado) === 'En camino' ? '' : p.sali_lng });
     p = buscarPedido_(data.id, ctx);
   } finally { lock.releaseLock(); }
@@ -2520,6 +2522,7 @@ function accionPedidoRegresar_(data, ctx) {
   try {
     p = buscarPedido_(data.id, ctx);
     if (String(p.estado) !== 'En camino') throw fallo_('Solo un pedido En camino puede regresar al local.', 'CAMBIO');
+    gpsMarcarTramo_(p);
     actualizarCampos_('pedidos', p._fila, p, { estado: 'Preparando', en_camino: '', sali_lat: '', sali_lng: '', ultima_senal: '', incidencia_motivo: motivo });
     p = buscarPedido_(data.id, ctx);
   } finally { lock.releaseLock(); }
@@ -2727,7 +2730,7 @@ function accionMisEntregas_(data, ctx) {
   var deuda = deudaMotorizado_(String(m.id), cajas, pedidos);
   return { ok: true, data: {
     motorizado: { id: String(m.id), nombre: String(m.nombre) },
-    pedidos: mios.map(function (p) { var salida = pedidoSalida_(p, det[String(p.id)] || []); salida.cambios_pendientes = !!bloqueos[String(p.id)]; return salida; }).sort(function (a, b) { return a.creado < b.creado ? -1 : 1; }),
+    pedidos: mios.map(function (p) { var salida = pedidoSalida_(p, det[String(p.id)] || []); salida.cambios_pendientes = !!bloqueos[String(p.id)]; if (String(p.estado) === 'En camino') salida.gps_tramo = gpsTramo_(p).id; return salida; }).sort(function (a, b) { return a.creado < b.creado ? -1 : 1; }),
     debe: { fondo: deuda.fondo, efectivo: deuda.efectivo, total: deuda.total },
     turno: turnoSalida_(turnoAbierto_(String(m.id))), // 3.1
     exigir_turno: siNo_(cfg.exigir_turno), codigo_entrega: siNo_(cfg.codigo_entrega)
@@ -3695,29 +3698,104 @@ function accionTurnoTerminar_(data, ctx) {
 
 /* ---------- 13.3 Rastreo: SOLO con pedido «En camino» (privacidad) ---------- */
 function accionRastreoPunto_(data, ctx) {
-  var lat = coord_(data.lat, -90, 90), lng = coord_(data.lng, -180, 180);
-  if (lat === '' || lng === '') throw fallo_('Ubicación no válida.');
-  var lock = candado_();
-  try {
-    var m = miMotorizado_(ctx);
-    var p = leerTabla_('pedidos').filter(function (x) { return String(x.id) === limpiarTexto_(data.pedido_id, 40); })[0];
-    if (!p || String(p.motorizado_id) !== String(m.id) || String(p.estado) !== 'En camino') return { ok: true, data: { guardado: false, motivo: 'sin_pedido_en_camino' } };
-    var ahora = new Date();
-    // Límite por pedido persistente, incluso si se pierde la caché. La reasignación y el regreso limpian ultima_senal.
-    if (p.ultima_senal instanceof Date && p.en_camino instanceof Date && p.ultima_senal >= p.en_camino && ahora >= p.ultima_senal && ahora - p.ultima_senal < 40000)
-      return { ok: true, data: { guardado: false, motivo: 'intervalo_minimo', fecha: iso_(p.ultima_senal) } };
-    agregarFilas_('rastreo', [[nuevoId_('RAS'), String(p.id), String(m.id), ahora, lat, lng, Math.round(numero_(data.precision))]]);
-    actualizarCampos_('pedidos', p._fila, p, { ultima_senal: ahora });
-    SpreadsheetApp.flush();
-    return { ok: true, data: { guardado: true, fecha: iso_(ahora) } };
-  } finally { lock.releaseLock(); }
+  return { ok: true, data: gpsGuardarLote_(data, [{id: data.pedido_id, tramo: data.tramo}], ctx, false).resultados[0].respuesta };
 }
 
+/* Tramo persistente en propiedades del script, sin nuevas columnas ni coordenadas de control.
+   Solo se guarda una frontera para pedidos reasignados; no se guarda ubicación en propiedades. */
+function gpsTramo_(p, props) {
+  var salida = p.en_camino instanceof Date ? p.en_camino.getTime() : 0;
+  var k = 'GPS_TRAMO_' + String(p.id);
+  var marca = Number(props ? props[k] : PropertiesService.getScriptProperties().getProperty(k)) || 0;
+  var desde = Math.max(salida, marca);
+  return { salida: salida, desde: desde, id: String(salida) + '.' + String(desde) };
+}
+function gpsMarcarTramo_(p) {
+  var pr = PropertiesService.getScriptProperties(), k = 'GPS_TRAMO_' + String(p.id);
+  var marca = Math.max(Date.now() + 1, (Number(pr.getProperty(k)) || 0) + 1, p.ultima_senal instanceof Date ? p.ultima_senal.getTime() + 1 : 0);
+  try { pr.setProperty(k, String(marca)); }
+  catch (e) { gpsLimpiarTramos_(); pr.setProperty(k, String(marca)); }
+}
+function gpsLimpiarTramos_() {
+  var pr = PropertiesService.getScriptProperties(), ps = pr.getProperties(), activos = Object.create(null);
+  leerTabla_('pedidos').forEach(function (p) { if (String(p.estado) === 'En camino') activos['GPS_TRAMO_' + String(p.id)] = true; });
+  Object.keys(ps).forEach(function (k) { if (k.indexOf('GPS_TRAMO_') === 0 && !activos[k]) pr.deleteProperty(k); });
+}
+function gpsPuntoValido_(r, p, tramo) {
+  return r && String(r.pedido_id) === String(p.id) && String(r.motorizado_id) === String(p.motorizado_id) &&
+    r.fecha instanceof Date && r.fecha.getTime() >= tramo.desde && coord_(r.lat, -90, 90) !== '' && coord_(r.lng, -180, 180) !== '';
+}
+function gpsPuntosTramo_(p, tramo, puntos) {
+  if (!(p.ultima_senal instanceof Date) || p.ultima_senal.getTime() < tramo.desde) return [];
+  return puntos.filter(function (r) { return gpsPuntoValido_(r, p, tramo) && r.fecha <= p.ultima_senal; }).sort(function (a, b) { return a.fecha - b.fecha; });
+}
+/* Búsqueda exacta por ID en la primera columna, incluso fuera de la ventana reciente. */
+function gpsBuscarId_(id) {
+  var sh = hoja_('rastreo'), n = sh.getLastRow() - 1;
+  if (n <= 0) return null;
+  var celda = sh.getRange(2, 1, n, 1).createTextFinder(id).matchEntireCell(true).matchCase(true).findNext();
+  if (!celda) return null;
+  var fila = sh.getRange(celda.getRow(), 1, HOJAS.rastreo.length).getValues()[0], r = {};
+  HOJAS.rastreo.forEach(function (c, i) { r[c[0]] = fila[i]; });
+  return r;
+}
+function accionRastreoLote_(data, ctx) {
+  if (!Array.isArray(data.pedidos) || !data.pedidos.length || data.pedidos.length > 30 || !/^\d{1,16}$/.test(String(data.op_id || ''))) throw fallo_('Lote GPS inválido.');
+  return { ok: true, data: gpsGuardarLote_(data, data.pedidos, ctx, true) };
+}
+function gpsGuardarLote_(data, lista, ctx, exigeTramo) {
+  var lat = coord_(data.lat, -90, 90), lng = coord_(data.lng, -180, 180);
+  if (lat === '' || lng === '') throw fallo_('Ubicación no válida.');
+  var op = String(data.op_id || '');
+  if (op && !/^\d{1,16}$/.test(op)) throw fallo_('Identificador GPS inválido.');
+  var lock = candado_();
+  try {
+    var m = miMotorizado_(ctx), ahora = new Date(), mapa = Object.create(null), vistos = Object.create(null);
+    var props = PropertiesService.getScriptProperties().getProperties();
+    leerTabla_('pedidos').forEach(function (p) { mapa[String(p.id)] = p; });
+    var recientes = op ? [] : rastreoReciente_(3000);
+    var filas = [], confirmar = [], resultados = [];
+    lista.forEach(function (item) {
+      var id = limpiarTexto_((item || {}).id, 40), p = mapa[id];
+      if (vistos[id]) return; vistos[id] = true;
+      var r = { id: id, respuesta: { guardado: false, motivo: 'sin_pedido_en_camino' } };
+      resultados.push(r);
+      if (!p || String(p.motorizado_id) !== String(m.id) || String(p.estado) !== 'En camino' || !(p.en_camino instanceof Date)) return;
+      var tramo = gpsTramo_(p, props);
+      if ((exigeTramo || item.tramo) && String(item.tramo || '') !== tramo.id) { r.respuesta.motivo = 'tramo_cambiado'; return; }
+      if (ahora.getTime() < tramo.desde) { r.respuesta.motivo = 'esperar_tramo'; return; }
+      var fechaConfirmada = p.ultima_senal instanceof Date && p.ultima_senal.getTime() >= tramo.desde && p.ultima_senal <= ahora ? p.ultima_senal : null;
+      var puntoId = op ? 'RAS2-' + hashClave_(JSON.stringify([id, String(m.id), tramo.id, op]), 'GPS') : '';
+      var previo = op ? gpsBuscarId_(puntoId) : recientes.reduce(function (u, x) {
+        return gpsPuntoValido_(x, p, tramo) && x.fecha <= ahora && ahora - x.fecha < 40000 && (!u || x.fecha > u.fecha) ? x : u;
+      }, null);
+      if (previo && gpsPuntoValido_(previo, p, tramo) && previo.fecha <= ahora) {
+        var reparar = !fechaConfirmada || previo.fecha > fechaConfirmada;
+        if (reparar) confirmar.push({p:p, fecha:previo.fecha});
+        r.respuesta = { guardado: false, motivo: reparar ? 'recuperado' : (op ? 'repetido' : 'intervalo_minimo'), fecha: iso_(reparar ? previo.fecha : fechaConfirmada) };
+        return;
+      }
+      if (fechaConfirmada && ahora - fechaConfirmada < 40000) {
+        r.respuesta = { guardado: false, motivo: 'intervalo_minimo', fecha: iso_(fechaConfirmada) };
+        return;
+      }
+      filas.push([puntoId || nuevoId_('RAS'), id, String(m.id), ahora, lat, lng, Math.max(0, Math.round(numero_(data.precision)))]);
+      confirmar.push({p:p, fecha:ahora});
+      r.respuesta = { guardado: true, fecha: iso_(ahora) };
+    });
+    // Dos fases bajo el mismo candado: primero puntos duraderos, después confirmaciones.
+    // Un reintento encuentra el ID persistido y solo repara la segunda fase.
+    if (filas.length) { agregarFilas_('rastreo', filas); SpreadsheetApp.flush(); }
+    confirmar.forEach(function (x) { actualizarCampos_('pedidos', x.p._fila, x.p, {ultima_senal:x.fecha}); });
+    if (confirmar.length) SpreadsheetApp.flush();
+    return { resultados: resultados, ahora: iso_(ahora) };
+  } finally { lock.releaseLock(); }
+}
 function accionRutaPedido_(data, ctx) {
   var p = buscarPedido_(limpiarTexto_(data.pedido_id, 40), ctx);
-  var puntos = leerTabla_('rastreo').filter(function (r) { return String(r.pedido_id) === String(p.id) && tienePunto_(r) && r.fecha instanceof Date; }).sort(function (a, b) { return a.fecha - b.fecha; }).map(function (r) {
-    return { fecha: iso_(r.fecha), lat: Number(r.lat), lng: Number(r.lng) };
-  });
+  var puntos = leerTabla_('rastreo').filter(function (r) { return String(r.pedido_id) === String(p.id) && tienePunto_(r) && r.fecha instanceof Date; });
+  if (String(p.estado) === 'En camino') puntos = gpsPuntosTramo_(p, gpsTramo_(p), puntos);
+  puntos = puntos.sort(function (a, b) { return a.fecha - b.fecha; }).map(function (r) { return { fecha: iso_(r.fecha), lat: Number(r.lat), lng: Number(r.lng) }; });
   return { ok: true, data: { puntos: puntos } };
 }
 
@@ -3733,6 +3811,7 @@ function accionMonitoreo_(data, ctx) {
   var turnos = leerTabla_('turnos');
   var rastreo = rastreoReciente_(3000).filter(function (r) { return idsLocales[String(r.pedido_id)] && tienePunto_(r) && r.fecha instanceof Date; });
   var cajas = leerTabla_('caja').filter(function (c) { return String(c.estado) === 'abierta' && (local === 'TODOS' || String(c.local_id) === local); });
+  var propsGPS = PropertiesService.getScriptProperties().getProperties();
   var lista = motos.map(function (m) {
     var id = String(m.id);
     var mios = pedidos.filter(function (p) { return String(p.motorizado_id) === id; });
@@ -3752,9 +3831,8 @@ function accionMonitoreo_(data, ctx) {
     var enRuta = abiertos.filter(function (p) { return String(p.estado) === 'En camino'; });
     var porPedido = Object.create(null);
     enRuta.forEach(function (p) {
-      var confirmado = p.ultima_senal instanceof Date && p.en_camino instanceof Date && p.ultima_senal >= p.en_camino && p.ultima_senal <= ahora;
-      var actual = confirmado ? puntos.filter(function (r) { return String(r.pedido_id) === String(p.id) && r.fecha >= p.en_camino && r.fecha <= p.ultima_senal; }).sort(function (a, b) { return a.fecha - b.fecha; }) : [];
-      porPedido[String(p.id)] = { fecha: confirmado ? p.ultima_senal : null, puntos: actual };
+      var tramo = gpsTramo_(p, propsGPS), actual = gpsPuntosTramo_(p, tramo, puntos).filter(function (r) { return r.fecha <= ahora; });
+      porPedido[String(p.id)] = { fecha: actual.length ? actual[actual.length - 1].fecha : null, desde: new Date(tramo.desde), puntos: actual };
     });
     // Nunca pintar un punto histórico como posición actual de otro recorrido.
     if (enRuta.length) {
@@ -3763,10 +3841,10 @@ function accionMonitoreo_(data, ctx) {
         var r = porPedido[String(p.id)], u = r.puntos.length ? r.puntos[r.puntos.length - 1] : null;
         if (u && (!ultimo || u.fecha > ultimo.fecha)) ultimo = u;
       });
-    } else if (local !== 'TODOS' && String(m.local_id) === 'TODOS') { ultimo = null; }
+    } else { ultimo = null; }
     var alertas = [];
     enRuta.forEach(function (p) {
-      var senal = porPedido[String(p.id)].fecha || p.en_camino;
+      var senal = porPedido[String(p.id)].fecha || porPedido[String(p.id)].desde;
       if (p.hora_estimada instanceof Date && ahora > p.hora_estimada) alertas.push({ tipo: 'atraso', texto: p.numero + ': atrasado ' + Math.round((ahora - p.hora_estimada) / 60000) + ' min' });
       if (senal instanceof Date && (ahora - senal) / 60000 > minSen) alertas.push({ tipo: 'senal', texto: p.numero + ': sin señal hace ' + Math.round((ahora - senal) / 60000) + ' min' });
       var recientes = porPedido[String(p.id)].puntos.filter(function (r) { return (ahora - r.fecha) / 60000 <= minDet + 1 && r.fecha <= ahora; });
@@ -3940,6 +4018,7 @@ function limpiarDatosViejos() {
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(30000)) return;
   try {
+    try { gpsLimpiarTramos_(); } catch (e) { console.error('limpieza GPS: ' + e); }
     var n = borrarFilasRastreo_(function (r) { return r.fecha instanceof Date && r.fecha < limite; });
     var fotos = 0;
     leerTabla_('pedidos').forEach(function (p) {
