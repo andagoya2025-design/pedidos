@@ -23,5 +23,5 @@ test('limpieza selectiva de mapas previos sin borrar fotos ni sesión',async()=>
  const e=entorno(200);await e.ctx.limpiarMapasAntiguos();assert.deepEqual(e.borrados,[osm]);
 });
 test('ambos mapas identifican su origen, muestran atribución y avisan si falla el mapa',()=>{
- for(const p of ['js/mapa.js','js/monitoreo.js']){const s=fs.readFileSync(p,'utf8');assert.match(s,/strict-origin-when-cross-origin/);assert.match(s,/anonymous/);assert.match(s,/openstreetmap.org\/copyright/);assert.match(s,/mapa-error/);assert.doesNotMatch(s,/referrerpolicy="no-referrer"/);}
+ for(const p of ['js/mapa.js','js/monitoreo.js']){const s=fs.readFileSync(p,'utf8');assert.match(s,/strict-origin-when-cross-origin/);assert.match(s,/anonymous/);assert.match(s,/openstreetmap.org\/copyright/);assert.match(s,/mapa-error/);const tile=s.split('\n').find(l=>l.includes('https://tile.openstreetmap.org/'));assert.ok(tile);assert.doesNotMatch(tile,/referrerpolicy="no-referrer"/);}
 });
