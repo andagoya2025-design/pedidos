@@ -48,5 +48,13 @@ async function caso(engine,dev,label){
     await page.evaluate(()=>window.scrollTo(0,document.documentElement.scrollHeight));await page.waitForTimeout(200);
     assert.equal((await page.evaluate(()=>{const v=document.getElementById('pwa-actualizar').getBoundingClientRect(),n=document.getElementById('navegacion').getBoundingClientRect();return v.bottom>n.top})),false,label+': el texto de versión no queda tapado por el menú');
   }finally{await b.close()}
+  ({b,page}=await abrir(engine,dev));
+  try { // 4) promoción de candidata y reversión mediante un controlador nuevo, no borrar sesión ni preferencias.
+    await page.evaluate(()=>{localStorage.setItem('mip-prueba-sesion','token-ficticio');localStorage.setItem('mip-prueba-tema','oscuro');document.getElementById('form-ingreso').remove()});
+    await nueva(page);await page.waitForFunction(()=>Number(sessionStorage.__cargas)>1);
+    await page.evaluate(()=>{navigator.serviceWorker.controller={id:'R'};navigator.serviceWorker.dispatchEvent(new Event('controllerchange'))});
+    await page.waitForFunction(()=>Number(sessionStorage.__cargas)>2);
+    assert.deepEqual(await page.evaluate(()=>[localStorage.getItem('mip-prueba-sesion'),localStorage.getItem('mip-prueba-tema')]),['token-ficticio','oscuro']);
+  } finally { await b.close() }
 }
 (async()=>{for(const [e,d,l] of [[webkit,devices['iPhone 13'],'iphone-13'],[chromium,{viewport:{width:360,height:740},isMobile:true,hasTouch:true},'android']]){await caso(e,d,l);console.log('ACTUALIZACIÓN '+l+' OK')}})().catch(e=>{console.error(e);process.exitCode=1});

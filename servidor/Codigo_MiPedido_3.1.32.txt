@@ -3735,7 +3735,7 @@ function gpsBuscarId_(id) {
   if (n <= 0) return null;
   var celda = sh.getRange(2, 1, n, 1).createTextFinder(id).matchEntireCell(true).matchCase(true).findNext();
   if (!celda) return null;
-  var fila = sh.getRange(celda.getRow(), 1, HOJAS.rastreo.length).getValues()[0], r = {};
+  var fila = sh.getRange(celda.getRow(), 1, 1, HOJAS.rastreo.length).getValues()[0], r = {};
   HOJAS.rastreo.forEach(function (c, i) { r[c[0]] = fila[i]; });
   return r;
 }
@@ -3789,6 +3789,11 @@ function gpsGuardarLote_(data, lista, ctx, exigeTramo) {
     confirmar.forEach(function (x) { actualizarCampos_('pedidos', x.p._fila, x.p, {ultima_senal:x.fecha}); });
     if (confirmar.length) SpreadsheetApp.flush();
     return { resultados: resultados, ahora: iso_(ahora) };
+  } catch (e) {
+    // Si quedó una escritura pendiente, intentar consolidarla sin soltar el candado.
+    // El ID persistente permite reparar cualquier resultado ambiguo al reintentar.
+    try { SpreadsheetApp.flush(); } catch (ignorado) {}
+    throw e;
   } finally { lock.releaseLock(); }
 }
 function accionRutaPedido_(data, ctx) {

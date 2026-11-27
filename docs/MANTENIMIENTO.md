@@ -29,6 +29,6 @@ MAIN contiene el código publicado, no una candidata. Leer primero js/config.js 
 - Depuración: eliminar del árbol activo solo documentos obsoletos verificados, con recuperación por SHA y sin afectar pruebas ni instalación. No eliminar ramas con commits únicos ni reescribir historial.
 - Caja anual y comercialización: cambios separados.
 
-- Candidata 3.1.50: servidor 30131 obligatorio para habilitar monitoreoSeguro; mínimo comercial 30129, pantalla 3.1.50, caché app-3.1.60-monitoreo. No publicar hasta confirmar CI del SHA, respaldo de hoja/script y prueba GPS física. La fuente estable sigue intacta.
+- Primera candidata 3.1.50 (histórica): servidor 30131 obligatorio para habilitar monitoreoSeguro; mínimo comercial 30129, pantalla 3.1.50, caché app-3.1.60-monitoreo. No publicar hasta confirmar CI del SHA, respaldo de hoja/script y prueba GPS física. La fuente estable sigue intacta.
 
 - Refuerzo autorizado 3.1.50: base candidata aprobada `c0d37ec2cd7f89f19fdbc37d9e2ada41e5f0d268` (460 unitarias, 14 suites), respaldo `respaldo/3.1.50-antes-estres`. Servidor fuente 30132, caché app-3.1.61-monitoreo, mínimo comercial 30129. No modificar esquema ni URL; desplegar únicamente tras aprobación explícita. Para volver a pantalla estable se conserva servidor compatible y se usa nueva caché, sin restaurar hojas. Las pruebas con reloj virtual y candado simulado no certifican cuotas, latencia ni GPS físico de Apps Script.

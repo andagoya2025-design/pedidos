@@ -344,6 +344,7 @@
 
   global.RASTREO = {
     actualizar: function (lista, rutas) {
+      if (!esMotorizado()) { reiniciarTodo(); return; }
       var nueva = (lista || []).filter(function (id, i, arr) { return arr.indexOf(id) === i; });
       var nuevosTramos = Object.create(null);
       nueva.forEach(function (id) { if (rutas && rutas[id]) nuevosTramos[id] = String(rutas[id]); });
