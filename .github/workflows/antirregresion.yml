@@ -90,6 +90,8 @@ jobs:
         run: node tests/navegador-integral.cjs
       - name: Monitoreo seguro y estados GPS en cuatro pantallas
         run: node tests/navegador-monitoreo.cjs
+      - name: Service worker real - actualización y reversión sin perder sesión
+        run: node tests/navegador-reversion-monitoreo.cjs
       - name: Capturas del monitoreo
         if: always()
         uses: actions/upload-artifact@v4

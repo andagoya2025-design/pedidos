@@ -5,7 +5,7 @@ const read=p=>fs.readFileSync(p,'utf8');
 const ahora='2026-11-27T18:00:00.000Z',fecha='2026-11-27T17:59:30.000Z';
 const pedido=(id,estado,gps_estado)=>({id,numero:'PED-'+id,cliente:'Cliente '+id,estado,gps_estado,gps_fecha:gps_estado==='confirmado'?fecha:'',en_camino:estado==='En camino'?fecha:'',hora_estimada:''});
 const moto=(id,pedidos,estado='en_camino')=>({id,nombre:'Motorizado '+id,placa:'DEMO',celular:'0990000000',estado,pedidos,turno_inicio:fecha,hoy:{entregas:0,minutos:null,estrellas:null},debe:0,alertas:[],ultimo_punto:estado==='en_camino'?{lat:-2.1,lng:-79.9,fecha}:null});
-const L1={ahora,alertas:0,motorizados:[moto('A',[pedido('01','En camino','confirmado'),pedido('02','En camino','sin_senal')]),moto('B',[pedido('03','Preparando','pendiente')],'asignado'),moto('C',[pedido('04','En camino','esperando')])]},L2={ahora,alertas:0,motorizados:[moto('SUR',[pedido('99','En camino','confirmado')])]};
+const L1={gps_version:2,ahora,alertas:0,motorizados:[moto('A',[pedido('01','En camino','confirmado'),pedido('02','En camino','sin_senal')]),moto('B',[pedido('03','Preparando','pendiente')],'asignado'),moto('C',[pedido('04','En camino','esperando')])]},L2={gps_version:2,ahora,alertas:0,motorizados:[moto('SUR',[pedido('99','En camino','confirmado')])]};
 async function run(engine,device,label){
  const browser=await engine.launch();try{
   const page=await browser.newPage({...device,serviceWorkers:'block'}),errors=[];page.setDefaultTimeout(8000);page.on('pageerror',e=>errors.push(e.message));
@@ -14,8 +14,8 @@ async function run(engine,device,label){
   for(const p of ['css/app.css','css/modulos.css','css/admin-elite.css','css/premium-integral.css'])await page.addStyleTag({content:read(p)});
   await page.addScriptTag({content:read('js/ui.js')});await page.addScriptTag({content:read('js/comun.js')});
   await page.evaluate(({L1,L2})=>{
-   window.APP={local:'L1',sesion:{rol:'dueno'},vistas:{}};window.__calls=[];window.__defer=false;window.__error=false;
-   window.DATOS={pedir:async(a,d)=>{__calls.push([a,d]);if(a==='monitoreoSeguro'){if(__error)throw Object.assign(Error('Acción no reconocida'),{codigo:'ACCION'});if(__defer&&d.local_id==='L1')return new Promise(r=>window.__resolver=()=>r(L1));return d.local_id==='L1'?L1:L2;}if(a==='rutaPedido')return {puntos:[{lat:-2.1,lng:-79.9,fecha:'2026-11-27T17:59:00Z'},{lat:-2.11,lng:-79.91,fecha:'2026-11-27T18:00:00Z'}]};throw Error('No simulado') }};
+   window.APP={local:'L1',sesion:{rol:'dueno'},vistas:{}};window.__calls=[];window.__defer=false;window.__error=false;window.__networkFail=false;window.__oldServer=false;
+   window.DATOS={pedir:async(a,d)=>{__calls.push([a,d]);if(a==='monitoreoSeguro'){if(__error)throw Object.assign(Error('Acción no reconocida'),{codigo:'ACCION'});if(__networkFail)throw Object.assign(Error('Sin conexión'),{codigo:'RED'});if(__oldServer)return {...L1,gps_version:undefined};if(__defer&&d.local_id==='L1')return new Promise(r=>window.__resolver=()=>r(L1));return d.local_id==='L1'?L1:L2;}if(a==='rutaPedido')return {puntos:[{lat:-2.1,lng:-79.9,fecha:'2026-11-27T17:59:00Z'},{lat:-2.11,lng:-79.91,fecha:'2026-11-27T18:00:00Z'}]};throw Error('No simulado') }};
    UI.ventana=o=>{window.__ventana=o;};UI.abrirWhatsApp=(n,m)=>{window.__wa=[n,m]};UI.error=(t,m)=>{throw Error(t+': '+m)};
   },{L1,L2});
   await page.addScriptTag({content:read('js/monitoreo.js')});
@@ -26,10 +26,14 @@ async function run(engine,device,label){
   for(const tema of ['claro','oscuro']){await page.evaluate(t=>UI.tema(t),tema);assert.ok(await page.locator('#mn-cuerpo .btn').evaluateAll(es=>es.every(e=>e.getBoundingClientRect().height>=44)));assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=document.documentElement.clientWidth+1));fs.mkdirSync('capturas-monitoreo',{recursive:true});await page.screenshot({path:'capturas-monitoreo/'+label+'-'+tema+'.png',fullPage:true});}
   await page.locator('[data-ruta="01"]').click();await page.waitForFunction(()=>window.__ventana);assert.match(await page.evaluate(()=>__ventana.html),/polyline/);
   await page.locator('[data-wa]').first().click();assert.equal(await page.evaluate(()=>__wa[0]),'0990000000');
+  await page.evaluate(()=>{__networkFail=true;window.dispatchEvent(new Event('offline'))});await page.getByText(/Sin actualización/).waitFor();assert.equal(await page.getByText('GPS confirmado',{exact:true}).count(),0);assert.ok(await page.getByText('Última señal sin actualizar',{exact:true}).count()>0);
+  await page.evaluate(()=>{__networkFail=false;window.dispatchEvent(new Event('online'))});await page.getByText('GPS confirmado',{exact:true}).waitFor();assert.equal(await page.getByText(/Sin actualización/).count(),0);
   await page.evaluate(()=>{__defer=true});await page.locator('[data-actualizar]').click();await page.waitForFunction(()=>window.__resolver);
   await page.evaluate(()=>{APP.local='L2'});await pintar();await page.getByText('PED-99',{exact:true}).waitFor();
   await page.evaluate(()=>{__resolver()});await page.waitForTimeout(150);assert.equal(await page.getByText('PED-01',{exact:true}).count(),0);
-  await page.evaluate(()=>{__error=true});await pintar();await page.getByText(/necesita el servidor 3.1.32/).waitFor();assert.ok(await page.evaluate(()=>__calls.every(c=>c[0]!=='monitoreo')));assert.deepEqual(errors,[]);
+  await page.evaluate(()=>{__networkFail=true;APP.local='L3'});await pintar();await page.getByText('Sin conexión',{exact:true}).waitFor();assert.equal(await page.getByText('PED-99',{exact:true}).count(),0);
+  await page.evaluate(()=>{__networkFail=false;__oldServer=true});await pintar();await page.getByText(/necesita el servidor 3.1.32/).waitFor();
+  await page.evaluate(()=>{__oldServer=false;__error=true});await pintar();await page.getByText(/necesita el servidor 3.1.32/).waitFor();assert.ok(await page.evaluate(()=>__calls.every(c=>c[0]!=='monitoreo')));assert.deepEqual(errors,[]);
   console.log('MONITOREO '+label+' OK');
  }finally{await browser.close()}
 }

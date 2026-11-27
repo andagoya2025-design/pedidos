@@ -75,14 +75,15 @@
     try {
       var respuesta = await DATOS.pedir('monitoreoSeguro', { local_id: local });
       if (n !== solicitud || local !== APP.local || sesion !== APP.sesion || !UI.$('#mn-cuerpo')) return;
+      if (!respuesta || respuesta.gps_version !== 2) { var error = new Error('Servidor de monitoreo anterior'); error.codigo = 'VERSION_GPS'; throw error; }
       datos = respuesta; ultimoContexto = {local:local,sesion:sesion}; pintar();
     } catch (err) {
       if (n !== solicitud || local !== APP.local || sesion !== APP.sesion || !UI.$('#mn-cuerpo')) return;
       // Mantener los últimos datos del mismo local con aviso inequívoco de desconexión; jamás reutilizar otro contexto.
       var c = UI.$('#mn-cuerpo');
-      if (err.codigo !== 'ACCION' && datos && ultimoContexto && ultimoContexto.local === local && ultimoContexto.sesion === sesion) {
+      if (err.codigo !== 'ACCION' && err.codigo !== 'VERSION_GPS' && err.codigo !== 'SESION' && err.codigo !== 'PERMISO' && datos && ultimoContexto && ultimoContexto.local === local && ultimoContexto.sesion === sesion) {
         pintar(true);
-      } else c.innerHTML = '<div class="banda error">⚠️ <span>' + UI.esc(err.codigo === 'ACCION' ? 'El centro de monitoreo necesita el servidor 3.1.32. Contacta al administrador. Los demás módulos siguen disponibles.' : err.message) + '</span></div>';
+      } else c.innerHTML = '<div class="banda error">⚠️ <span>' + UI.esc((err.codigo === 'ACCION' || err.codigo === 'VERSION_GPS') ? 'El centro de monitoreo necesita el servidor 3.1.32. Contacta al administrador. Los demás módulos siguen disponibles.' : err.message) + '</span></div>';
     }
   }
 
@@ -139,7 +140,13 @@
       '<button class="btn secundario chico" type="button" data-wa="' + UI.esc(m.celular) + '" data-nombre="' + UI.esc(nombre) + '">💬 WhatsApp</button></div></article>';
   }
 
-  global.addEventListener('online', function () { if (UI.$('#mn-cuerpo') && !document.hidden) cargar(); });
+  global.addEventListener('online', function () { if (APP.sesion && UI.$('#mn-cuerpo') && !document.hidden) cargar(); });
+  global.addEventListener('offline', function () {
+    var c = UI.$('#mn-cuerpo'); if (!c) return;
+    solicitud++;
+    if (APP.sesion && datos && ultimoContexto && ultimoContexto.local === APP.local && ultimoContexto.sesion === APP.sesion) pintar(true);
+    else c.innerHTML = '<div class="banda error" role="status">⚠️ <span>Sin conexión para consultar este local.</span></div>';
+  });
 
   async function verRuta(id, numero) {
     var local = APP.local, sesion = APP.sesion;

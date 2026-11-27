@@ -3879,7 +3879,7 @@ function accionMonitoreo_(data, ctx) {
   });
   var orden = { en_camino: 0, asignado: 1, libre: 2, fuera: 3 };
   lista.sort(function (a, b) { return (b.alertas.length - a.alertas.length) || (orden[a.estado] - orden[b.estado]) || (a.nombre < b.nombre ? -1 : 1); });
-  return { ok: true, data: { motorizados: lista, ahora: iso_(ahora), alertas: lista.reduce(function (s, m) { return s + m.alertas.length; }, 0) } };
+  return { ok: true, data: { gps_version: 2, motorizados: lista, ahora: iso_(ahora), alertas: lista.reduce(function (s, m) { return s + m.alertas.length; }, 0) } };
 }
 
 /* ---------- 13.5 Informe de motorizados (solo dueño) ---------- */

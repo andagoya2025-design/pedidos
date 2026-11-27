@@ -30,3 +30,11 @@ MAIN contiene el código publicado, no una candidata. Leer primero js/config.js 
 - Caja anual y comercialización: cambios separados.
 
 - Candidata 3.1.50: servidor 30132 obligatorio para habilitar monitoreo y GPS por lote; mínimo comercial 30129, pantalla 3.1.50, caché app-3.1.61-monitoreo-seguro. No publicar hasta confirmar CI del SHA, respaldo de hoja/script y prueba GPS física. La fuente estable sigue intacta.
+
+
+### Endurecimiento 3.1.50 / servidor 30132 (solo candidata)
+- Base estable: bf445362ecf1109b6c343acebcaf0f0fb50b7282. Candidata anterior aprobada: c0d37ec2cd7f89f19fdbc37d9e2ada41e5f0d268. No publicar ni desplegar sin autorización.
+- GPS: una lectura por lote (máx. 50 pedidos), candado existente, identificación persistente de muestra en el ID de rastreo, conciliación de escritura parcial y corte de recorrido en la bitácora ya existente. No se crean columnas ni hojas; la URL /exec y el mínimo comercial 30129 no cambian. La recuperación de GPS con versión anterior conserva el endpoint individual; la candidata múltiple exige 30132.
+- Simulación de carga: 10 motorizados, 30 pedidos, 480 minutos virtuales y reintentos; no certifica tiempos reales, cuotas de Apps Script ni batería. El cambio Wi-Fi/datos se simula con eventos de red.
+- Reversión: tras un eventual despliegue autorizado, restaurar el árbol de la estable por commit sin reescribir historial y generar una caché inédita; validar sesiones de los tres perfiles y conservar la URL de Apps Script. No restaurar ciegamente las hojas ni eliminar rastreo/bitácora. El 30132 mantiene las acciones del 30130; antes de un rollback de servidor, hacer respaldo y prueba en copia de negocio. Prueba de service worker local con datos ficticios.
+- Puerta física: dos dispositivos motorizados, tres pedidos por motorizado, dos locales, seguimiento restaurante/cliente, pérdida y regreso de señal, reasignación M-X-M, sesión cerrada, Safari/PWA/Android, y verificación del backend 30132 y Cloudflare. No certificar GPS en segundo plano ni con teléfono bloqueado.
