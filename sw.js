@@ -8,8 +8,8 @@
  * - Nunca guarda datos del negocio: los pedidos van siempre al servidor.
  * ============================================================
  */
-var VERSION = 'app-3.1.63-monitoreo-final';
-var FOTOS = 'fotos-1';      // 3.1: fotos de platos y mapas (sobrevive a las actualizaciones)
+var VERSION = 'app-3.1.64-mapa-403';
+var FOTOS = 'fotos-1';      // 3.1: fotos de platos (sobrevive a las actualizaciones)
 var MAX_FOTOS = 150;
 
 var ARCHIVOS = [
@@ -75,7 +75,7 @@ self.addEventListener('activate', function (e) {
   e.waitUntil(
     caches.keys().then(function (claves) {
       return Promise.all(claves.filter(function (k) { return k !== VERSION && k.indexOf('app-') === 0; }).map(function (k) { return caches.delete(k); }));
-    }).then(function () { return self.clients.claim(); })
+    }).then(limpiarMapasAntiguos).then(function () { return self.clients.claim(); })
   );
 });
 
@@ -95,8 +95,19 @@ self.addEventListener('fetch', function (e) {
     return;
   }
 
-  // 3.1: fotos (Drive) y cuadros del mapa: se muestra la guardada al instante y se renueva por detrás.
-  if (req.destination === 'image' && /(^|\.)(drive\.google\.com|googleusercontent\.com|tile\.openstreetmap\.org)$/.test(url.hostname)) {
+  // OSM: respetar la caché HTTP del navegador y no conservar respuestas opacas/403.
+  // La página identifica su origen; CORS permite distinguir un mapa de una imagen de error.
+  if (url.hostname === 'tile.openstreetmap.org') {
+    if (req.mode === 'cors' && req.destination === 'image') {
+      e.respondWith(fetch(req).then(function (resp) {
+        return resp.ok ? resp : Response.error();
+      }).catch(function () { return Response.error(); }));
+    }
+    return;
+  }
+
+  // 3.1: fotos (Drive): se muestra la guardada al instante y se renueva por detrás.
+  if (req.destination === 'image' && /(^|\.)(drive\.google\.com|googleusercontent\.com)$/.test(url.hostname)) {
     e.respondWith(caches.open(FOTOS).then(function (c) {
       return c.match(req).then(function (guardada) {
         var nueva = fetch(req).then(function (resp) {
@@ -125,6 +136,15 @@ self.addEventListener('fetch', function (e) {
     })
   );
 });
+
+function limpiarMapasAntiguos() {
+  // Borrar exclusivamente cuadros del proveedor, no fotos ni sesiones.
+  return caches.open(FOTOS).then(function (c) {
+    return c.keys().then(function (keys) {
+      return Promise.all(keys.filter(function (r) { return new URL(r.url).hostname === 'tile.openstreetmap.org'; }).map(function (r) { return c.delete(r); }));
+    });
+  }).catch(function () {});
+}
 
 function recortar(c) {
   c.keys().then(function (k) { if (k.length > MAX_FOTOS) return Promise.all(k.slice(0, k.length - MAX_FOTOS).map(function (x) { return c.delete(x); })); });

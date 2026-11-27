@@ -893,3 +893,8 @@ details.otras-fechas[open] summary { margin-bottom: 10px; }
   .mip-premium-admin #app .navegacion { overflow-y: auto; }
   .mip-premium-admin #contenido .bienvenida { padding: 30px; }
 }
+
+/* Aviso de mapa base: el GPS es independiente del proveedor cartográfico. */
+.mapa-error { position:absolute; z-index:2; top:8px; left:8px; right:8px; padding:8px 10px; border-radius:10px; background:var(--superficie,#fff); color:var(--texto,#222); font-size:12px; line-height:1.4; border:1px solid var(--borde,#ddd); pointer-events:none; }
+.mapa-error[hidden] { display:none !important; }
+.mapa-error a { pointer-events:auto; text-decoration:underline; color:inherit; font-weight:700; }

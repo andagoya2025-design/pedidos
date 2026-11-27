@@ -34,6 +34,7 @@
       '<div class="mapa-pin" aria-hidden="true"><span>📍</span></div>' +
       '<div class="mapa-zoom"><button type="button" data-z="1" aria-label="Acercar">＋</button><button type="button" data-z="-1" aria-label="Alejar">−</button></div>' +
       '<div class="mapa-ayuda">Mueve el mapa hasta que el pin quede en tu puerta</div>' +
+      '<div class="mapa-error" role="status" hidden>Mapa base no disponible. Comprueba la dirección o utiliza el GPS.</div>' +
       '<a class="mapa-credito" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap</a>';
     var capa = cont.querySelector('.mapa-capa');
     var cache = {};
@@ -54,7 +55,8 @@
           if (!img) {
             img = document.createElement('img');
             img.alt = ''; img.draggable = false; img.decoding = 'async';
-            img.onerror = function () { this.style.visibility = 'hidden'; };
+            img.crossOrigin = 'anonymous'; img.referrerPolicy = 'strict-origin-when-cross-origin';
+            img.onerror = function () { this.style.visibility = 'hidden'; var aviso = cont.querySelector('.mapa-error'); if (aviso) aviso.hidden = false; };
             img.src = 'https://tile.openstreetmap.org/' + z + '/' + nx + '/' + ty + '.png';
             cache[k] = img; capa.appendChild(img);
           }

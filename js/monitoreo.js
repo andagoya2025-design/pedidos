@@ -33,7 +33,7 @@
       for (var ty = Math.floor(y0 / T); ty <= Math.floor((y0 + alto) / T); ty++) {
         if (ty < 0 || ty >= max) continue;
         var txx = ((tx % max) + max) % max;
-        tiles += '<img alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.visibility=\'hidden\'" src="https://tile.openstreetmap.org/' + z + '/' + txx + '/' + ty + '.png" style="left:' + Math.round(tx * T - x0) + 'px;top:' + Math.round(ty * T - y0) + 'px">';
+        tiles += '<img alt="" loading="lazy" crossorigin="anonymous" referrerpolicy="strict-origin-when-cross-origin" onerror="this.style.visibility=\'hidden\';this.closest(\'.mapa-puntos\').querySelector(\'.mapa-error\').hidden=false" src="https://tile.openstreetmap.org/' + z + '/' + txx + '/' + ty + '.png" style="left:' + Math.round(tx * T - x0) + 'px;top:' + Math.round(ty * T - y0) + 'px">';
       }
     }
     var px = ok.map(function (p) { var q = aPixel(Number(p.lat), Number(p.lng), z); return { x: Math.round(q.x - x0), y: Math.round(q.y - y0), p: p }; });
@@ -46,7 +46,8 @@
           (q.p.etiqueta ? '<text x="' + q.x + '" y="' + (q.y - 14) + '" text-anchor="middle" font-size="12" font-weight="800" fill="#212529" stroke="#fff" stroke-width="3" paint-order="stroke">' + UI.esc(q.p.etiqueta) + '</text>' : '') + '</g>';
       }).join('') + '</svg>';
     return '<div class="mapa-puntos" style="height:' + alto + 'px"><div class="mapa-lienzo" style="width:' + ancho + 'px;height:' + alto + 'px">' + tiles + svg + '</div>' +
-      '<span class="mapa-credito">© OpenStreetMap</span></div>';
+      '<div class="mapa-error" role="status" hidden>Mapa base no disponible. Los puntos GPS y el recorrido se conservan. <a href="https://www.openstreetmap.org/?mlat=' + Number(ok[0].lat) + '&amp;mlon=' + Number(ok[0].lng) + '#map=17/' + Number(ok[0].lat) + '/' + Number(ok[0].lng) + '" target="_blank" rel="noopener">Abrir mapa</a></div>' +
+      '<a class="mapa-credito" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap</a></div>';
   };
 
   /* ---------- Pantalla de monitoreo ---------- */

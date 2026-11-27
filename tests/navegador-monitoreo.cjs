@@ -22,6 +22,9 @@ async function run(engine,device,label){
   const pintar=()=>page.evaluate(()=>APP.vistas.monitoreo.pintar(document.getElementById('contenido')));
   await pintar();await page.getByText('GPS confirmado',{exact:true}).waitFor();
   for(const t of ['Señal interrumpida','Esperando salida','Esperando señal GPS'])assert.equal(await page.getByText(t,{exact:true}).count(),1);
+  await page.locator('.mapa-puntos .mapa-error').waitFor({state:'visible'});
+  assert.ok(await page.locator('.mapa-puntos img').evaluateAll(es=>es.length>0&&es.every(e=>e.referrerPolicy==='strict-origin-when-cross-origin'&&e.crossOrigin==='anonymous')));
+  assert.ok(await page.locator('.mapa-puntos svg circle').count()>0);
   assert.equal(await page.locator('#mn-cuerpo .monitor').count(),3);assert.equal(await page.locator('.monitor-resumen>div').count(),4);
   for(const tema of ['claro','oscuro']){await page.evaluate(t=>UI.tema(t),tema);assert.ok(await page.locator('#mn-cuerpo .btn').evaluateAll(es=>es.every(e=>e.getBoundingClientRect().height>=44)));assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=document.documentElement.clientWidth+1));fs.mkdirSync('capturas-monitoreo',{recursive:true});await page.screenshot({path:'capturas-monitoreo/'+label+'-'+tema+'.png',fullPage:true});}
   assert.equal(await page.locator('.monitor-cobertura').first().textContent(),'Señal confirmada1 de 2');

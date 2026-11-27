@@ -2,7 +2,7 @@
 // Service worker REAL en Chromium, origen local y datos ficticios; ninguna publicación ni conexión a Apps Script.
 const assert=require('node:assert/strict'),fs=require('node:fs'),http=require('node:http'),{execFileSync}=require('node:child_process'),{chromium}=require('playwright');
 const BASE='bf445362ecf1109b6c343acebcaf0f0fb50b7282';
-const stable='app-3.1.59-actualizacion',candidate='app-3.1.63-monitoreo-final',rollback='app-3.1.62-reversion-prueba';
+const stable='app-3.1.59-actualizacion',candidate='app-3.1.64-mapa-403',rollback='app-3.1.62-reversion-prueba';
 const html='<!doctype html><meta name="viewport" content="width=device-width"><title>Prueba PWA local</title><body>Prueba sin datos reales</body>';
 const fromGit=p=>execFileSync('git',['show',BASE+':'+p],{maxBuffer:8*1024*1024});
 const tipo=p=>p.endsWith('.js')?'text/javascript':p.endsWith('.css')?'text/css':p.endsWith('.html')?'text/html':p.endsWith('.json')?'application/json':p.endsWith('.svg')?'image/svg+xml':p.endsWith('.png')?'image/png':'text/plain';
