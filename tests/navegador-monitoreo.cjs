@@ -24,6 +24,7 @@ async function run(engine,device,label){
   for(const t of ['Señal interrumpida','Esperando salida','Esperando señal GPS'])assert.equal(await page.getByText(t,{exact:true}).count(),1);
   assert.equal(await page.locator('#mn-cuerpo .monitor').count(),3);assert.equal(await page.locator('.monitor-resumen>div').count(),4);
   for(const tema of ['claro','oscuro']){await page.evaluate(t=>UI.tema(t),tema);assert.ok(await page.locator('#mn-cuerpo .btn').evaluateAll(es=>es.every(e=>e.getBoundingClientRect().height>=44)));assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=document.documentElement.clientWidth+1));fs.mkdirSync('capturas-monitoreo',{recursive:true});await page.screenshot({path:'capturas-monitoreo/'+label+'-'+tema+'.png',fullPage:true});}
+  assert.equal(await page.locator('.monitor-cobertura').first().textContent(),'Señal confirmada1 de 2');
   await page.locator('[data-ruta="01"]').click();await page.waitForFunction(()=>window.__ventana);assert.match(await page.evaluate(()=>__ventana.html),/polyline/);
   await page.locator('[data-wa]').first().click();assert.equal(await page.evaluate(()=>__wa[0]),'0990000000');
   await page.evaluate(()=>{__networkFail=true;window.dispatchEvent(new Event('offline'))});await page.getByText(/Sin actualización/).waitFor();assert.equal(await page.getByText('GPS confirmado',{exact:true}).count(),0);assert.ok(await page.getByText('Última señal sin actualizar',{exact:true}).count()>0);

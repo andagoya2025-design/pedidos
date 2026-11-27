@@ -28,7 +28,7 @@
   var vigilancia = null, temporizador = null, pedidos = [], ultimo = null, candadoPantalla = null;
   var estado = 'buscando'; // buscando | ok | permiso | gps | red
   var ultimoEnvio = null, buscando = false, primeroPendiente = false, enviando = false, generacion = 0, confirmaciones = Object.create(null);
-  var versiones = Object.create(null), secuencia = 0, epocaRed = 0, solicitudGps = 0, reenviar = false;
+  var versiones = Object.create(null), tramos = Object.create(null), secuencia = 0, epocaRed = 0, solicitudGps = 0, reenviar = false;
 
   function ahora() { return Date.now(); }
   function fresca() { return !!ultimo && ahora() - ultimo.t <= VIEJA_MS && ultimo.t - ahora() <= 15000; }
@@ -79,7 +79,7 @@
   }
 
   function alError(err) {
-    if (err && err.code === 1) return cambiar('permiso'); // PERMISSION_DENIED
+    if (err && err.code === 1) { ultimo = null; confirmaciones = Object.create(null); epocaRed++; solicitudGps++; buscando = false; reenviar = false; primeroPendiente = true; return cambiar('permiso'); }
     if (!fresca()) cambiar('gps'); // sin señal o tiempo agotado: avisar solo si no hay una lectura reciente
   }
 
@@ -104,6 +104,7 @@
     lista.forEach(function (id) { vigentes[id] = versiones[id]; });
     enviando = true;
     var datos = { lat:punto.lat, lng:punto.lng, precision:punto.precision, muestra_id:punto.id, capturado_ms:punto.t };
+    if (lista.some(function(id){return !!tramos[id];})) { datos.gps_tramos = Object.create(null); lista.forEach(function(id){if(tramos[id]) datos.gps_tramos[id]=tramos[id];}); }
     var operacion = lista.length === 1 ?
       DATOS.pedir('rastreoPunto', Object.assign({ pedido_id:lista[0] }, datos)).then(function (v) { return [{ id:lista[0], respuesta:v }]; }) :
       DATOS.pedir('rastreoLote', Object.assign({ pedido_ids:lista }, datos)).then(function (v) {
@@ -121,7 +122,7 @@
         var v = x.respuesta, fecha = v && v.fecha ? Date.parse(v.fecha) : NaN;
         if (v && (v.guardado === true || v.motivo === 'intervalo_minimo') && isFinite(fecha) && ahora() - fecha <= VIEJA_MS && fecha - ahora() <= 15000) confirmaciones[x.id] = fecha;
         else if (v && v.guardado === true && !v.fecha) confirmaciones[x.id] = ahora(); // respuesta válida del servidor anterior para un solo pedido
-        else { delete confirmaciones[x.id]; if (x.error) fallos++; if (x.servidor) servidor = true; if (v && v.motivo === 'ubicacion_antigua') antigua = true; }
+        else { delete confirmaciones[x.id]; if (x.error) fallos++; if (x.servidor) servidor = true; if (v && (v.motivo === 'ubicacion_antigua' || v.motivo === 'tramo_cambiado')) antigua = true; }
       });
       var n = pedidos.filter(function (id) { return confirmaciones[id] !== undefined && ahora() - confirmaciones[id] <= VIEJA_MS; }).length;
       primeroPendiente = false;
@@ -155,7 +156,7 @@
   function detener() {
     if (vigilancia !== null && global.navigator.geolocation) global.navigator.geolocation.clearWatch(vigilancia);
     if (temporizador) clearInterval(temporizador);
-    generacion++; solicitudGps++; epocaRed++; enviando = false; reenviar = false; confirmaciones = Object.create(null); versiones = Object.create(null);
+    generacion++; solicitudGps++; epocaRed++; enviando = false; reenviar = false; confirmaciones = Object.create(null); versiones = Object.create(null); tramos = Object.create(null);
     vigilancia = null; temporizador = null; ultimo = null; ultimoEnvio = null; buscando = false; primeroPendiente = false;
     estado = 'buscando';
     try { if (candadoPantalla) candadoPantalla.release(); } catch (e) { /* ya liberado */ }
@@ -335,9 +336,14 @@
   }
 
   global.RASTREO = {
-    actualizar: function (lista) {
+    actualizar: function (lista, rutas) {
+      if (!esMotorizado()) { reiniciarTodo(); return; }
       var nueva = (lista || []).filter(function (id, i, arr) { return arr.indexOf(id) === i; });
-      var agregados = nueva.filter(function (id) { return pedidos.indexOf(id) < 0; });
+      var nuevosTramos = Object.create(null);
+      nueva.forEach(function (id) { if (rutas && rutas[id]) nuevosTramos[id] = String(rutas[id]); });
+      var agregados = nueva.filter(function (id) { return pedidos.indexOf(id) < 0 || nuevosTramos[id] !== tramos[id]; });
+      agregados.forEach(function(id){delete confirmaciones[id];});
+      tramos = nuevosTramos;
       var estabaActivo = pedidos.length > 0;
       pedidos = nueva;
       Object.keys(versiones).forEach(function (id) { if (pedidos.indexOf(id) < 0) { delete confirmaciones[id]; delete versiones[id]; } });

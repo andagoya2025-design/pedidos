@@ -29,7 +29,7 @@ MAIN contiene el código publicado, no una candidata. Leer primero js/config.js 
 - Depuración: eliminar del árbol activo solo documentos obsoletos verificados, con recuperación por SHA y sin afectar pruebas ni instalación. No eliminar ramas con commits únicos ni reescribir historial.
 - Caja anual y comercialización: cambios separados.
 
-- Candidata 3.1.50: servidor 30132 obligatorio para habilitar monitoreo y GPS por lote; mínimo comercial 30129, pantalla 3.1.50, caché app-3.1.61-monitoreo-seguro. No publicar hasta confirmar CI del SHA, respaldo de hoja/script y prueba GPS física. La fuente estable sigue intacta.
+- Candidata 3.1.50: servidor 30132 obligatorio para habilitar monitoreo y GPS por lote; mínimo comercial 30129, pantalla 3.1.50, caché app-3.1.63-monitoreo-final. No publicar hasta confirmar CI del SHA, respaldo de hoja/script y prueba GPS física. La fuente estable sigue intacta.
 
 
 ### Endurecimiento 3.1.50 / servidor 30132 (solo candidata)
@@ -38,3 +38,7 @@ MAIN contiene el código publicado, no una candidata. Leer primero js/config.js 
 - Simulación de carga: 10 motorizados, 30 pedidos, 480 minutos virtuales y reintentos; no certifica tiempos reales, cuotas de Apps Script ni batería. El cambio Wi-Fi/datos se simula con eventos de red.
 - Reversión: tras un eventual despliegue autorizado, restaurar el árbol de la estable por commit sin reescribir historial y generar una caché inédita; validar sesiones de los tres perfiles y conservar la URL de Apps Script. No restaurar ciegamente las hojas ni eliminar rastreo/bitácora. El 30132 mantiene las acciones del 30130; antes de un rollback de servidor, hacer respaldo y prueba en copia de negocio. Prueba de service worker local con datos ficticios.
 - Puerta física: dos dispositivos motorizados, tres pedidos por motorizado, dos locales, seguimiento restaurante/cliente, pérdida y regreso de señal, reasignación M-X-M, sesión cerrada, Safari/PWA/Android, y verificación del backend 30132 y Cloudflare. No certificar GPS en segundo plano ni con teléfono bloqueado.
+
+### Consolidación definitiva
+- Candidata principal anterior `0ddc06bdee807d4ced707c04de0cdead18b2dda6` (482 pruebas y 15 suites, CI 46057483039); candidata alternativa preservada `9708ed13d566682a28f2f404608f9c7135e962bf`. Se conserva el contrato de lote y los cortes de bitácora de la primera, incorporando identificación de tramo emitida por servidor, descarte de permisos revocados, confirmación en dos fases y cobertura visual de la segunda. No se integra por mezcla automática ni se sobrescribe la rama alternativa.
+- Pantalla 3.1.50, fuente de servidor 30132 (sin desplegar), caché app-3.1.63-monitoreo-final. Pruebas nuevas de carreras de reasignación y permisos. Verificar CI exacto y prueba física antes de publicar.
