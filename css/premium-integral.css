@@ -103,3 +103,40 @@
 .mip-premium-cliente .revision-inicial>.acciones .btn{min-width:0;min-height:48px;padding:10px 5px;white-space:normal;line-height:1.2;font-size:14px;overflow-wrap:anywhere}
 .mip-premium-cliente .revision-inicial h2:focus{outline:none}
 /* FIN REVISION FINAL 3.1.47 */
+
+/* INICIO MOTORIZADO 3.1.48 — ubicación honesta, turno largo, lectura clara. Sin ocultar controles. */
+:is(.mip-premium-driver,.mip-premium-admin) #en-cuerpo .banda.ok{background:color-mix(in srgb,var(--exito) 14%,transparent);color:var(--texto);border:1px solid color-mix(in srgb,var(--exito) 45%,var(--borde))}
+:is(.mip-premium-driver,.mip-premium-admin) #en-cuerpo #banda-rastreo{line-height:1.35;overflow-wrap:anywhere}
+:is(.mip-premium-driver,.mip-premium-admin) #en-cuerpo .turno.largo{border-left-color:var(--error);background:color-mix(in srgb,var(--error) 8%,var(--superficie))}
+:is(.mip-premium-driver,.mip-premium-admin) #en-cuerpo .turno.largo b{color:var(--error)}
+:is(.mip-premium-driver,.mip-premium-admin) #en-cuerpo .pedido .pedido-linea{color:var(--texto);font-size:15px;line-height:1.35;overflow-wrap:anywhere}
+:is(.mip-premium-driver,.mip-premium-admin) #en-cuerpo .pedido .pedido-linea small{display:inline-block;margin-top:3px;color:var(--texto-2);font-size:13px}
+.mip-premium-driver #app .marca-sub{white-space:normal;line-height:1.25;overflow:visible;text-overflow:clip}
+.mip-premium-driver #app .selector-local:disabled{appearance:none;-webkit-appearance:none;background-image:none;padding-right:14px;opacity:1;color:var(--texto)}
+/* FIN MOTORIZADO 3.1.48 */
+
+/* INICIO AYUDA Y MENÚ 3.1.48 */
+@media(max-width:899px){
+  :is(.mip-premium-admin,.mip-premium-driver) #app .nav-btn{overflow-wrap:normal;word-break:normal;hyphens:none;min-width:min-content;max-width:none;padding:3px 6px}
+}
+.btn-ayuda{position:fixed;right:12px;z-index:60;white-space:nowrap;display:flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:0 16px;border-radius:999px;border:1px solid #b3261e;background:var(--superficie,#fff);color:#b3261e;font-family:inherit;font-weight:700;font-size:14px;line-height:1.1;overflow:hidden;cursor:pointer;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;touch-action:manipulation;box-shadow:0 2px 10px rgba(20,16,12,.18)}
+.btn-ayuda::before{content:"";position:absolute;left:0;top:0;bottom:0;width:0;background:rgba(179,38,30,.18)}
+.btn-ayuda.pulsando::before{animation:ayuda-llenar 2s linear forwards}
+.btn-ayuda>*{position:relative}
+.btn-ayuda:focus-visible{outline:3px solid #b3261e;outline-offset:2px}
+@keyframes ayuda-llenar{from{width:0}to{width:100%}}
+@media(min-width:900px){.btn-ayuda{right:20px}}
+.mip-premium-driver #app .contenido{padding-bottom:calc(150px + var(--abajo,0px))}
+@media(min-width:900px){.mip-premium-driver #app .contenido{padding-bottom:90px}}
+.ayuda-fondo{position:fixed;inset:0;z-index:130;background:rgba(20,16,12,.5);display:flex;align-items:flex-end;justify-content:center}
+.ayuda-hoja{width:100%;max-width:480px;background:var(--superficie,#fff);color:var(--texto,#1f1b16);border-radius:20px 20px 0 0;padding:10px 18px calc(18px + env(safe-area-inset-bottom,0px));display:grid;gap:10px}
+.ayuda-asa{width:36px;height:4px;border-radius:2px;background:var(--borde,#d9d2c8);justify-self:center}
+.ayuda-titulo{margin:4px 0 0;font-size:20px}
+.ayuda-texto{margin:0;font-size:15px;line-height:1.4;color:var(--texto-2,#5a5148)}
+.ayuda-estado{margin:0;font-size:13px;color:var(--texto-2,#5a5148);min-height:18px}
+.ayuda-avisar,.ayuda-cancelar{min-height:50px;border-radius:14px;font-family:inherit;font-weight:700;font-size:16px;line-height:1.1;cursor:pointer}
+.ayuda-avisar{border:0;background:#b3261e;color:#fff}
+.ayuda-cancelar{border:1px solid var(--borde,#d9d2c8);background:transparent;color:var(--texto,#1f1b16)}
+.ayuda-avisar:focus-visible,.ayuda-cancelar:focus-visible{outline:3px solid #1f1b16;outline-offset:2px}
+@media(prefers-reduced-motion:reduce){.btn-ayuda.pulsando::before{animation-duration:2s}}
+/* FIN AYUDA Y MENÚ 3.1.48 */

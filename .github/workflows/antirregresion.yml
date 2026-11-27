@@ -72,6 +72,9 @@ jobs:
 
       - name: Comparación élite de pantallas reales con datos ficticios
         run: node tests/navegador-premium-elite.cjs
+
+      - name: Botón de ayuda del motorizado y menú sin palabras partidas
+        run: node tests/navegador-ayuda.cjs
       - name: Capturas antes y después
         if: always()
         uses: actions/upload-artifact@v4

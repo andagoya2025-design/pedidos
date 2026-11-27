@@ -310,10 +310,18 @@
   }
 
   /* 3.1: turno del motorizado (hora y lugar de inicio y fin). */
+  /* 3.1.48: un turno abierto hace muchas horas se marca en rojo para que no quede abierto de un día a otro. */
+  var TURNO_LARGO_HORAS = 14;
+  function turnoAbiertoDesde(t) {
+    var ini = new Date(t.inicio), ms = Date.now() - ini.getTime();
+    if (!isFinite(ms) || ms < 0) return { largo: false, texto: 'desde las ' + UI.hora(t.inicio) };
+    var h = Math.floor(ms / 3600000), hoy = new Date(), mismoDia = ini.toDateString() === hoy.toDateString();
+    return { largo: h >= TURNO_LARGO_HORAS, horas: h, texto: (mismoDia ? 'desde las ' : 'desde ayer a las ') + UI.hora(t.inicio) };
+  }
   function turnoHtml() {
-    var t = mias.turno;
-    return '<div class="tarjeta turno ' + (t ? 'abierto' : '') + '"><div style="flex:1;min-width:0"><b>' + (t ? '🟢 Turno desde las ' + UI.esc(UI.hora(t.inicio)) : '⚪ Turno sin empezar') + '</b>' +
-      '<div class="item-sub">' + (t ? 'Al terminar tu jornada, toca «Terminar turno».' : (mias.exigir_turno ? 'Empieza tu turno para recibir pedidos.' : 'Empieza tu turno al llegar al local.')) + '</div></div>' +
+    var t = mias.turno, d = t ? turnoAbiertoDesde(t) : null, largo = !!(d && d.largo);
+    return '<div class="tarjeta turno ' + (t ? 'abierto' : '') + (largo ? ' largo' : '') + '"><div style="flex:1;min-width:0"><b>' + (t ? (largo ? '🔴 Turno abierto ' : '🟢 Turno ') + UI.esc(d.texto) : '⚪ Turno sin empezar') + '</b>' +
+      '<div class="item-sub">' + (t ? (largo ? 'Lleva ' + d.horas + ' h abierto. Si ya terminaste tu jornada, toca «Terminar turno».' : 'Al terminar tu jornada, toca «Terminar turno».') : (mias.exigir_turno ? 'Empieza tu turno para recibir pedidos.' : 'Empieza tu turno al llegar al local.')) + '</div></div>' +
       '<button class="btn ' + (t ? 'secundario' : '') + ' chico" type="button" id="btn-turno">' + (t ? 'Terminar turno' : '▶ Empezar turno') + '</button></div>' +
       '<button class="btn secundario chico" type="button" id="btn-ubic-vivo" style="margin:-4px 0 12px">📍 Compartir ubicación en vivo (Google Maps)</button>';
   }
@@ -364,7 +372,7 @@
         : '<div class="cobrar-grande pagado"><span>' + UI.NOMBRE_PAGO[p.forma_pago] + '</span><span>' + (p.pago_verificado ? '✅ Pagado · no cobrar' : '⏳ Por verificar') + '</span></div>') +
       (p.propina ? '<div class="pedido-linea">🙌 Incluye tu propina: <b>' + UI.dinero(p.propina) + '</b></div>' : '') +
       '<div class="pedido-linea" style="font-size:16px"><b style="color:var(--texto)">' + UI.esc(p.cliente_nombre) + '</b></div>' +
-      '<div class="pedido-linea">📍 ' + UI.esc(p.direccion || 'Ver en el mapa') + (p.referencia ? ' · ' + UI.esc(p.referencia) : '') + '<br><small>' + UI.fuenteUbicacion(p) + '</small></div>' +
+      '<div class="pedido-linea">📍 ' + UI.esc(p.direccion || 'Ubicación marcada por el cliente') + (p.referencia ? ' · ' + UI.esc(p.referencia) : '') + '<br><small>' + UI.fuenteUbicacion(p) + '</small></div>' +
       '<ul class="pedido-items">' + (p.detalle || []).map(function (d) { return '<li><b>' + d.cantidad + '×</b> ' + UI.esc(d.nombre) + (d.extras ? ' <span class="pedido-linea">(' + UI.esc(d.extras) + ')</span>' : '') + '</li>'; }).join('') + '</ul>' +
       (p.notas ? '<div class="banda" style="margin:0;padding:8px 10px">📝 <span>' + UI.esc(p.notas) + '</span></div>' : '') +
       '<div class="entrega-grid">' +
