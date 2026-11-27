@@ -6,9 +6,9 @@ Una copia por cliente: cada negocio tiene su propia hoja de Google y su propio s
 ## Versión vigente y fuente de verdad
 
 - **MAIN / estable 3.1.49:** base oficial verificada el 27 de noviembre de 2026, commit `bf445362ecf1109b6c343acebcaf0f0fb50b7282`; 445/445 pruebas unitarias y 13 suites de navegador ([CI](https://github.com/andagoya2025-design/pedidos/actions/runs/46017693206)); [Pages](https://github.com/andagoya2025-design/pedidos/actions/runs/46019871185) exitoso.
-- **Próxima candidata 3.1.50:** monitoreo y rastreo múltiple; fase documental, sin modificación funcional ni despliegue de servidor. Consultar MAIN antes de determinar estado vigente.
-- **Servidor:** mínimo compatible 30129; fuente y TXT 30130 idénticos, despliegue de Apps Script no confirmado. No instalar sin autorización coordinada.
-- **Caché estable:** app-3.1.59-actualizacion. La versión de pantalla se declara en js/config.js; la caché en sw.js.
+- **Próxima candidata 3.1.50:** monitoreo y rastreo múltiple; implementación en candidata; CI y despliegue de servidor pendientes. Consultar MAIN antes de determinar estado vigente.
+- **Servidor:** mínimo compatible 30129; fuente y TXT de la estable 30130 idénticos; candidata 30131, mínimo candidato 30131, despliegue de Apps Script no confirmado. No instalar sin autorización coordinada.
+- **Caché estable:** app-3.1.59-actualizacion. Caché candidata: app-3.1.60-monitoreo. La versión de pantalla se declara en js/config.js; la caché en sw.js.
 - **Recuperación:** ramas `estable/3.1.49`, `estable/3.1.48`, `estable/3.1.47`. Historial preservado en [archivo/historico-2026-11-27](https://github.com/andagoya2025-design/pedidos/tree/archivo/historico-2026-11-27), commit `918f5361fcaf0810bdfd1407c72107dac92db469`. No instalar históricos ni integrar el archivo a MAIN.
 
 Consultar [Inventario de servidor](servidor/README.md), [mantenimiento](docs/MANTENIMIENTO.md) y [reglas de trabajo](AGENTS.md). Los TXT obsoletos se conservan en el historial Git y no en el árbol activo.

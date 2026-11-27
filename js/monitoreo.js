@@ -11,7 +11,7 @@
 (function (global) {
   'use strict';
   var UI = global.UI, DATOS = global.DATOS, APP = global.APP;
-  var T = 256, reloj = null, datos = null;
+  var T = 256, reloj = null, datos = null, solicitud = 0;
 
   /* ---------- Mapa liviano de puntos y ruta ---------- */
   function aPixel(lat, lng, z) {
@@ -59,7 +59,7 @@
   APP.vistas.monitoreo = {
     titulo: 'Monitoreo', icono: '📡', orden: 45, roles: ['dueno', 'cajero'],
     pintar: function (cont) {
-      cont.innerHTML = UI.encabezado('📡 Monitoreo', 'Motorizados en vivo · se actualiza cada minuto') + '<div id="mn-cuerpo">' + UI.esqueleto(3) + '</div>';
+      cont.innerHTML = UI.encabezado('📡 Monitoreo', 'Centro de seguimiento · actualización cada minuto con la app abierta') + '<div id="mn-cuerpo">' + UI.esqueleto(3) + '</div>';
       UI.$('[data-actualizar]', cont).addEventListener('click', function (e) { UI.trabajando(e.currentTarget, cargar); });
       cargar();
       if (reloj) clearInterval(reloj);
@@ -71,11 +71,13 @@
   };
 
   async function cargar() {
+    var n = ++solicitud, local = APP.local, sesion = APP.sesion;
     try {
-      datos = await DATOS.pedir('monitoreo', { local_id: APP.local });
-      pintar();
+      var respuesta = await DATOS.pedir('monitoreo', { local_id: local });
+      if (n !== solicitud || local !== APP.local || sesion !== APP.sesion || !UI.$('#mn-cuerpo')) return;
+      datos = respuesta; pintar();
     } catch (err) {
-      if (UI.$('#mn-cuerpo')) UI.$('#mn-cuerpo').innerHTML = '<div class="banda error">⚠️ <span>' + UI.esc(err.message) + '</span></div>';
+      if (n === solicitud && local === APP.local && sesion === APP.sesion && UI.$('#mn-cuerpo')) UI.$('#mn-cuerpo').innerHTML = '<div class="banda error">⚠️ <span>' + UI.esc(err.message) + '</span></div>';
     }
   }
 
@@ -84,15 +86,15 @@
     if (!c) return;
     var m = datos.motorizados || [];
     var cuenta = function (e) { return m.filter(function (x) { return x.estado === e; }).length; };
-    var puntos = m.filter(function (x) { return x.ultimo_punto && x.estado !== 'fuera'; }).map(function (x) {
-      return { lat: x.ultimo_punto.lat, lng: x.ultimo_punto.lng, etiqueta: String(x.nombre).split(' ')[0], color: x.alertas.length ? '#e03131' : '#2b8a3e' };
+    var puntos = m.filter(function (x) { return x.ultimo_punto && x.estado === 'en_camino'; }).map(function (x) {
+      return { lat: x.ultimo_punto.lat, lng: x.ultimo_punto.lng, etiqueta: String(x.nombre).split(' ')[0], color: x.pedidos.every(function (p) { return p.estado !== 'En camino' || p.gps_estado === 'confirmado'; }) && !x.alertas.length ? '#2b8a3e' : '#d97706' };
     });
     c.innerHTML =
       '<div class="resumen-mini">' +
       '<div><b>' + cuenta('en_camino') + '</b><span>en camino</span></div>' +
       '<div><b>' + (cuenta('libre') + cuenta('asignado')) + '</b><span>libres o por salir</span></div>' +
       '<div class="' + (datos.alertas ? 'mal' : '') + '"><b>' + datos.alertas + '</b><span>alertas</span></div></div>' +
-      (puntos.length ? UI.mapaPuntos(puntos, { ancho: 600, alto: 240 }) : '') +
+      '<div class="tarjeta"><div class="item-titulo">Ubicación de entregas activas</div><div class="item-sub">Última consulta: ' + UI.esc(UI.hora(datos.ahora)) + ' · Verde: señal confirmada; ámbar: revisar estado.</div>' + (puntos.length ? UI.mapaPuntos(puntos, { ancho: Math.max(220, Math.min(600, (c.clientWidth || 340) - 28)), alto: 240 }) : '<div class="mapa-vacio">Sin puntos GPS confirmados de entregas activas.</div>') + '</div>' +
       (m.length ? '<div class="lista" style="margin-top:12px">' + m.map(tarjeta).join('') + '</div>' : UI.vacio('🛵', 'No hay motorizados activos.')) +
       '<details class="tarjeta guia-gps" style="margin-top:16px"><summary>💡 ¿Cómo ver al motorizado aunque tenga el teléfono bloqueado?</summary>' +
       '<p>Esta app avisa la ubicación cada minuto <b>solo mientras lleva un pedido y tiene la app abierta</b>. Para verlo todo el turno, pídale que comparta su ubicación con usted en <b>Google Maps</b> (foto → Compartir ubicación → su cuenta) y que la apague al terminar. Es lo más confiable y es gratis.</p>' +
@@ -100,6 +102,11 @@
     UI.$$('[data-llamar]', c).forEach(function (b) { b.addEventListener('click', function () { global.location.href = 'tel:' + UI.digitos(b.getAttribute('data-llamar')); }); });
     UI.$$('[data-wa]', c).forEach(function (b) { b.addEventListener('click', function () { UI.abrirWhatsApp(b.getAttribute('data-wa'), 'Hola ' + b.getAttribute('data-nombre') + ', ¿cómo vas con el pedido?'); }); });
     UI.$$('[data-ruta]', c).forEach(function (b) { b.addEventListener('click', function () { verRuta(b.getAttribute('data-ruta'), b.getAttribute('data-num')); }); });
+  }
+
+  function estadoGps(p) {
+    var e = { confirmado: ['GPS confirmado', 'ok'], sin_senal: ['Señal interrumpida', 'aviso'], esperando: ['Esperando señal GPS', 'aviso'], pendiente: ['Esperando salida', ''] }[p.gps_estado] || ['GPS sin confirmar', 'aviso'];
+    return '<span class="etiqueta ' + e[1] + '">' + e[0] + '</span>' + (p.gps_fecha ? '<span class="item-sub"> · ' + UI.esc(UI.hora(p.gps_fecha)) + '</span>' : '');
   }
 
   function tarjeta(m) {
@@ -114,6 +121,7 @@
       m.pedidos.map(function (p) {
         return '<div class="monitor-pedido"><div class="monitor-linea"><b>' + UI.esc(p.numero) + '</b><span>' + UI.esc(p.cliente) + '</span>' + UI.chipEstado(p.estado) + '</div>' +
           (p.en_camino ? '<div class="item-sub">Salió ' + UI.esc(UI.hora(p.en_camino)) + ' (' + UI.minutosDesde(p.en_camino, datos.ahora) + ' min)' + (p.hora_estimada ? ' · llega ' + UI.esc(UI.hora(p.hora_estimada)) : '') + '</div>' : '') +
+          '<div class="monitor-linea">' + estadoGps(p) + '</div>' +
           (p.estado === 'En camino' ? '<button class="btn borde chico" type="button" data-ruta="' + UI.esc(p.id) + '" data-num="' + UI.esc(p.numero) + '">🗺️ Ver recorrido</button>' : '') + '</div>';
       }).join('') +
       '<div class="monitor-datos"><span>Hoy: <b>' + m.hoy.entregas + '</b> entregas</span>' + (m.hoy.minutos !== null ? '<span>⏱️ ' + m.hoy.minutos + ' min</span>' : '') + (m.hoy.estrellas !== null ? '<span>⭐ ' + m.hoy.estrellas + '</span>' : '') +

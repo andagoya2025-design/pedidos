@@ -28,3 +28,5 @@ MAIN contiene el código publicado, no una candidata. Leer primero js/config.js 
 - Archivo histórico `archivo/historico-2026-11-27` (`918f5361fcaf0810bdfd1407c72107dac92db469`) conserva el inventario de las ramas y los cuatro tips independientes. No integrar a MAIN. Retirar ramas antiguas solo tras verificar cada SHA y su alcance en el archivo; las pruebas usan SHA históricos que permanecen accesibles. No borrar datos, archivos ni historial Git.
 - Depuración: eliminar del árbol activo solo documentos obsoletos verificados, con recuperación por SHA y sin afectar pruebas ni instalación. No eliminar ramas con commits únicos ni reescribir historial.
 - Caja anual y comercialización: cambios separados.
+
+- Candidata 3.1.50: servidor 30131 obligatorio para la candidata, pantalla 3.1.50, caché app-3.1.60-monitoreo. No publicar hasta confirmar CI del SHA, respaldo de hoja/script y prueba GPS física. La fuente estable sigue intacta.

@@ -28,8 +28,8 @@
   global.APP_CONFIG = Object.freeze({
     url: valida(URL_SCRIPT) ? String(URL_SCRIPT).trim() : '',
     configurada: valida(URL_SCRIPT),
-    versionPantalla: '3.1.49',
-    versionScriptMinima: 30129, // candidato: cotización previa obligatoria; no desplegar sin coordinación
+    versionPantalla: '3.1.50',
+    versionScriptMinima: 30131, // monitoreo seguro: coordinar servidor antes de publicar
     tiempoEsperaMs: 25000
   });
 })(window);

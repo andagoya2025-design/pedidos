@@ -27,7 +27,7 @@
   var VIEJA_MS = 90000; // una lectura más vieja que esto no se envía
   var vigilancia = null, temporizador = null, pedidos = [], ultimo = null, candadoPantalla = null;
   var estado = 'buscando'; // buscando | ok | permiso | gps | red
-  var ultimoEnvio = null, buscando = false, primeroPendiente = false;
+  var ultimoEnvio = null, buscando = false, primeroPendiente = false, enviando = false, generacion = 0, confirmaciones = Object.create(null);
 
   function ahora() { return Date.now(); }
   function fresca() { return !!ultimo && ahora() - ultimo.t <= VIEJA_MS; }
@@ -39,6 +39,8 @@
     buscando: ['📡', 'Buscando tu ubicación… Sal a un lugar abierto y revisa que el GPS esté activado. Deja esta pantalla abierta.'],
     permiso: ['🚫', 'Tu teléfono bloqueó la ubicación. Actívala para esta app en los Ajustes del teléfono y vuelve aquí.'],
     gps: ['📍', 'No encontramos tu GPS. Revisa que la ubicación esté activada y sal a un lugar abierto. Se reintenta solo.'],
+    parcial: ['📡', 'Ubicación confirmada solo para parte de tus pedidos. Reintentando… Deja esta pantalla abierta.'],
+    pendiente: ['📡', 'Esperando confirmación del servidor. Deja esta pantalla abierta.'],
     red: ['📶', 'Sin conexión: el local no recibió tu ubicación. Se reintenta cada minuto. Deja esta pantalla abierta.']
   };
 
@@ -88,20 +90,34 @@
 
   function enviar() {
     if (!sesionActiva()) { reiniciarTodo(); return Promise.resolve(); }
-    if (!pedidos.length || global.document.hidden) return Promise.resolve();
+    if (!pedidos.length || global.document.hidden || enviando) return Promise.resolve();
     if (!fresca()) { // nunca se envía una posición vieja como si fuera de ahora
       if (estado === 'ok' || estado === 'red') cambiar('buscando');
       pedirPosicionFresca();
       return Promise.resolve();
     }
-    var punto = ultimo, lista = pedidos.slice();
+    var punto = ultimo, lista = pedidos.slice(), turno = generacion;
+    enviando = true;
     return Promise.all(lista.map(function (id) {
-      return DATOS.pedir('rastreoPunto', { pedido_id: id, lat: punto.lat, lng: punto.lng, precision: punto.precision });
+      return DATOS.pedir('rastreoPunto', { pedido_id: id, lat: punto.lat, lng: punto.lng, precision: punto.precision }).then(function (respuesta) {
+        return { id: id, respuesta: respuesta };
+      }, function () { return { id: id, error: true }; });
     })).then(function (resultados) {
-      // «sin_pedido_en_camino»: la lista del teléfono aún no se actualizó; no cuenta como envío.
-      var llego = resultados.some(function (r) { return r && (r.guardado === true || !r.motivo); });
-      if (llego) { ultimoEnvio = ahora(); primeroPendiente = false; cambiar('ok'); }
-    }, function () { cambiar('red'); }); // solo un fallo del envío es «sin conexión»; un error al pintar no
+      if (turno !== generacion || !sesionActiva() || !pedidos.length) return;
+      var fallos = 0;
+      resultados.forEach(function (x) {
+        if (pedidos.indexOf(x.id) < 0) return;
+        var v = x.respuesta, fecha = v && v.fecha ? Date.parse(v.fecha) : NaN;
+        if (v && v.guardado === true) confirmaciones[x.id] = ahora();
+        else if (v && v.motivo === 'intervalo_minimo' && isFinite(fecha) && Math.abs(ahora() - fecha) <= VIEJA_MS) confirmaciones[x.id] = fecha;
+        else { delete confirmaciones[x.id]; if (x.error) fallos++; }
+      });
+      var n = pedidos.filter(function (id) { return confirmaciones[id] !== undefined && ahora() - confirmaciones[id] <= VIEJA_MS; }).length;
+      primeroPendiente = false;
+      if (n === pedidos.length) { ultimoEnvio = Math.min.apply(null, pedidos.map(function (id) { return confirmaciones[id]; })); cambiar('ok'); }
+      else if (n) cambiar('parcial');
+      else cambiar(fallos ? 'red' : 'pendiente');
+    }).finally(function () { if (turno === generacion) enviando = false; });
   }
 
   async function mantenerPantalla() {
@@ -121,6 +137,7 @@
   function detener() {
     if (vigilancia !== null && global.navigator.geolocation) global.navigator.geolocation.clearWatch(vigilancia);
     if (temporizador) clearInterval(temporizador);
+    generacion++; enviando = false; confirmaciones = Object.create(null);
     vigilancia = null; temporizador = null; ultimo = null; ultimoEnvio = null; buscando = false; primeroPendiente = false;
     estado = 'buscando';
     try { if (candadoPantalla) candadoPantalla.release(); } catch (e) { /* ya liberado */ }
@@ -289,8 +306,11 @@
 
   global.RASTREO = {
     actualizar: function (lista) {
-      pedidos = (lista || []).slice();
-      if (pedidos.length) iniciar(); else detener();
+      var nueva = (lista || []).filter(function (id, i, arr) { return arr.indexOf(id) === i; });
+      var cambio = nueva.length !== pedidos.length || nueva.some(function (id) { return pedidos.indexOf(id) < 0; });
+      pedidos = nueva;
+      Object.keys(confirmaciones).forEach(function (id) { if (pedidos.indexOf(id) < 0) delete confirmaciones[id]; });
+      if (pedidos.length) { iniciar(); if (cambio && fresca()) { cambiar('buscando'); enviar(); } } else detener();
       pintarBanda();
       asegurarAyuda();
     },
