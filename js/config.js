@@ -29,7 +29,7 @@
     url: valida(URL_SCRIPT) ? String(URL_SCRIPT).trim() : '',
     configurada: valida(URL_SCRIPT),
     versionPantalla: '3.1.50',
-    versionScriptMinima: 30131, // monitoreo seguro: coordinar servidor antes de publicar
+    versionScriptMinima: 30129, // compatibilidad comercial; monitoreoSeguro requiere 30131
     tiempoEsperaMs: 25000
   });
 })(window);

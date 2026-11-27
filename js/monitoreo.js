@@ -73,11 +73,11 @@
   async function cargar() {
     var n = ++solicitud, local = APP.local, sesion = APP.sesion;
     try {
-      var respuesta = await DATOS.pedir('monitoreo', { local_id: local });
+      var respuesta = await DATOS.pedir('monitoreoSeguro', { local_id: local });
       if (n !== solicitud || local !== APP.local || sesion !== APP.sesion || !UI.$('#mn-cuerpo')) return;
       datos = respuesta; pintar();
     } catch (err) {
-      if (n === solicitud && local === APP.local && sesion === APP.sesion && UI.$('#mn-cuerpo')) UI.$('#mn-cuerpo').innerHTML = '<div class="banda error">⚠️ <span>' + UI.esc(err.message) + '</span></div>';
+      if (n === solicitud && local === APP.local && sesion === APP.sesion && UI.$('#mn-cuerpo')) UI.$('#mn-cuerpo').innerHTML = '<div class="banda error">⚠️ <span>' + UI.esc(err.codigo === 'ACCION' ? 'El centro de monitoreo necesita el servidor 3.1.31. Contacta al administrador. Los demás módulos siguen disponibles.' : err.message) + '</span></div>';
     }
   }
 

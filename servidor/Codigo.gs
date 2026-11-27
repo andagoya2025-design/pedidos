@@ -217,6 +217,7 @@ var ACCIONES = {
   turnoTerminar:      { tipo: 'sesion',  roles: ['motorizado'], fn: accionTurnoTerminar_ },
   rastreoPunto:       { tipo: 'sesion',  roles: ['motorizado'], fn: accionRastreoPunto_ },
   monitoreo:          { tipo: 'sesion',  roles: ['dueno', 'cajero'], fn: accionMonitoreo_ },
+  monitoreoSeguro:    { tipo: 'sesion',  roles: ['dueno', 'cajero'], fn: accionMonitoreo_ },
   informeMotorizados: { tipo: 'dueno',   fn: accionInformeMotorizados_ },
   rutaPedido:         { tipo: 'sesion',  roles: ['dueno', 'cajero'], fn: accionRutaPedido_ },
   clienteAnonimizar:  { tipo: 'dueno',   fn: accionClienteAnonimizar_ },
