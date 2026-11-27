@@ -76,6 +76,9 @@ jobs:
       - name: Botón de ayuda del motorizado y menú sin palabras partidas
         run: node tests/navegador-ayuda.cjs
 
+      - name: Activar mi ubicación del motorizado y formulario de inventario
+        run: node tests/navegador-ubicacion-inventario.cjs
+
       - name: Actualización automática de la app sin bloqueos y con aviso visible
         run: node tests/navegador-actualizacion.cjs
       - name: Capturas antes y después

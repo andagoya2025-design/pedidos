@@ -165,3 +165,10 @@
 /* Aviso de mapa base: el GPS es independiente del proveedor cartográfico. */
 .mapa-error:not([hidden]) { position:absolute; z-index:2; top:8px; left:8px; right:8px; padding:8px 10px; border-radius:10px; background:var(--superficie,#fff); color:var(--texto,#222); font-size:12px; line-height:1.4; border:1px solid var(--borde,#ddd); pointer-events:none; }
 .mapa-error a { pointer-events:auto; text-decoration:underline; color:inherit; font-weight:700; }
+
+/* INICIO INVENTARIO FORMULARIO 3.1.51 */
+.fila-dos{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+.ventana:has(#form-insumo)>.acciones{position:sticky;bottom:0;z-index:2;background:var(--superficie);margin:8px 0 0;padding:10px 0 max(6px,env(safe-area-inset-bottom));border-top:1px solid var(--borde)}
+.ventana:has(#form-insumo) .campo .ayuda{display:block;margin-top:2px;line-height:1.3}
+.interruptor:has(#solo-bajos){white-space:nowrap;flex:1 1 200px!important}
+/* FIN INVENTARIO FORMULARIO 3.1.51 */

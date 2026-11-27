@@ -324,6 +324,50 @@
     if (fresca()) enviar(); else { if (estado === 'ok' || estado === 'red') cambiar('buscando'); pedirPosicionFresca(); }
   });
 
+  /* 3.1.51: «Activar mi ubicación». Pide el permiso del teléfono ANTES de salir y explica el resultado.
+   * Prueba local: no guarda ni envía nada al servidor. */
+  var probandoUbicacion = false;
+
+  function pasosAjustes() {
+    var ua = String((global.navigator && global.navigator.userAgent) || '');
+    if (/iPhone|iPad|iPod/.test(ua)) {
+      return '<ol><li>Abre <b>Ajustes</b> del iPhone.</li><li>Entra a <b>Privacidad y seguridad</b> → <b>Localización</b>.</li><li>Toca <b>Safari</b> (o <b>MiPedido</b>) y elige <b>Mientras se usa la app</b>.</li><li>Activa <b>Ubicación precisa</b> y vuelve aquí.</li></ol>';
+    }
+    return '<ol><li>Abre <b>Ajustes</b> del teléfono.</li><li>Entra a <b>Aplicaciones</b> → <b>Chrome</b> (o <b>MiPedido</b>) → <b>Permisos</b>.</li><li>Toca <b>Ubicación</b> y elige <b>Permitir</b> (con ubicación exacta).</li><li>Vuelve aquí y toca otra vez «Activar mi ubicación».</li></ol>';
+  }
+
+  function mostrarUbicacion(resultado, precision) {
+    var UI = global.UI;
+    if (!UI || typeof UI.ventana !== 'function') return Promise.resolve();
+    var limite = '<p>Recuerda: tu ubicación se envía <b>solo mientras MiPedido está abierta</b> y con la pantalla encendida.</p>';
+    var op = {
+      ok: { icono: '✅', titulo: 'Tu ubicación funciona', html: '<p>Precisión aproximada: <b>' + Math.round(precision || 0) + ' m</b>.</p>' + ((precision || 0) > 100 ? '<p>La precisión es baja. Activa la ubicación exacta (alta precisión) del teléfono y sal a un lugar abierto.</p>' : '') + limite },
+      permiso: { icono: '🚫', titulo: 'La ubicación está bloqueada', html: '<p>El teléfono no deja que MiPedido use tu ubicación. Actívala así:</p>' + pasosAjustes() },
+      senal: { icono: '📡', titulo: 'No encontramos señal GPS', html: '<p>Activa la <b>ubicación</b> del teléfono, sal a un lugar abierto y vuelve a intentarlo.</p>' + limite },
+      soporte: { icono: '📵', titulo: 'Este navegador no permite la ubicación', html: '<p>Abre MiPedido en <b>Chrome</b> (Android) o en <b>Safari</b> (iPhone).</p>' }
+    }[resultado];
+    op.botones = [{ texto: 'Entendido', valor: true }];
+    return UI.ventana(op);
+  }
+
+  function activarUbicacion(boton) {
+    if (probandoUbicacion || !esMotorizado()) return;
+    var original = boton ? boton.textContent : '';
+    function fin() { probandoUbicacion = false; if (boton) { boton.disabled = false; boton.textContent = original; } }
+    if (!global.navigator.geolocation) { mostrarUbicacion('soporte'); return; }
+    probandoUbicacion = true;
+    if (boton) { boton.disabled = true; boton.textContent = 'Buscando tu ubicación…'; }
+    global.navigator.geolocation.getCurrentPosition(
+      function (pos) { fin(); mostrarUbicacion('ok', pos && pos.coords ? pos.coords.accuracy : 0); },
+      function (err) { fin(); mostrarUbicacion(err && err.code === 1 ? 'permiso' : 'senal'); },
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 });
+  }
+
+  global.document.addEventListener('click', function (e) {
+    var b = e && e.target && typeof e.target.closest === 'function' ? e.target.closest('#btn-ubic-activar') : null;
+    if (b) activarUbicacion(b);
+  });
+
   // Cerrar sesión o vencer la sesión apaga el GPS al instante (privacidad).
   global.addEventListener('app:sesion-terminada', reiniciarTodo);
   if (global.APP && typeof global.APP.salir === 'function') {

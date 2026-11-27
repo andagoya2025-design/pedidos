@@ -323,6 +323,7 @@
     return '<div class="tarjeta turno ' + (t ? 'abierto' : '') + (largo ? ' largo' : '') + '"><div style="flex:1;min-width:0"><b>' + (t ? (largo ? '🔴 Turno abierto ' : '🟢 Turno ') + UI.esc(d.texto) : '⚪ Turno sin empezar') + '</b>' +
       '<div class="item-sub">' + (t ? (largo ? 'Lleva ' + d.horas + ' h abierto. Si ya terminaste tu jornada, toca «Terminar turno».' : 'Al terminar tu jornada, toca «Terminar turno».') : (mias.exigir_turno ? 'Empieza tu turno para recibir pedidos.' : 'Empieza tu turno al llegar al local.')) + '</div></div>' +
       '<button class="btn ' + (t ? 'secundario' : '') + ' chico" type="button" id="btn-turno">' + (t ? 'Terminar turno' : '▶ Empezar turno') + '</button></div>' +
+      '<button class="btn chico" type="button" id="btn-ubic-activar" style="margin:-4px 0 8px">📍 Activar mi ubicación</button>' +
       '<button class="btn secundario chico" type="button" id="btn-ubic-vivo" style="margin:-4px 0 12px">📍 Compartir ubicación en vivo (Google Maps)</button>';
   }
   async function guardarConAviso(accion, datos, previo) {

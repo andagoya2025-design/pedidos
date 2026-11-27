@@ -97,14 +97,16 @@
     var nuevo = !i;
     i = i || { id: '', nombre: '', unidad: '', minimo: '', local_id: APP.local === 'TODOS' ? ((APP.locales.filter(function (l) { return l.activo; })[0] || {}).id || '') : APP.local, activo: true };
     var enviar = null;
+    var locales = APP.locales.filter(function (l) { return l.activo || l.id === i.local_id; });
     var ok = await UI.ventana({
       icono: '📦', titulo: nuevo ? 'Nuevo insumo' : 'Editar insumo',
       html: '<form id="form-insumo" autocomplete="off"><div class="campo"><label for="ins-nombre">Nombre</label><input class="entrada" id="ins-nombre" name="nombre" maxlength="60" placeholder="Ej. Pollo (presas)" value="' + UI.esc(i.nombre) + '"></div>' +
-        '<div class="fila-campos"><div class="campo"><label for="ins-unidad">Unidad</label><input class="entrada" id="ins-unidad" name="unidad" maxlength="15" placeholder="presa, kg, litro, unidad" value="' + UI.esc(i.unidad) + '"></div>' +
-        '<div class="campo"><label for="ins-min">Mínimo (aviso)</label><input class="entrada" id="ins-min" name="minimo" inputmode="decimal" value="' + UI.esc(i.minimo) + '"></div>' +
-        (nuevo ? '<div class="campo"><label for="ins-stock">Cantidad inicial</label><input class="entrada" id="ins-stock" name="stock" inputmode="decimal" placeholder="0"></div>' : '') +
-        '<div class="campo"><label for="ins-local">Local</label><select class="entrada" id="ins-local" name="local_id"' + (nuevo ? '' : ' disabled') + '>' +
-        APP.locales.filter(function (l) { return l.activo || l.id === i.local_id; }).map(function (l) { return '<option value="' + UI.esc(l.id) + '"' + (l.id === i.local_id ? ' selected' : '') + '>' + UI.esc(l.nombre) + '</option>'; }).join('') + '</select></div></div>' +
+        '<div class="campo"><label for="ins-unidad">Unidad</label><input class="entrada" id="ins-unidad" name="unidad" maxlength="15" placeholder="presa, kg, litro, unidad" value="' + UI.esc(i.unidad) + '"></div>' +
+        '<div class="fila-campos fila-dos"><div class="campo"><label for="ins-min">Mínimo (aviso)</label><input class="entrada" id="ins-min" name="minimo" inputmode="decimal" placeholder="Ej. 5" value="' + UI.esc(i.minimo) + '"><span class="ayuda">Le avisamos cuando quede esta cantidad o menos.</span></div>' +
+        (nuevo ? '<div class="campo"><label for="ins-stock">Cantidad inicial</label><input class="entrada" id="ins-stock" name="stock" inputmode="decimal" placeholder="0"><span class="ayuda">Lo que hay hoy.</span></div>' : '') + '</div>' +
+        (locales.length > 1 ? '<div class="campo"><label for="ins-local">Local</label><select class="entrada" id="ins-local" name="local_id"' + (nuevo ? '' : ' disabled') + '>' +
+        locales.map(function (l) { return '<option value="' + UI.esc(l.id) + '"' + (l.id === i.local_id ? ' selected' : '') + '>' + UI.esc(l.nombre) + '</option>'; }).join('') + '</select></div>'
+          : '<input type="hidden" id="ins-local" name="local_id" value="' + UI.esc(i.local_id || (locales[0] || {}).id || '') + '">') +
         '<div class="fila-campos"><div class="campo"><label for="ins-costo">Costo por unidad (USD)</label><input class="entrada" id="ins-costo" name="costo" inputmode="decimal" placeholder="Ej. 2,50" value="' + UI.esc(i.costo === undefined ? '' : i.costo) + '"><span class="ayuda">Para saber cuánto gana en cada plato.</span></div>' +
         '<div class="campo"><label for="ins-prov">Proveedor</label><input class="entrada" id="ins-prov" name="proveedor" maxlength="60" placeholder="Ej. Avícola Sur" value="' + UI.esc(i.proveedor || '') + '"></div>' +
         '<div class="campo"><label for="ins-provtel">WhatsApp del proveedor</label><input class="entrada" id="ins-provtel" name="proveedor_tel" inputmode="tel" placeholder="0991234567" value="' + UI.esc(i.proveedor_tel || '') + '"></div></div>' +
