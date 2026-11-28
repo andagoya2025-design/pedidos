@@ -3,7 +3,7 @@ const test=require('node:test'),assert=require('node:assert/strict'),fs=require(
 const gs=fs.readFileSync('servidor/Codigo.gs','utf8');
 function ex(n){const i=gs.indexOf('function '+n+'('),j=gs.indexOf('\nfunction ',i+1);assert.ok(i>=0);return gs.slice(i,j);}
 function fixture(){
- const p={id:'P1',numero:'PED-1',local_id:'L1'},ins=[{id:'I1',local_id:'L1',nombre:'Harina',stock:10,_fila:2},{id:'I2',local_id:'L1',nombre:'Aceite',stock:10,_fila:3}];
+ const p={id:'P1',numero:'PED-1',local_id:'L1'},ins=[{id:'I1',local_id:'L1',nombre:'Harina',activo:true,stock:10,_fila:2},{id:'I2',local_id:'L1',nombre:'Aceite',activo:true,stock:10,_fila:3}];
  const recetas=[{plato_id:'A',insumo_id:'I1',cantidad:.3334},{plato_id:'B',insumo_id:'I1',cantidad:.3334},{plato_id:'B',insumo_id:'I2',cantidad:.5}];
  const lines=[{id:'D1',plato_id:'A',cantidad:2},{id:'D2',plato_id:'B',cantidad:1},{id:'D3',plato_id:'C',cantidad:1}];const logs=[];let seq=0,writes=0;
  const deps={leerTabla_:n=>({insumos:ins,recetas_plato:recetas,movimientos_inventario:logs}[n]),numero_:Number,claveComparar_:v=>String(v).toLowerCase(),nuevoId_:n=>n+'-'+(++seq),fallo_:(m,c)=>Object.assign(Error(m),{codigo:c}),actualizarCampos_:(n,f,i,x)=>{writes++;Object.assign(i,x)},agregarFilas_:(n,rows)=>{writes++;rows.forEach(a=>logs.push({id:a[0],local_id:a[2],insumo_id:a[3],tipo:a[4],cantidad:a[5],motivo:a[6]}))},limpiarMenuCache_:()=>{}};

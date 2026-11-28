@@ -8,7 +8,7 @@
  * - Nunca guarda datos del negocio: los pedidos van siempre al servidor.
  * ============================================================
  */
-var VERSION = 'app-3.1.71-inventario-traza';
+var VERSION = 'app-3.1.72-inventario-cierre';
 var FOTOS = 'fotos-1';      // 3.1: fotos de platos (sobrevive a las actualizaciones)
 var MAX_FOTOS = 150;
 

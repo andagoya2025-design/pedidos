@@ -38,7 +38,7 @@ function escenario(opts = {}) {
     pedidos: [pedido],
     pedido_detalle: opts.detalleDuplicado ? [{id:'ADIC-token1-0'}] : [],
     recetas_plato: opts.stock == null ? [] : [{plato_id:'A',insumo_id:'I',cantidad:2}],
-    insumos: [{id:'I',nombre:'Queso',local_id:'L1',stock:opts.stock == null ? 100 : opts.stock}]
+    insumos: [{id:'I',nombre:'Queso',local_id:'L1',activo:true,stock:opts.stock == null ? 100 : opts.stock}]
   };
   const writes = [];
   const helpers = {

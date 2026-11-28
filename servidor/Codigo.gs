@@ -18,10 +18,10 @@
  * ============================================================
  */
 
-var APP_VERSION = '3.1.37';
+var APP_VERSION = '3.1.38';
 // Marcador opaco, sin datos de pedidos. Una ejecución de Apps Script tiene su propio estado.
 var syncPendiente_ = false;
-var APP_VERSION_NUM = 30137; // 3.1.0 -> 30100 (la pantalla compara con su mínimo)
+var APP_VERSION_NUM = 30138; // 3.1.0 -> 30100 (la pantalla compara con su mínimo)
 var SESION_SEGUNDOS = 21600;  // 6 h; se renueva con cada uso
 var ROLES = ['dueno', 'cajero', 'motorizado'];
 
@@ -1872,6 +1872,7 @@ function validarStockAdicional_(localId, detalle) {
       var ins = porId[String(rec.insumo_id)];
       if (ins && String(ins.local_id) !== String(localId)) ins = porNombre[claveComparar_(ins.nombre)];
       if (!ins) return; // Sin inventario configurado en este local: mismo criterio de venta existente.
+      if (ins.activo !== true) throw fallo_('Insumo inactivo: ' + String(ins.nombre) + '. El plato no está disponible en este local.', 'AGOTADO');
       var id = String(ins.id);
       consumo[id] = (consumo[id] || 0) + numero_(rec.cantidad) * numero_(d.cantidad);
     });
@@ -2370,6 +2371,7 @@ function descontarInventario_(pedidoId, numero, localId, detalle, signo, usuario
       var ins=porId[String(r.insumo_id)];
       if(ins&&String(ins.local_id)!==localId)ins=porNombre[claveComparar_(ins.nombre)];
       if(!ins)return;
+      if(ins.activo!==true)throw fallo_('Insumo inactivo: '+String(ins.nombre)+'.','AGOTADO');
       var iid=String(ins.id);
       if(!(iid in antes))antes[iid]=Math.round((total[iid]||0)*1000);
       total[iid]=(total[iid]||0)+numero_(r.cantidad)*n;
@@ -3028,13 +3030,19 @@ function accionInsumoGuardar_(data, ctx) {
       if (!actual) throw fallo_('Ese insumo ya no existe.', 'NO_EXISTE');
       if (String(actual.local_id) !== localId) throw fallo_('Un insumo no cambia de local: use «Traspaso».');
       // El stock NO se edita aquí: solo con movimientos (quedan en el historial).
-      if (actualizarCampos_('insumos', actual._fila, actual, { nombre: nombre, unidad: unidad, minimo: minimo, activo: data.activo !== false, costo: costo, proveedor: proveedor, proveedor_tel: provTel })) bitacora_(ctx.sesion, 'INVENTARIO', 'EDITAR_INSUMO', nombre, ctx.dispositivo);
+      if (actualizarCampos_('insumos', actual._fila, actual, { nombre: nombre, unidad: unidad, minimo: minimo, activo: data.activo !== false, costo: costo, proveedor: proveedor, proveedor_tel: provTel })) {
+        limpiarMenuCache_();
+        bitacora_(ctx.sesion, 'INVENTARIO', 'EDITAR_INSUMO', nombre, ctx.dispositivo);
+      }
     } else {
       var inicial = cantidadInventario_(data.stock, true);
       if (!(inicial >= 0)) throw fallo_('Cantidad inicial no válida.');
-      var nid = nuevoId_('INS'), ahora = new Date();
-      agregarFilas_('insumos', [[nid, localId, nombre, unidad, inicial, minimo, data.activo !== false, ahora, costo, proveedor, provTel]]);
-      if (inicial > 0) agregarFilas_('movimientos_inventario', [[nuevoId_('MOV'), ahora, localId, nid, 'inicial', inicial, 'Cantidad inicial', '', ctx.sesion.usuario]]);
+      var nid = nuevoId_('INS'), ahora = new Date().toISOString();
+      var fila = [nid, localId, nombre, unidad, inicial, minimo, data.activo !== false, ahora, costo, proveedor, provTel];
+      // Usa el diario existente: una ficha y su movimiento inicial (también cero) se recuperan juntos.
+      var plan = {v:1,cambios:[{id:nid,local:localId,unidad:claveComparar_(unidad),antes:null,despues:inicial,fila:fila}],movs:[[nuevoId_('MOV'),ahora,localId,nid,'inicial',inicial,'Cantidad inicial','',String(ctx.sesion.usuario)]]};
+      PropertiesService.getScriptProperties().setProperty('MIPEDIDO_INV_PENDIENTE_V1', JSON.stringify(plan));
+      recuperarMovimientoInventario_();
       bitacora_(ctx.sesion, 'INVENTARIO', 'CREAR_INSUMO', nombre, ctx.dispositivo);
     }
   } finally { lock.releaseLock(); }
@@ -4404,8 +4412,8 @@ function agotadosPorLocal_() {
       var base = porId[String(r.insumo_id)];
       if (!base) return;
       var ins = String(base.local_id) === lid ? base : porLocalNombre[lid + '|' + claveComparar_(base.nombre)];
-      if (!ins || ins.activo !== true) return; // sin ese insumo en el local: no se controla
-      if (numero_(ins.stock) < numero_(r.cantidad)) m[String(r.plato_id)] = true;
+      if (!ins) return; // se conserva la compatibilidad de locales sin insumo configurado
+      if (ins.activo !== true || numero_(ins.stock) < numero_(r.cantidad)) m[String(r.plato_id)] = true;
     });
     if (Object.keys(m).length) res[lid] = m;
   });
