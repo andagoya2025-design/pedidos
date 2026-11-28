@@ -1,2 +1,0 @@
-const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs');
-for(const [p,selector] of [['js/notificaciones.js','data-borrar-aviso'],['js/avisos-cliente.js','data-borrar-cliente']])test('selector múltiple de borrado: '+p,()=>{const s=fs.readFileSync(p,'utf8');assert.ok(s.includes("UI.$$('["+selector+"]',v).forEach"));assert.ok(!s.includes("UI.$('["+selector+"]',v).forEach"));assert.doesNotMatch(s,/UI\.\$\([^;\n]*?\)\.forEach\(/);});

@@ -1,0 +1,24 @@
+MI PEDIDO · ENTREGA COMERCIAL 3.1.58
+Pantalla 3.1.58 | Apps Script 3.1.38 (30138) | Caché app-3.1.73-consolidacion
+Código fuente base: abe51465f6529b7b469e19af67bd19e624be34c4
+ESTADO: paquete candidato de instalación aislada. Verificar aprobación del CI de la base, respaldo y aceptación antes de publicar. No contiene datos reales ni configuración de conexión activa.
+
+CARPETAS
+WEB/ : única carpeta a publicar como sitio HTTPS estático. Subir su contenido completo, conservando nombres y rutas.
+INSTALACION/ : herramientas y código de servidor. No publicar esta carpeta en el sitio web.
+No se incluyen pruebas, archivos históricos, herramientas comerciales del proveedor ni repositorio Git.
+
+NEGOCIO NUEVO
+1. Crear una hoja de Google exclusiva del cliente y hacer copia de respaldo. Abrir Extensiones > Apps Script desde esa hoja.
+2. Copiar el contenido de INSTALACION/Codigo_MiPedido_3.1.38.txt en Código.gs. Guardar. Implementar como aplicación web, ejecutar como el propietario autorizado y elegir el acceso necesario para pedidos públicos. Revisar los permisos y la titularidad antes de compartir.
+3. Copiar la URL /exec de esa implementación. Abrir WEB/js/config.js, reemplazar exclusivamente las comillas vacías de URL_SCRIPT por esa URL y guardar. No reutilizar otra conexión. MiPedido_Setup.html valida formato localmente, no instala ni concede permisos.
+4. Publicar únicamente WEB/ en un alojamiento HTTPS independiente del resto de negocios (sin modificar el sitio activo). Abrir instalar.html y comprobar que responde el servidor propio.
+5. Confirmar que el servidor es 30138; el mínimo compatible de la pantalla 30129 no certifica las funciones nuevas. Crear usuario dueño y negocio únicamente si la hoja es nueva y no instalada. Guardar las credenciales de forma privada.
+6. Probar los tres perfiles con pedidos ficticios y el inventario: insumo nuevo, compras, salidas, conteos, traspasos, inactivar/reactivar, retiro parcial y anulación. Comprobar caja, notificaciones, GPS y versiones en dispositivos.
+7. Entregar accesos propios: index.html (administración), pedir.html (cliente), driver.html (motorizado).
+
+INSTALACIÓN EXISTENTE
+No reinicializar. Conservar la hoja, usuarios y URL propia del negocio. Respaldar hoja y script, confirmar que no hay diario de inventario pendiente, desplegar nueva versión del script conservando URL, comprobar 30138 y actualizar WEB/ con su propia configuración. Si se detecta una escritura incompleta o falta trazabilidad, conciliar antes de reintentar. No restaurar hojas a ciegas.
+
+LÍMITES
+Los pedidos históricos sin trazabilidad suficiente requieren conciliación manual para devoluciones parciales. Un alta recuperada puede informar nombre duplicado sin duplicar existencias. Las escrituras generales de pedidos no son transacciones atómicas. Las pruebas de navegador no certifican GPS, voz ni red física. No incluye un sistema remoto de licenciamiento. Revisar políticas de privacidad según el negocio.

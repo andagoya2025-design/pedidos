@@ -13,7 +13,7 @@
   'use strict';
 
   /* ===== ÚNICA LÍNEA A CONFIGURAR EN CADA CLIENTE ===== */
-  var URL_SCRIPT = 'https://script.google.com/macros/s/AKfycbzI4P-BPCPBWjmITTQ9eVHcK26odpjLHYpCMNCRphleF6PFpPGu3sNbtL3dn0Uo-RM/exec'; // Conexión original del negocio; requiere Apps Script 3.1.8 publicado.
+  var URL_SCRIPT = ''; // Pegue exclusivamente la URL /exec del negocio nuevo.
   /* ===================================================== */
 
   function valida(url) {

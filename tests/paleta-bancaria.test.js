@@ -1,8 +1,0 @@
-const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
-const s=fs.readFileSync('js/comun.js','utf8'),a=s.indexOf('  UI.paletaBanco ='),b=s.indexOf('  UI.NOMBRE_PAGO =',a);const UI={};vm.runInNewContext(s.slice(a,b),{UI});
-const pixels=(...colors)=>new Uint8ClampedArray(colors.flatMap(([r,g,b,a,n])=>Array.from({length:n},()=>[r,g,b,a]).flat()));
-test('blanco y transparencia ignorados, color predominante',()=>{assert.equal(UI.paletaBanco(pixels([255,255,255,255,100],[15,110,200,255,20],[200,10,10,255,5],[0,255,0,0,200])),'#0f6ec8');});
-test('monocromo sin color utiliza alternativa',()=>{assert.equal(UI.paletaBanco(pixels([255,255,255,255,10],[0,0,0,255,10])),'');assert.equal(UI.tonoBanco({banco:'Otro'}).fondo,'#334155')});
-function lum(h){const v=[1,3,5].map(i=>{const n=parseInt(h.slice(i,i+2),16)/255;return n<=.04045?n/12.92:((n+.055)/1.055)**2.4});return .2126*v[0]+.7152*v[1]+.0722*v[2]}
-test('contraste WCAG AA para 4096 colores',()=>{for(let r=0;r<256;r+=17)for(let g=0;g<256;g+=17)for(let b=0;b<256;b+=17){const h='#'+[r,g,b].map(v=>v.toString(16).padStart(2,'0')).join(''),p=UI.tonoBanco({color:h});const l=lum(p.fondo),t=lum(p.texto);assert.ok((Math.max(l,t)+.05)/(Math.min(l,t)+.05)>=4.5,h)}});
-test('cinco bancos conocidos y color personalizado seguro',()=>{for(const b of ['Banco Pichincha','Banco Guayaquil','Banco del Pacífico','Banco Bolivariano','Produbanco'])assert.notEqual(UI.tonoBanco({banco:b}).fondo,'#334155');assert.equal(UI.tonoBanco({banco:'Otro',color:'red;position:fixed'}).fondo,'#334155');assert.equal(UI.tonoBanco({banco:'Otro',color:'#ffffff'}).texto,'#000000')});
