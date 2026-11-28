@@ -2436,7 +2436,7 @@ function aplicarDevolucionTotal_(p, plan, usuario) {
   return true;
 }
 
-// Devuelve solamente el consumo acreditado por línea. Históricos ambiguos: conciliación.
+/* Devuelve solamente el consumo acreditado por línea. Históricos ambiguos: conciliación. */
 function planDevolucionParcial_(p, antes, bajas) {
   var error=function(){throw fallo_('La devolución parcial requiere trazabilidad original. Solicita conciliación de inventario antes de aplicar.', 'REVISION_MANUAL');};
   var local=String(p.local_id),num=String(p.numero),pref='Trazabilidad '+num+' ',ventas=Object.create(null),trazas=[],lineas=Object.create(null),usadas=Object.create(null),total=Object.create(null);
