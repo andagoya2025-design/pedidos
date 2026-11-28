@@ -8,7 +8,7 @@
  * - Nunca guarda datos del negocio: los pedidos van siempre al servidor.
  * ============================================================
  */
-var VERSION = 'app-3.1.69-insumos-recuperacion';
+var VERSION = 'app-3.1.70-inventario-devolucion';
 var FOTOS = 'fotos-1';      // 3.1: fotos de platos (sobrevive a las actualizaciones)
 var MAX_FOTOS = 150;
 

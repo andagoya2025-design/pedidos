@@ -18,10 +18,10 @@
  * ============================================================
  */
 
-var APP_VERSION = '3.1.35';
+var APP_VERSION = '3.1.36';
 // Marcador opaco, sin datos de pedidos. Una ejecución de Apps Script tiene su propio estado.
 var syncPendiente_ = false;
-var APP_VERSION_NUM = 30135; // 3.1.0 -> 30100 (la pantalla compara con su mínimo)
+var APP_VERSION_NUM = 30136; // 3.1.0 -> 30100 (la pantalla compara con su mínimo)
 var SESION_SEGUNDOS = 21600;  // 6 h; se renueva con cada uso
 var ROLES = ['dueno', 'cajero', 'motorizado'];
 
@@ -1698,13 +1698,14 @@ function aplicarIntegral_(x,p,q,data,ctx) {
   var nuevos=q.despues.filter(function(d){return !d.id;}).map(function(d,i){return Object.assign({},d,{id:'ADIC-'+String(q.id).replace(/[^A-Za-z0-9]/g,'')+'-'+i});});
   var ids=Object.create(null);nuevos.forEach(function(d){ids[d.id]=true;});
   if(leerTabla_('pedido_detalle').some(function(d){return ids[String(d.id)];}))throw fallo_('Detalle repetido; requiere conciliación.');
+  var devolucionTotal=q.tipo==='cancelar'&&p.inventario_descontado===true?planDevolucionTotal_(p):[];
   actualizarCampos_('pedido_cambios',x._fila,x,{estado:'Aplicando',respuesta:'Aplicación en curso. No despachar hasta completar.'});
   if(q.tipo==='cancelar'){
     actualizarCampos_('pedidos',p._fila,p,{estado:'Anulado',anulado:new Date(),motivo_anulacion:'Cancelación aceptada por cliente',anulado_por:usuario});
     var c=leerTabla_('clientes').filter(function(v){return String(v.id)===String(p.cliente_id);})[0];
     if(c){var patch={pedidos:Math.max(0,numero_(c.pedidos)-1)};if(numero_(p.premio)>0)patch.sellos=numero_(c.sellos)+numero_(leerConfig_().fidelidad_sellos);actualizarCampos_('clientes',c._fila,c,patch);}
     if(p.cupon){var cu=leerTabla_('cupones').filter(function(v){return claveComparar_(v.codigo)===claveComparar_(p.cupon);})[0];if(cu)actualizarCampos_('cupones',cu._fila,cu,{usos:Math.max(0,numero_(cu.usos)-1)});}
-    if(p.inventario_descontado===true)descontarInventario_(String(p.id),String(p.numero),String(p.local_id),q.bajas,-1,usuario);
+    if(p.inventario_descontado===true)aplicarDevolucionTotal_(p,devolucionTotal,usuario);
   }else{
     rows.forEach(function(d){var anterior=q.antes.filter(function(v){return v.id===String(d.id);})[0];if(!anterior)return;var fin=q.despues.filter(function(v){return v.id===String(d.id);})[0];var n=fin?fin.cantidad:0;if(n!==anterior.cantidad)actualizarCampos_('pedido_detalle',d._fila,d,{cantidad:n,total_linea:fin?fin.total_linea:0});});
     if(nuevos.length)agregarFilas_('pedido_detalle',nuevos.map(function(d){return [d.id,p.id,d.plato_id,d.nombre,d.precio,d.cantidad,d.extras,d.total_linea];}));
@@ -2385,6 +2386,54 @@ function descontarInventario_(pedidoId, numero, localId, detalle, signo, usuario
   return true;
 }
 
+// 3.1.55: una anulación completa devuelve el consumo NETO registrado, no la receta de hoy.
+// Las ventas y devoluciones anteriores se identifican por número correlativo y local.
+// Se valida todo antes de cambiar el estado del pedido; no se inventa un saldo si falta evidencia.
+function planDevolucionTotal_(p) {
+  var local = String(p.local_id), numero = String(p.numero);
+  var venta = 'Venta ' + numero, devolucion = 'Anulación ' + numero;
+  var error = function () { throw fallo_('El historial de inventario del pedido requiere conciliación antes de anular. No se modificaron existencias.', 'REVISION_MANUAL'); };
+  if (!local || !numero) error();
+  var total = Object.create(null), ids = Object.create(null), huboVenta = false;
+  leerTabla_('movimientos_inventario').forEach(function (m) {
+    if (String(m.local_id) !== local) return;
+    var tipo = String(m.tipo), motivo = String(m.motivo);
+    if (!((tipo === 'venta' && motivo === venta) || (tipo === 'devolucion' && motivo === devolucion))) return;
+    var id = String(m.id || ''), ins = String(m.insumo_id || '');
+    if (!id || !ins || ids[id] || m.cantidad == null || m.cantidad === '') error();
+    ids[id] = true;
+    var n = Number(m.cantidad), mil = Math.round(n * 1000);
+    if (!Number.isFinite(n) || !Number.isSafeInteger(mil) || n !== mil / 1000 ||
+        (tipo === 'venta' && mil > 0) || (tipo === 'devolucion' && mil < 0)) error();
+    if (tipo === 'venta') huboVenta = true;
+    total[ins] = (total[ins] || 0) - mil;
+    if (!Number.isSafeInteger(total[ins]) || total[ins] < 0) error();
+  });
+  if (!huboVenta) error();
+  var filas = leerTabla_('insumos');
+  return Object.keys(total).filter(function (id) { return total[id] > 0; }).map(function (id) {
+    var matches = filas.filter(function (i) { return String(i.id) === id; });
+    if (matches.length !== 1) error();
+    var i = matches[0], stock = Number(i.stock), mil = Math.round(stock * 1000);
+    if (String(i.local_id) !== local || i.stock == null || i.stock === '' ||
+        !Number.isFinite(stock) || !Number.isSafeInteger(mil) || stock !== mil / 1000 ||
+        !Number.isSafeInteger(mil + total[id])) error();
+    return { insumo: i, cantidad: total[id] / 1000, stock: (mil + total[id]) / 1000 };
+  });
+}
+
+function aplicarDevolucionTotal_(p, plan, usuario) {
+  if (!plan.length) return false;
+  var ahora = new Date(), movs = [];
+  plan.forEach(function (d) {
+    actualizarCampos_('insumos', d.insumo._fila, d.insumo, { stock: d.stock });
+    movs.push([nuevoId_('MOV'), ahora, String(p.local_id), String(d.insumo.id), 'devolucion', d.cantidad, 'Anulación ' + String(p.numero), '', usuario]);
+  });
+  agregarFilas_('movimientos_inventario', movs);
+  limpiarMenuCache_();
+  return true;
+}
+
 /* ---------- 11.4 Clientes (dueño) ---------- */
 
 function accionClientesListar_() {
@@ -2561,6 +2610,7 @@ function accionPedidoAnular_(data, ctx) {
       if(data.devolucion_confirmada!==true||typeof data.total_esperado!=='number'||redondear_(data.total_esperado)!==redondear_(p.total))throw fallo_('Confirma la devolución completa en el banco y su importe antes de anular.','PAGO');
       motivo=limpiarTexto_('Devolución bancaria confirmada '+redondear_(p.total).toFixed(2)+' · '+motivo,200);
     }
+    var devolucionTotal = p.inventario_descontado === true ? planDevolucionTotal_(p) : [];
     actualizarCampos_('pedidos', p._fila, p, { estado: 'Anulado', anulado: new Date(), motivo_anulacion: motivo, anulado_por: ctx.sesion.usuario });
     var c = leerTabla_('clientes').filter(function (x) { return String(x.id) === String(p.cliente_id); })[0];
     if (c) actualizarCampos_('clientes', c._fila, c, { pedidos: Math.max(0, numero_(c.pedidos) - 1) });
@@ -2572,8 +2622,7 @@ function accionPedidoAnular_(data, ctx) {
       if (cu) actualizarCampos_('cupones', cu._fila, cu, { usos: Math.max(0, numero_(cu.usos) - 1) });
     }
     if (p.inventario_descontado === true) {
-      var det = detallePorPedido_([String(p.id)])[String(p.id)] || [];
-      descontarInventario_(String(p.id), String(p.numero), String(p.local_id), det, -1, ctx.sesion.usuario);
+      aplicarDevolucionTotal_(p, devolucionTotal, ctx.sesion.usuario);
     }
     p = buscarPedido_(data.id, ctx);
   } finally { lock.releaseLock(); }
