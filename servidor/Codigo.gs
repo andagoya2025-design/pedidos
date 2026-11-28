@@ -18,10 +18,10 @@
  * ============================================================
  */
 
-var APP_VERSION = '3.1.36';
+var APP_VERSION = '3.1.37';
 // Marcador opaco, sin datos de pedidos. Una ejecución de Apps Script tiene su propio estado.
 var syncPendiente_ = false;
-var APP_VERSION_NUM = 30136; // 3.1.0 -> 30100 (la pantalla compara con su mínimo)
+var APP_VERSION_NUM = 30137; // 3.1.0 -> 30100 (la pantalla compara con su mínimo)
 var SESION_SEGUNDOS = 21600;  // 6 h; se renueva con cada uso
 var ROLES = ['dueno', 'cajero', 'motorizado'];
 
@@ -1405,11 +1405,12 @@ function accionPedidoCrear_(data, ctx, soloCotizar) {
       ses && data.canal !== 'cliente' ? 'NO' : '', '', nuevaClaveSeguimiento_(), esDigital_(forma) ? limpiarTexto_(data.cuenta_pago, 120) : '', '',
       distancia, llegada ? new Date(llegada.getTime() + numero_(cfg.ventana_minutos) * 60000) : '', '', '']; // 3.1: pedido tomado por el personal (teléfono/mostrador): sin código. 3.1.1: si se hizo desde la página del cliente, sí lleva código
     agregarFilas_('pedidos', [fila]);
-    agregarFilas_('pedido_detalle', detalleFilas.map(function (d) { return [nuevoId_('DET'), id, d.plato_id, d.nombre, d.precio, d.cantidad, d.extras, d.total_linea]; }));
+    var detalleInventario = detalleFilas.map(function(d){return Object.assign({},d,{id:nuevoId_('DET')});});
+    agregarFilas_('pedido_detalle', detalleInventario.map(function (d) { return [d.id, id, d.plato_id, d.nombre, d.precio, d.cantidad, d.extras, d.total_linea]; }));
     if (cuponFila) actualizarCampos_('cupones', cuponFila._fila, cuponFila, { usos: numero_(cuponFila.usos) + 1 });
     CacheService.getScriptCache().remove('POPULAR_30');
 
-    var descontado = descontarInventario_(id, numero, localId, detalleFilas, 1, ses ? ses.usuario : 'cliente');
+    var descontado = descontarInventario_(id, numero, localId, detalleInventario, 1, ses ? ses.usuario : 'cliente');
     if (descontado) {
       limpiarMenuCache_(); // 3.1.3
       var recien = leerTabla_('pedidos').filter(function (p) { return String(p.id) === id; })[0];
@@ -1699,6 +1700,7 @@ function aplicarIntegral_(x,p,q,data,ctx) {
   var ids=Object.create(null);nuevos.forEach(function(d){ids[d.id]=true;});
   if(leerTabla_('pedido_detalle').some(function(d){return ids[String(d.id)];}))throw fallo_('Detalle repetido; requiere conciliación.');
   var devolucionTotal=q.tipo==='cancelar'&&p.inventario_descontado===true?planDevolucionTotal_(p):[];
+  var parcial=q.tipo!=='cancelar'&&p.inventario_descontado===true&&q.bajas.length?planDevolucionParcial_(p,q.antes,q.bajas):[];
   actualizarCampos_('pedido_cambios',x._fila,x,{estado:'Aplicando',respuesta:'Aplicación en curso. No despachar hasta completar.'});
   if(q.tipo==='cancelar'){
     actualizarCampos_('pedidos',p._fila,p,{estado:'Anulado',anulado:new Date(),motivo_anulacion:'Cancelación aceptada por cliente',anulado_por:usuario});
@@ -1709,8 +1711,8 @@ function aplicarIntegral_(x,p,q,data,ctx) {
   }else{
     rows.forEach(function(d){var anterior=q.antes.filter(function(v){return v.id===String(d.id);})[0];if(!anterior)return;var fin=q.despues.filter(function(v){return v.id===String(d.id);})[0];var n=fin?fin.cantidad:0;if(n!==anterior.cantidad)actualizarCampos_('pedido_detalle',d._fila,d,{cantidad:n,total_linea:fin?fin.total_linea:0});});
     if(nuevos.length)agregarFilas_('pedido_detalle',nuevos.map(function(d){return [d.id,p.id,d.plato_id,d.nombre,d.precio,d.cantidad,d.extras,d.total_linea];}));
-    if(p.inventario_descontado===true&&q.bajas.length)descontarInventario_(String(p.id),String(p.numero),String(p.local_id),q.bajas,-1,usuario);
-    var inv=q.lineas.length?descontarInventario_(String(p.id),String(p.numero),String(p.local_id),q.lineas,1,usuario):false;
+    if(parcial.length)aplicarDevolucionTotal_(p,parcial,usuario);
+    var inv=nuevos.length?descontarInventario_(String(p.id),String(p.numero),String(p.local_id),nuevos,1,usuario):false;
     actualizarCampos_('pedidos',p._fila,p,{subtotal:q.subtotal,base_iva:q.base_iva,iva:q.iva,total:q.total_estimado,pago_verificado:pago.verificado,pago_verificado_fecha:pago.verificado?(q.adicional===0?p.pago_verificado_fecha||new Date():new Date()):'',inventario_descontado:p.inventario_descontado===true||inv});
   }
   actualizarCampos_('pedido_cambios',x._fila,x,{estado:'Aplicada',aplicado_fecha:new Date(),aplicado_por:usuario,adicional_final:q.adicional,referencia_pago_extra:pago.ref,resuelto:new Date(),resuelto_por:usuario,respuesta:q.tipo==='cancelar'?'Pedido cancelado. '+(pago.modo==='ajuste_verificado'?'Devolución verificada por el restaurante.':''):'Modificación aplicada. '+(pago.verificado?'Pago conciliado por el restaurante.':'Consulta el total actualizado del pedido.')});
@@ -2356,34 +2358,34 @@ function accionRecetaGuardar_(data, ctx) {
  * con el mismo nombre. Devuelve true si movió algo.
  */
 function descontarInventario_(pedidoId, numero, localId, detalle, signo, usuario) {
-  var recetas = leerTabla_('recetas_plato').filter(function (r) { return numero_(r.cantidad) > 0; });
-  if (!recetas.length) return false;
-  var insumos = leerTabla_('insumos');
-  var porId = {}, porNombre = {};
-  insumos.forEach(function (i) {
-    porId[String(i.id)] = i;
-    if (String(i.local_id) === localId) porNombre[claveComparar_(i.nombre)] = i;
-  });
-  var total = {};
-  detalle.forEach(function (d) {
-    recetas.filter(function (r) { return String(r.plato_id) === String(d.plato_id); }).forEach(function (r) {
-      var ins = porId[String(r.insumo_id)];
-      if (ins && String(ins.local_id) !== localId) ins = porNombre[claveComparar_(ins.nombre)];
-      if (!ins) return;
-      total[String(ins.id)] = (total[String(ins.id)] || 0) + numero_(r.cantidad) * numero_(d.cantidad);
+  if(signo!==1)throw fallo_('Devolución sin trazabilidad.', 'REVISION_MANUAL');
+  var recetas=leerTabla_('recetas_plato').filter(function(r){return numero_(r.cantidad)>0;});
+  var insumos=leerTabla_('insumos'), porId={}, porNombre={}, total=Object.create(null), lineas=[], vistos=Object.create(null);
+  insumos.forEach(function(i){porId[String(i.id)]=i;if(String(i.local_id)===localId)porNombre[claveComparar_(i.nombre)]=i;});
+  detalle.forEach(function(d){
+    var id=String(d.id||''), n=Number(d.cantidad), antes=Object.create(null), asignacion=Object.create(null);
+    if(!id||vistos[id]||!Number.isSafeInteger(n)||n<1)throw fallo_('Detalle sin identidad de inventario.', 'REVISION_MANUAL');
+    vistos[id]=true;
+    recetas.filter(function(r){return String(r.plato_id)===String(d.plato_id);}).forEach(function(r){
+      var ins=porId[String(r.insumo_id)];
+      if(ins&&String(ins.local_id)!==localId)ins=porNombre[claveComparar_(ins.nombre)];
+      if(!ins)return;
+      var iid=String(ins.id);
+      if(!(iid in antes))antes[iid]=Math.round((total[iid]||0)*1000);
+      total[iid]=(total[iid]||0)+numero_(r.cantidad)*n;
     });
+    Object.keys(antes).forEach(function(iid){var m=Math.round(total[iid]*1000)-antes[iid];if(!Number.isSafeInteger(m)||m<0)throw fallo_('Consumo inválido.', 'REVISION_MANUAL');if(m)asignacion[iid]=m;});
+    lineas.push({id:id,cantidad:n,insumos:asignacion});
   });
-  var ids = Object.keys(total);
-  if (!ids.length) return false;
-  var ahora = new Date(), movs = [];
-  ids.forEach(function (iid) {
-    var ins = porId[iid];
-    var cant = Math.round(total[iid] * 1000) / 1000;
-    actualizarCampos_('insumos', ins._fila, ins, { stock: Math.round((numero_(ins.stock) - signo * cant) * 1000) / 1000 });
-    movs.push([nuevoId_('MOV'), ahora, localId, iid, signo > 0 ? 'venta' : 'devolucion', signo > 0 ? -cant : cant, (signo > 0 ? 'Venta ' : 'Anulación ') + numero, '', usuario]);
-  });
-  agregarFilas_('movimientos_inventario', movs);
-  return true;
+  var ids=Object.keys(total), ahora=new Date(), movs=[];
+  ids.forEach(function(iid){var cant=Math.round(total[iid]*1000)/1000;movs.push([nuevoId_('MOV'),ahora,localId,iid,'venta',-cant,'Venta '+numero,'',usuario]);});
+  // Registro informativo, cantidad cero, sin agregar columnas ni alterar saldo.
+  var traza='Trazabilidad '+numero+' '+JSON.stringify({v:1,pedido:String(pedidoId),lineas:lineas,ventas:movs.map(function(m){return m[0];})});
+  if(traza.length>45000)throw fallo_('Trazabilidad supera capacidad técnica.', 'REVISION_MANUAL');
+  ids.forEach(function(iid){var ins=porId[iid],cant=Math.round(total[iid]*1000)/1000;actualizarCampos_('insumos',ins._fila,ins,{stock:Math.round((numero_(ins.stock)-cant)*1000)/1000});});
+  movs.push([nuevoId_('TRAZA'),ahora,localId,'','traza_linea',0,traza,'',usuario]);
+  agregarFilas_('movimientos_inventario',movs);
+  return ids.length>0;
 }
 
 // 3.1.55: una anulación completa devuelve el consumo NETO registrado, no la receta de hoy.
@@ -2432,6 +2434,50 @@ function aplicarDevolucionTotal_(p, plan, usuario) {
   agregarFilas_('movimientos_inventario', movs);
   limpiarMenuCache_();
   return true;
+}
+
+// Devuelve solamente el consumo acreditado por línea. Históricos ambiguos: conciliación.
+function planDevolucionParcial_(p, antes, bajas) {
+  var error=function(){throw fallo_('La devolución parcial requiere trazabilidad original. Solicita conciliación de inventario antes de aplicar.', 'REVISION_MANUAL');};
+  var local=String(p.local_id),num=String(p.numero),pref='Trazabilidad '+num+' ',ventas=Object.create(null),trazas=[],lineas=Object.create(null),usadas=Object.create(null),total=Object.create(null);
+  leerTabla_('movimientos_inventario').forEach(function(m){
+    if(String(m.local_id)!==local)return;
+    var t=String(m.tipo),mot=String(m.motivo),id=String(m.id||'');
+    if(t==='devolucion'&&mot==='Anulación '+num)error();
+    if(t==='venta'&&mot==='Venta '+num){
+      var n=Number(m.cantidad),mil=Math.round(-n*1000),ins=String(m.insumo_id||'');
+      if(!id||!ins||ventas[id]||m.cantidad===''||m.cantidad==null||!Number.isSafeInteger(mil)||mil<0||n!==-mil/1000)error();
+      ventas[id]={ins:ins,mil:mil};
+    }
+    if(t==='traza_linea'&&mot.indexOf(pref)===0){
+      var x;try{x=JSON.parse(mot.slice(pref.length));}catch(e){error();}
+      if(!id||m.insumo_id||m.cantidad!==0||!x||x.v!==1||x.pedido!==String(p.id)||!Array.isArray(x.lineas)||!x.lineas.length||!Array.isArray(x.ventas))error();
+      trazas.push(x);
+    }
+  });
+  if(!trazas.length)error();
+  trazas.forEach(function(t){
+    var esp=Object.create(null),asig=Object.create(null);
+    t.ventas.forEach(function(id){var v=ventas[id];if(!v||usadas[id])error();usadas[id]=true;esp[v.ins]=(esp[v.ins]||0)+v.mil;if(!Number.isSafeInteger(esp[v.ins]))error();});
+    t.lineas.forEach(function(d){
+      if(!d||typeof d.id!=='string'||!d.id||lineas[d.id]||!Number.isSafeInteger(d.cantidad)||d.cantidad<1||!d.insumos||Array.isArray(d.insumos)||typeof d.insumos!=='object')error();
+      lineas[d.id]=d;
+      Object.keys(d.insumos).forEach(function(iid){var n=d.insumos[iid];if(!Number.isSafeInteger(n)||n<1||!(iid in esp))error();asig[iid]=(asig[iid]||0)+n;if(!Number.isSafeInteger(asig[iid]))error();});
+    });
+    Object.keys(esp).forEach(function(iid){if((asig[iid]||0)!==esp[iid])error();});
+  });
+  if(Object.keys(ventas).some(function(id){return !usadas[id];}))error();
+  var actuales=Object.create(null),retiradas=Object.create(null);
+  antes.forEach(function(d){var id=String(d.id),l=lineas[id];if(actuales[id]||!l||l.cantidad!==Number(d.cantidad))error();actuales[id]=true;});
+  if(Object.keys(lineas).some(function(id){return !actuales[id];}))error();
+  bajas.forEach(function(d){
+    var id=String(d.id),l=lineas[id],n=Number(d.cantidad);
+    if(retiradas[id]||!l||!actuales[id]||!Number.isSafeInteger(n)||n<1||n>l.cantidad)error();
+    retiradas[id]=true;
+    Object.keys(l.insumos).forEach(function(iid){var m=l.insumos[iid]*n;if(!Number.isSafeInteger(m))error();total[iid]=(total[iid]||0)+Math.round(m/l.cantidad);if(!Number.isSafeInteger(total[iid]))error();});
+  });
+  var neto=planDevolucionTotal_(p),mapa=Object.create(null);neto.forEach(function(d){mapa[String(d.insumo.id)]=d;});
+  return Object.keys(total).filter(function(iid){return total[iid]>0;}).map(function(iid){var d=mapa[iid],m=total[iid];if(!d||m>Math.round(d.cantidad*1000))error();var s=Math.round(Number(d.insumo.stock)*1000)+m;if(!Number.isSafeInteger(s))error();return {insumo:d.insumo,cantidad:m/1000,stock:s/1000};});
 }
 
 /* ---------- 11.4 Clientes (dueño) ---------- */
