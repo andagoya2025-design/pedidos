@@ -9,7 +9,7 @@
 (function (global) {
   'use strict';
   var UI = global.UI, DATOS = global.DATOS, APP = global.APP;
-  var insumos = [];
+  var insumos = [], movimientosSeguros = false;
   var soloBajos = false, busca = '';
 
   APP.vistas.inventario = {
@@ -30,7 +30,9 @@
 
   async function cargar() {
     try {
-      insumos = (await DATOS.pedir('insumosListar', { local_id: APP.local })).insumos || [];
+      var datos = await DATOS.pedir('insumosListar', { local_id: APP.local });
+      movimientosSeguros = datos.movimientos_seguros === true;
+      insumos = datos.insumos || [];
       pintar();
     } catch (err) {
       if (UI.$('#in-cuerpo')) UI.$('#in-cuerpo').innerHTML = '<div class="banda error">⚠️ <span>' + UI.esc(err.message) + '</span></div>';
@@ -147,6 +149,34 @@
     return Number.isFinite(n) && n >= 0 && Number.isSafeInteger(entero) && n === entero / 1000 ? entero / 1000 : NaN;
   }
 
+  // El código de envío queda en el dispositivo incluso si se cierra o recarga la app.
+  function claveMovimiento() { return 'mipedido_inv_pendiente_v1:' + global.APP_CONFIG.url + ':' + APP.sesion.usuario_id; }
+  function pendienteMovimiento() { return JSON.parse(global.localStorage.getItem(claveMovimiento()) || 'null'); }
+  function guardarPendiente(p) { global.localStorage.setItem(claveMovimiento(), JSON.stringify(p)); }
+  function borrarPendiente(p) { var actual = pendienteMovimiento(); if (actual && actual.op_id === p.op_id) global.localStorage.removeItem(claveMovimiento()); }
+  var enviandoMovimiento = false;
+  async function enviarMovimiento(boton, p) {
+    if (enviandoMovimiento) return;
+    enviandoMovimiento = true;
+    try {
+      await UI.trabajando(boton, async function () {
+        try {
+          var info = await DATOS.pedir('insumosListar', { local_id: p.local_id }, { sinReintento: true });
+          if (info.movimientos_seguros !== true) return UI.error('Actualización necesaria', 'El servidor no admite recuperación. No se envió otro movimiento.');
+          var r = await DATOS.pedir('inventarioMovimiento', p, { guardar: true });
+          borrarPendiente(p);
+          insumos = r.insumos || insumos;
+          var res = r.resultado || {};
+          UI.aviso(res.repetido ? 'Movimiento ya registrado. No se duplicó.' : p.tipo === 'conteo' ? 'Conteo guardado. Diferencia: ' + (res.diferencia > 0 ? '+' : '') + res.diferencia + ' ' + p.unidad : 'Guardado. Ahora hay ' + res.stock + ' ' + p.unidad + '.', 'ok');
+          pintar();
+        } catch (err) {
+          if (['VALIDACION','UNIDAD_INSUMO','INSUMO_INACTIVO'].indexOf(err.codigo) >= 0) { borrarPendiente(p); UI.error('No se guardó', err.message); }
+          else UI.error('No se pudo confirmar', 'Conservamos el movimiento para recuperarlo con el mismo código. No registre otro. ' + err.message);
+        }
+      });
+    } finally { enviandoMovimiento = false; }
+  }
+
   async function movimiento(boton, tipo, id) {
     var i = insumos.filter(function (x) { return x.id === id; })[0];
     if (!i) return;
@@ -159,6 +189,16 @@
     }
     if (tipo === 'editar') return editar(i);
     if (tipo === 'historial') return historial(i);
+    if (!movimientosSeguros) return UI.error('Actualización necesaria', 'Actualice el servidor para registrar movimientos con protección de duplicados.');
+    if (enviandoMovimiento) return;
+    try {
+      var p = pendienteMovimiento();
+      if (p) {
+        if (APP.local !== 'TODOS' && p.local_id !== APP.local) return UI.error('Movimiento pendiente', 'Seleccione el local del movimiento pendiente para recuperarlo.');
+        if (await UI.confirmar('Recuperar movimiento', p.tipo + ' · ' + p.nombre + ' · ' + p.cantidad + ' ' + p.unidad + '. Se consultará el mismo código, sin duplicar.', 'Recuperar')) await enviarMovimiento(boton, p);
+        return;
+      }
+    } catch (err) { return UI.error('No se puede recuperar', 'No se pudo leer el movimiento pendiente del dispositivo. Revise antes de guardar.'); }
     var titulos = { compra: '＋ Compra de ', salida: '− Salida de ', conteo: '🔢 Conteo de ', traspaso: '⇄ Traspaso de ' };
     var otros = APP.locales.filter(function (l) { return l.activo && l.id !== i.local_id; });
     if (tipo === 'traspaso' && !otros.length) return UI.error('No hay otro local', 'Necesita al menos dos locales activos.');
@@ -180,18 +220,12 @@
     });
     if (!ok) return;
     enviar.insumo_id = id; enviar.tipo = tipo;
-    UI.trabajando(boton, async function () {
-      try {
-        var r = await DATOS.pedir('inventarioMovimiento', enviar, { guardar: true });
-        insumos = r.insumos || insumos;
-        var res = r.resultado || {};
-        UI.aviso(tipo === 'conteo' ? 'Conteo guardado. Diferencia: ' + (res.diferencia > 0 ? '+' : '') + res.diferencia + ' ' + i.unidad : 'Guardado. Ahora hay ' + res.stock + ' ' + i.unidad + '.', 'ok');
-        pintar();
-      } catch (err) {
-        if (['RED', 'TIEMPO', 'HTTP', 'RESPUESTA', 'ERROR', 'ACTUALIZANDO'].indexOf(err.codigo) >= 0) UI.error('No se pudo confirmar', 'Revise el historial y las existencias antes de repetir el movimiento. ' + err.message);
-        else UI.error('No se guardó', err.message);
-      }
-    });
+    enviar.op_id = UI.codigoEnvio(); enviar.local_id = i.local_id; enviar.nombre = i.nombre; enviar.unidad = i.unidad;
+    try {
+      if (pendienteMovimiento()) return UI.error('Movimiento pendiente', 'Recupere primero el movimiento anterior.');
+      guardarPendiente(enviar);
+    } catch (err) { return UI.error('No se guardó', 'No se pudo conservar el código de envío en el dispositivo.'); }
+    await enviarMovimiento(boton, enviar);
   }
 
   async function historial(i) {

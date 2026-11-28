@@ -93,5 +93,5 @@ test('ayuda: acciones registradas con los roles correctos y avisos del administr
  assert.match(gs,/ayudaAviso:\s+\{ tipo: 'sesion',\s+roles: \['motorizado'\]/);
  assert.match(gs,/ayudaAtender:\s+\{ tipo: 'sesion',\s+roles: \['dueno', 'cajero'\]/);
  assert.match(gs,/ayudas: ayudasParaAdmin_\(local\)/);
- assert.match(gs,/APP_VERSION_NUM = 30134/);assert.match(gs,/ayuda_vigencia_horas: '12'/);
+ assert.match(gs,/APP_VERSION_NUM = 30135/);assert.match(gs,/ayuda_vigencia_horas: '12'/);
 });
