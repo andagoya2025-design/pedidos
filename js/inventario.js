@@ -115,10 +115,10 @@
       botones: [{ texto: 'Cancelar', valor: false, clase: 'secundario' }, { texto: 'Guardar', valor: true, antes: function (v) {
         enviar = UI.leerFormulario(UI.$('#form-insumo', v));
         enviar.local_id = UI.$('#ins-local', v).value;
-        enviar.minimo = UI.numero(enviar.minimo || 0);
+        enviar.minimo = cantidadInventarioUI(enviar.minimo, true);
         enviar.costo = String(enviar.costo || '').trim() === '' ? '' : UI.numero(enviar.costo);
         if (enviar.costo !== '' && !(enviar.costo >= 0)) { UI.aviso('Costo no válido.', 'error'); return false; }
-        if (nuevo) enviar.stock = UI.numero(enviar.stock || 0);
+        if (nuevo) enviar.stock = cantidadInventarioUI(enviar.stock, true);
         var malo = !enviar.nombre ? 'Escriba el nombre.' : !(enviar.minimo >= 0) ? 'Mínimo no válido.' : (nuevo && !(enviar.stock >= 0)) ? 'Cantidad no válida.' : !enviar.local_id ? 'Elija el local.' : '';
         if (malo) { UI.aviso(malo, 'error'); return false; }
         return true;
@@ -131,6 +131,20 @@
       UI.aviso('Insumo guardado.', 'ok');
       cargar();
     } catch (err) { UI.error('No se guardó', err.message); }
+  }
+
+  // Cantidades de inventario: no convertir un campo vacío o inválido en cero.
+  // Se conserva la precisión de tres decimales de los movimientos existentes.
+  function cantidadInventarioUI(valor, opcional) {
+    if (valor == null || (typeof valor === 'string' && valor.trim() === '')) return opcional ? 0 : NaN;
+    if (typeof valor !== 'number' && typeof valor !== 'string') return NaN;
+    if (typeof valor === 'string') {
+      valor = valor.trim();
+      if (!/^(?:\d+(?:[.,]\d{1,3})?|[.,]\d{1,3})$/.test(valor)) return NaN;
+      valor = valor.replace(',', '.');
+    }
+    var n = Number(valor), escala = n * 1000, entero = Math.round(escala);
+    return Number.isFinite(n) && n >= 0 && Number.isSafeInteger(entero) && n === entero / 1000 ? entero / 1000 : NaN;
   }
 
   async function movimiento(boton, tipo, id) {
@@ -156,8 +170,8 @@
         '<div class="campo"><label for="mv-motivo">Motivo' + (tipo === 'salida' || tipo === 'traspaso' ? '' : ' (opcional)') + '</label><input class="entrada" id="mv-motivo" name="motivo" maxlength="200" placeholder="' + (tipo === 'compra' ? 'Ej. proveedor, factura' : tipo === 'salida' ? 'Ej. dañado, consumo del personal' : '') + '"></div></form>',
       botones: [{ texto: 'Cancelar', valor: false, clase: 'secundario' }, { texto: 'Guardar', valor: true, antes: function (v) {
         enviar = UI.leerFormulario(UI.$('#form-mov', v));
-        enviar.cantidad = UI.numero(enviar.cantidad);
-        var malo = !(enviar.cantidad >= 0) || (tipo !== 'conteo' && !(enviar.cantidad > 0)) ? 'Escriba la cantidad.' :
+        enviar.cantidad = cantidadInventarioUI(enviar.cantidad, false);
+        var malo = !(enviar.cantidad >= 0) || (tipo !== 'conteo' && !(enviar.cantidad > 0)) ? 'Escriba una cantidad válida, con hasta tres decimales.' :
           ((tipo === 'salida' || tipo === 'traspaso') && enviar.motivo.length < 3) ? 'Escriba el motivo.' :
           ((tipo === 'salida' || tipo === 'traspaso') && enviar.cantidad > i.stock) ? 'Solo hay ' + i.stock + ' ' + i.unidad + '.' : '';
         if (malo) { UI.aviso(malo, 'error'); return false; }
@@ -173,7 +187,10 @@
         var res = r.resultado || {};
         UI.aviso(tipo === 'conteo' ? 'Conteo guardado. Diferencia: ' + (res.diferencia > 0 ? '+' : '') + res.diferencia + ' ' + i.unidad : 'Guardado. Ahora hay ' + res.stock + ' ' + i.unidad + '.', 'ok');
         pintar();
-      } catch (err) { UI.error('No se guardó', err.message); }
+      } catch (err) {
+        if (['RED', 'TIEMPO', 'HTTP', 'RESPUESTA', 'ERROR', 'ACTUALIZANDO'].indexOf(err.codigo) >= 0) UI.error('No se pudo confirmar', 'Revise el historial y las existencias antes de repetir el movimiento. ' + err.message);
+        else UI.error('No se guardó', err.message);
+      }
     });
   }
 

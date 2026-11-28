@@ -18,10 +18,10 @@
  * ============================================================
  */
 
-var APP_VERSION = '3.1.33';
+var APP_VERSION = '3.1.34';
 // Marcador opaco, sin datos de pedidos. Una ejecución de Apps Script tiene su propio estado.
 var syncPendiente_ = false;
-var APP_VERSION_NUM = 30133; // 3.1.0 -> 30100 (la pantalla compara con su mínimo)
+var APP_VERSION_NUM = 30134; // 3.1.0 -> 30100 (la pantalla compara con su mínimo)
 var SESION_SEGUNDOS = 21600;  // 6 h; se renueva con cada uso
 var ROLES = ['dueno', 'cajero', 'motorizado'];
 
@@ -2910,7 +2910,7 @@ function accionInsumosListar_(data, ctx) {
 
 function accionInsumoGuardar_(data, ctx) {
   var id = limpiarTexto_(data.id, 40), nombre = limpiarTexto_(data.nombre, 60), unidad = limpiarTexto_(data.unidad, 15) || 'unidad';
-  var localId = limpiarTexto_(data.local_id, 40), minimo = Number(data.minimo || 0);
+  var localId = limpiarTexto_(data.local_id, 40), minimo = cantidadInventario_(data.minimo, true);
   if (!nombre) throw fallo_('Escriba el nombre del insumo.');
   if (!(minimo >= 0)) throw fallo_('Mínimo no válido.');
   /* 3.1.3: costo por unidad y proveedor */
@@ -2931,7 +2931,7 @@ function accionInsumoGuardar_(data, ctx) {
       // El stock NO se edita aquí: solo con movimientos (quedan en el historial).
       if (actualizarCampos_('insumos', actual._fila, actual, { nombre: nombre, unidad: unidad, minimo: minimo, activo: data.activo !== false, costo: costo, proveedor: proveedor, proveedor_tel: provTel })) bitacora_(ctx.sesion, 'INVENTARIO', 'EDITAR_INSUMO', nombre, ctx.dispositivo);
     } else {
-      var inicial = Number(data.stock || 0);
+      var inicial = cantidadInventario_(data.stock, true);
       if (!(inicial >= 0)) throw fallo_('Cantidad inicial no válida.');
       var nid = nuevoId_('INS'), ahora = new Date();
       agregarFilas_('insumos', [[nid, localId, nombre, unidad, inicial, minimo, data.activo !== false, ahora, costo, proveedor, provTel]]);
@@ -2942,11 +2942,25 @@ function accionInsumoGuardar_(data, ctx) {
   return accionInsumosListar_({ local_id: 'TODOS' }, ctx);
 }
 
+// Cantidades de inventario: no convertir un campo vacío o inválido en cero.
+// Se conserva la precisión de tres decimales de los movimientos existentes.
+function cantidadInventario_(valor, opcional) {
+  if (valor == null || (typeof valor === 'string' && valor.trim() === '')) return opcional ? 0 : NaN;
+  if (typeof valor !== 'number' && typeof valor !== 'string') return NaN;
+  if (typeof valor === 'string') {
+    valor = valor.trim();
+    if (!/^(?:\d+(?:[.,]\d{1,3})?|[.,]\d{1,3})$/.test(valor)) return NaN;
+    valor = valor.replace(',', '.');
+  }
+  var n = Number(valor), escala = n * 1000, entero = Math.round(escala);
+  return Number.isFinite(n) && n >= 0 && Number.isSafeInteger(entero) && n === entero / 1000 ? entero / 1000 : NaN;
+}
+
 /* tipo: compra (+), salida (−), conteo (queda la cantidad contada), traspaso (− aquí, + en el otro local). */
 function accionInventarioMovimiento_(data, ctx) {
-  var tipo = String(data.tipo || ''), cant = Number(data.cantidad), motivo = limpiarTexto_(data.motivo, 200), destino = limpiarTexto_(data.local_destino, 40);
+  var tipo = String(data.tipo || ''), cant = cantidadInventario_(data.cantidad, false), motivo = limpiarTexto_(data.motivo, 200), destino = limpiarTexto_(data.local_destino, 40);
   if (['compra', 'salida', 'conteo', 'traspaso'].indexOf(tipo) < 0) throw fallo_('Tipo de movimiento no válido.');
-  if (!(cant >= 0 && cant <= 1000000) || (tipo !== 'conteo' && !(cant > 0))) throw fallo_('Cantidad no válida.');
+  if (!(cant >= 0 && cant <= 1000000) || (tipo !== 'conteo' && !(cant > 0))) throw fallo_('Escriba una cantidad válida, con hasta tres decimales.');
   if ((tipo === 'salida' || tipo === 'traspaso') && motivo.length < 3) throw fallo_('Escriba el motivo.');
   var lock = candado_();
   var res = {};
@@ -2973,6 +2987,9 @@ function accionInventarioMovimiento_(data, ctx) {
       if (!destino || destino === String(ins.local_id)) throw fallo_('Elija el local que recibe.');
       if (!leerTabla_('locales').some(function (l) { return String(l.id) === destino && l.activo === true; })) throw fallo_('El local que recibe no existe.');
       var otro = filas.filter(function (r) { return String(r.local_id) === destino && claveComparar_(r.nombre) === claveComparar_(ins.nombre); })[0];
+      if (!claveComparar_(ins.unidad)) throw fallo_('El insumo no tiene una unidad válida. Revise su ficha.');
+      if (otro && claveComparar_(otro.unidad) !== claveComparar_(ins.unidad)) throw fallo_('Las unidades de los dos locales no coinciden. No se realizó el traspaso.', 'UNIDAD_INSUMO');
+      if (otro && otro.activo !== true) throw fallo_('El insumo del local que recibe está inactivo. No se realizó el traspaso.', 'INSUMO_INACTIVO');
       var otroId;
       if (otro) { otroId = String(otro.id); actualizarCampos_('insumos', otro._fila, otro, { stock: r3(numero_(otro.stock) + cant) }); }
       else { otroId = nuevoId_('INS'); agregarFilas_('insumos', [[otroId, destino, ins.nombre, ins.unidad, cant, 0, true, ahora, ins.costo, ins.proveedor, ins.proveedor_tel]]); }

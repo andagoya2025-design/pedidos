@@ -2,7 +2,7 @@
 // Service worker REAL en Chromium, origen local y datos ficticios; ninguna publicación ni conexión a Apps Script.
 const assert=require('node:assert/strict'),fs=require('node:fs'),http=require('node:http'),{execFileSync}=require('node:child_process'),{chromium}=require('playwright');
 const BASE='bf445362ecf1109b6c343acebcaf0f0fb50b7282',PUBLICADA='9cf4474154b6b8e312f6ecccefa0af696f0090e0';
-const stable='app-3.1.59-actualizacion',publicada='app-3.1.63-monitoreo-final',candidate='app-3.1.67-panico-un-toque',rollback='app-3.1.65-reversion-prueba';
+const stable='app-3.1.59-actualizacion',publicada='app-3.1.63-monitoreo-final',candidate='app-3.1.68-insumos-validaciones',rollback='app-3.1.65-reversion-prueba';
 const html='<!doctype html><meta name="viewport" content="width=device-width"><title>Prueba PWA local</title><body>Prueba sin datos reales</body>';
 const fromGit=(p,ref)=>execFileSync('git',['show',ref+':'+p],{maxBuffer:8*1024*1024});
 const tipo=p=>p.endsWith('.js')?'text/javascript':p.endsWith('.css')?'text/css':p.endsWith('.html')?'text/html':p.endsWith('.json')?'application/json':p.endsWith('.svg')?'image/svg+xml':p.endsWith('.png')?'image/png':'text/plain';
@@ -30,7 +30,7 @@ const server=http.createServer((req,res)=>{
   const comprobarDatos=async()=>{assert.deepEqual(await page.evaluate(keys=>Object.fromEntries(keys.map(k=>[k,localStorage.getItem(k)])),Object.keys(ficticio)),ficticio);assert.equal(await page.evaluate(()=>sessionStorage.getItem('prueba')),'persistente');assert.equal(await page.evaluate(async()=>await (await (await caches.open('fotos-1')).match('/foto-ficticia')).text()),'foto');};
   await actualizar('publicada',publicada,'3.1.50');await comprobarDatos();
   assert.equal(await page.evaluate(async()=>!!await (await caches.open('fotos-1')).match('https://tile.openstreetmap.org/17/1/2.png')),true,'el mapa antiguo debe existir antes de la corrección');
-  await actualizar('candidata',candidate,'3.1.52');await comprobarDatos();
+  await actualizar('candidata',candidate,'3.1.53');await comprobarDatos();
   assert.equal(await page.evaluate(async()=>!!await (await caches.open('fotos-1')).match('https://tile.openstreetmap.org/17/1/2.png')),false,'al activar el nuevo SW debe desaparecer solo el mapa antiguo');
   // La reversión usa exactamente los archivos del MAIN actual con nombre NUEVO de caché.
   await actualizar('reversion',rollback,'3.1.50');await comprobarDatos();

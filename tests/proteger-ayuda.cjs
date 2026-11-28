@@ -3,6 +3,7 @@
 // que el resultado sea IDÉNTICO al TXT 3.1.32 publicado (que luego pasa por proteger-monitoreo.cjs hacia la base estable).
 const assert=require('node:assert/strict'),fs=require('node:fs');
 module.exports=function sinAyuda(src){
+ src=require('./proteger-insumos-validaciones.cjs').servidor(src);
  assert.equal(src,fs.readFileSync('servidor/Codigo_MiPedido_3.1.33.txt','utf8'),'TXT 3.1.33 idéntico a Codigo.gs');
  const a=src.indexOf('/* ---------- 13.3b Ayuda del motorizado'),b=src.indexOf('function accionRutaPedido_(',a);
  assert.ok(a>=0&&b>a,'bloque de ayuda no encontrado');

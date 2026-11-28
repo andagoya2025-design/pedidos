@@ -4,6 +4,7 @@
 const assert=require('node:assert/strict'),{execFileSync}=require('node:child_process');
 const BASE='0caba7695269d82d58ab1eb86a2a13140f18483f';
 module.exports=function sinCambiosInventario(actual){
+ actual=require('./proteger-insumos-validaciones.cjs').inventario(actual);
  const viejo=execFileSync('git',['show',BASE+':js/inventario.js'],{encoding:'utf8',maxBuffer:8*1024*1024});
  const costo="        '<div class=\"fila-campos\"><div class=\"campo\"><label for=\"ins-costo\">";
  const iniNuevo="        '<div class=\"campo\"><label for=\"ins-unidad\">",iniViejo="        '<div class=\"fila-campos\"><div class=\"campo\"><label for=\"ins-unidad\">";
