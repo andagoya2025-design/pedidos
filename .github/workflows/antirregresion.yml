@@ -76,6 +76,9 @@ jobs:
       - name: Botón de ayuda de un toque del motorizado y menú sin palabras partidas
         run: node tests/navegador-ayuda.cjs
 
+      - name: Configuración, Locales en el teléfono (sin texto aplastado)
+        run: node tests/navegador-locales-movil.cjs
+
       - name: Alerta de ayuda en la app de la administración (banda roja, Atendido)
         run: node tests/navegador-ayuda-admin.cjs
 

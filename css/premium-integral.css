@@ -184,3 +184,13 @@
 .mip-ayuda-ok:disabled{opacity:.6}
 .mip-ayuda-ok:focus-visible,.mip-ayuda-mapa:focus-visible{outline:3px solid #fff;outline-offset:2px}
 /* FIN AYUDA ADMINISTRACIÓN 3.1.33 */
+
+/* INICIO LOCALES MÓVIL 3.1.59 — la fila de cada local (ícono, nombre, etiqueta y 2 botones) se parte en dos líneas en el teléfono. */
+#cfg-cuerpo .item:has(> button[data-pausar]) > .item-cuerpo { overflow-wrap: anywhere; }
+@media (max-width: 640px) {
+  #cfg-cuerpo .item:has(> button[data-pausar]) { flex-wrap: wrap; gap: 10px 12px; }
+  #cfg-cuerpo .item:has(> button[data-pausar]) > .item-cuerpo { flex: 1 1 calc(100% - 60px); }
+  #cfg-cuerpo .item:has(> button[data-pausar]) > .etiqueta { margin-left: 56px; }
+  #cfg-cuerpo .item:has(> button[data-pausar]) > .btn { flex: 1 1 120px; min-height: 44px; white-space: normal; text-align: center; }
+}
+/* FIN LOCALES MÓVIL 3.1.59 */

@@ -28,7 +28,7 @@
   global.APP_CONFIG = Object.freeze({
     url: valida(URL_SCRIPT) ? String(URL_SCRIPT).trim() : '',
     configurada: valida(URL_SCRIPT),
-    versionPantalla: '3.1.58',
+    versionPantalla: '3.1.59',
     versionScriptMinima: 30129, // compatibilidad comercial; GPS por lote requiere 30132
     tiempoEsperaMs: 25000
   });
