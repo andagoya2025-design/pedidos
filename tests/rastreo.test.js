@@ -164,11 +164,16 @@ test('ayuda: aparece solo para el motorizado y desaparece al cerrar sesión', ()
   const d = entorno(); d.win.APP.sesion = { rol: 'dueno' }; d.R.actualizar(['P1']);
   assert.equal(d.cuerpo.hijos.length, 0, 'el dueño y el cajero no lo ven');
 });
-test('ayuda: el código no envía nada solo y no guarda datos nuevos', () => {
-  assert.match(fuente, /global\.open\(UI\.enlaceWhatsApp\(numero, mensajeAyuda\(\)\)/, 'abre WhatsApp para que la persona toque Enviar');
-  assert.doesNotMatch(fuente, /DATOS\.pedir\('ayuda/, 'no hay llamadas nuevas al servidor');
+test('ayuda: un toque avisa a la plataforma; WhatsApp y falsa alarma solo por botón; nada se guarda en el teléfono', () => {
+  assert.match(fuente, /ayuda\.addEventListener\('click', pulsarAyuda\)/, 'un solo toque dispara el aviso');
+  assert.doesNotMatch(fuente, /pointerdown|pointerup|AYUDA_MS|Mantén/, 'ya no hay que mantener presionado');
+  assert.equal(fuente.split("DATOS.pedir('ayudaAviso'").length, 3, 'solo dos llamadas: enviar y falsa alarma');
+  assert.match(fuente, /function enviarAyuda[\s\S]*?DATOS\.pedir\('ayudaAviso', datos\)/, 'el aviso lleva un id que evita duplicados al reintentar');
+  assert.match(fuente, /accion: 'falsa'/);
+  assert.match(fuente, /r && r\.guardado === true/, 'solo se dice «enviado» con la confirmación del servidor');
+  assert.match(fuente, /global\.open\(global\.UI\.enlaceWhatsApp\(numero, mensajeAyuda\(\)\)/, 'abre WhatsApp para que la persona toque Enviar');
   assert.doesNotMatch(fuente, /localStorage|sessionStorage/, 'no guarda nada en el teléfono');
-  assert.match(fuente, /mejorPosicion\(\)/, 'solo usa una ubicación reciente');
+  assert.match(fuente, /mejorPosicion\(\)/, 'solo usa una ubicación reciente o una lectura rápida');
 });
 
 

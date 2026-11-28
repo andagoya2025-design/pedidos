@@ -18,10 +18,10 @@
  * ============================================================
  */
 
-var APP_VERSION = '3.1.32';
+var APP_VERSION = '3.1.33';
 // Marcador opaco, sin datos de pedidos. Una ejecución de Apps Script tiene su propio estado.
 var syncPendiente_ = false;
-var APP_VERSION_NUM = 30132; // 3.1.0 -> 30100 (la pantalla compara con su mínimo)
+var APP_VERSION_NUM = 30133; // 3.1.0 -> 30100 (la pantalla compara con su mínimo)
 var SESION_SEGUNDOS = 21600;  // 6 h; se renueva con cada uso
 var ROLES = ['dueno', 'cajero', 'motorizado'];
 
@@ -107,6 +107,7 @@ var CONFIG_DEFECTO = {
   exigir_turno: 'NO',        // SI = no se asigna pedido a un motorizado sin turno abierto
   minutos_alerta_detenido: '10',
   minutos_alerta_senal: '5',
+  ayuda_vigencia_horas: '12', // 3.1.33: horas que una alerta de ayuda sin atender sigue visible
   dias_guardar_rastreo: '30',
   privacidad_texto: '',      // vacío = texto por defecto (privacidad.html)
   formato_hora: '24',        // 24 | 12
@@ -219,6 +220,8 @@ var ACCIONES = {
   rastreoLote:        { tipo: 'sesion',  roles: ['motorizado'], fn: accionRastreoLote_ },
   monitoreo:          { tipo: 'sesion',  roles: ['dueno', 'cajero'], fn: accionMonitoreo_ },
   monitoreoSeguro:    { tipo: 'sesion',  roles: ['dueno', 'cajero'], fn: accionMonitoreo_ },
+  ayudaAviso:         { tipo: 'sesion',  roles: ['motorizado'], fn: accionAyudaAviso_ },
+  ayudaAtender:       { tipo: 'sesion',  roles: ['dueno', 'cajero'], fn: accionAyudaAtender_ },
   informeMotorizados: { tipo: 'dueno',   fn: accionInformeMotorizados_ },
   rutaPedido:         { tipo: 'sesion',  roles: ['dueno', 'cajero'], fn: accionRutaPedido_ },
   clienteAnonimizar:  { tipo: 'dueno',   fn: accionClienteAnonimizar_ },
@@ -560,6 +563,7 @@ function accionConfigGuardar_(data, ctx) {
     /* 3.1 */
     if ((k === 'codigo_entrega' || k === 'exigir_turno') && ['SI', 'NO'].indexOf(v) < 0) throw fallo_('Valor no válido.');
     if ((k === 'minutos_alerta_detenido' || k === 'minutos_alerta_senal') && !(Number(v) >= 1 && Number(v) <= 120)) throw fallo_('Minutos de alerta no válidos (1 a 120).');
+    if (k === 'ayuda_vigencia_horas' && !(Number(v) >= 1 && Number(v) <= 72)) throw fallo_('Horas de vigencia no válidas (1 a 72).');
     if (k === 'dias_guardar_rastreo' && !(Number(v) >= 1 && Number(v) <= 365)) throw fallo_('Días no válidos (1 a 365).');
     if (k === 'formato_hora' && ['12', '24'].indexOf(v) < 0) throw fallo_('Formato de hora no válido.');
     if ((k === 'meta_entregas_dia' || k === 'bono_meta') && v !== '' && !(Number(v) >= 0 && Number(v) <= 1000)) throw fallo_('Meta o bono no válidos.');
@@ -3406,7 +3410,8 @@ function accionPedidosNuevos_(data, ctx) {
   return { ok: true, data: {
     ultimo: Number(CacheService.getScriptCache().get('ULTIMO_PEDIDO') || 0),
     pedidos: pedidos.map(function (p) { return { id: String(p.id), numero: String(p.numero), nombre_aviso:nombres[String(p.id)] || '' }; }),
-    solicitudes: cambios.map(function (p) { return { id: String(p.id), numero: String(p.numero), estado:String(p.estado), nombre_aviso:nombres[String(p.pedido_id)] || '' }; })
+    solicitudes: cambios.map(function (p) { return { id: String(p.id), numero: String(p.numero), estado:String(p.estado), nombre_aviso:nombres[String(p.pedido_id)] || '' }; }),
+    ayudas: ayudasParaAdmin_(local) // 3.1.33: alertas de ayuda del motorizado sin atender
   } };
 }
 
@@ -3804,6 +3809,109 @@ function guardarRastreoGps_(data, ids, ctx) {
   } catch (e) {
     if (escritura) { try { SpreadsheetApp.flush(); } catch (ignorado) {} }
     throw e;
+  } finally { lock.releaseLock(); }
+}
+
+/* ---------- 13.3b Ayuda del motorizado (3.1.33) ----------
+ * Un toque en 🆘 avisa a la administración. Se guarda en la bitácora existente (sin hojas ni columnas nuevas):
+ * modulo AYUDA; accion AVISO | ATENDIDA | FALSA; detalle «id|json». Las alertas activas se guardan en caché corta
+ * para que la consulta frecuente de pedidosNuevos no lea la hoja cada vez; si la caché falta, se reconstruye de la hoja.
+ * Datos mínimos: motorizado, números de pedido, hora y última ubicación. Nunca cédula ni datos del cliente. */
+var AYUDA_CACHE = 'AYUDA_ACTIVAS';
+
+function ayudasLeer_() {
+  var sh = hoja_('bitacora'), n = sh.getLastRow(), avisos = [], cerradas = Object.create(null);
+  if (n < 2) return { avisos: avisos, cerradas: cerradas };
+  var celdas = sh.getRange(2, 5, n - 1, 1).createTextFinder('AYUDA').matchCase(true).matchEntireCell(true).findAll();
+  celdas.forEach(function (c) {
+    var v = sh.getRange(c.getRow(), 1, 1, 7).getValues()[0], accion = String(v[5]), detalle = String(v[6]), i = detalle.indexOf('|'), id = i < 0 ? detalle : detalle.slice(0, i);
+    if (v[4] !== 'AYUDA' || !id) return;
+    if (accion === 'AVISO') {
+      var d; try { d = JSON.parse(detalle.slice(i + 1)); } catch (e) { return; }
+      if (!d || typeof d !== 'object') return;
+      d.id = id; d.fecha = v[0]; avisos.push(d);
+    } else if (accion === 'ATENDIDA' || accion === 'FALSA') cerradas[id] = accion;
+  });
+  return { avisos: avisos, cerradas: cerradas };
+}
+
+function ayudasReconstruir_() {
+  var r = ayudasLeer_();
+  var activas = r.avisos.filter(function (a) { return !r.cerradas[a.id] && a.fecha instanceof Date; }).map(function (a) {
+    return { id: a.id, m: String(a.m || ''), n: String(a.n || ''), p: Array.isArray(a.p) ? a.p : [], l: Array.isArray(a.l) ? a.l : [], lat: a.lat === '' || a.lat == null ? '' : Number(a.lat), lng: a.lng === '' || a.lng == null ? '' : Number(a.lng), t: a.fecha.getTime() };
+  });
+  CacheService.getScriptCache().put(AYUDA_CACHE, JSON.stringify(activas), 21600);
+  return activas;
+}
+
+function ayudaVisible_(a, local) { return local === 'TODOS' || !a.l.length || a.l.indexOf(local) >= 0; }
+
+/* Alertas sin atender que puede ver este local, dentro de su vigencia (ajuste ayuda_vigencia_horas). */
+function ayudasParaAdmin_(local) {
+  try {
+    var cache = CacheService.getScriptCache(), g = cache.get(AYUDA_CACHE), activas = null;
+    if (g) { try { activas = JSON.parse(g); } catch (e) { activas = null; } }
+    if (!Array.isArray(activas)) activas = ayudasReconstruir_();
+    var vigencia = (numero_(leerConfig_().ayuda_vigencia_horas) || 12) * 3600000, ahora = Date.now();
+    return activas.filter(function (a) { return a.t && ahora - a.t <= vigencia && a.t - ahora <= 60000 && ayudaVisible_(a, local); })
+      .sort(function (a, b) { return a.t - b.t; })
+      .map(function (a) { return { id: a.id, nombre: a.n, pedidos: a.p, hora: new Date(a.t).toISOString(), lat: a.lat, lng: a.lng }; });
+  } catch (e) {
+    console.error('ayudas: ' + e); // un fallo aquí nunca debe frenar los avisos de pedidos
+    return [];
+  }
+}
+
+/* El motorizado avisa (accion «enviar», por defecto) o la cancela como falsa alarma (accion «falsa»). Repetir con el mismo ayuda_id no duplica. */
+function accionAyudaAviso_(data, ctx) {
+  var id = limpiarTexto_(data.ayuda_id, 40);
+  if (!/^[A-Za-z0-9_-]{8,40}$/.test(id)) throw fallo_('Aviso no válido.');
+  var falsa = String(data.accion || 'enviar') === 'falsa';
+  var lat = coord_(data.lat, -90, 90), lng = coord_(data.lng, -180, 180);
+  var lock = candado_();
+  try {
+    var m = miMotorizado_(ctx), ahora = new Date(), r = ayudasLeer_(), usuario = ctx.sesion.usuario || '';
+    var previo = r.avisos.filter(function (a) { return a.id === id; })[0];
+    if (falsa) {
+      if (!previo || String(previo.m) !== String(m.id)) throw fallo_('No encontramos ese aviso.', 'NO_EXISTE');
+      if (!r.cerradas[id]) {
+        agregarFilas_('bitacora', [[ahora, usuario, 'motorizado', ctx.sesion.local_id || '', 'AYUDA', 'FALSA', id, '']]);
+        SpreadsheetApp.flush(); ayudasReconstruir_();
+      }
+      return { ok: true, data: { cancelado: true, ayuda_id: id } };
+    }
+    if (previo) {
+      if (String(previo.m) !== String(m.id)) throw fallo_('Aviso no válido.');
+      return { ok: true, data: { guardado: true, repetido: true, ayuda_id: id, fecha: iso_(previo.fecha) } };
+    }
+    // Si ya tiene una alerta sin atender, no se duplica: la administración ya la tiene.
+    var abierto = r.avisos.filter(function (a) { return String(a.m) === String(m.id) && !r.cerradas[a.id] && a.fecha instanceof Date; })
+      .sort(function (a, b) { return b.fecha - a.fecha; })[0];
+    var vigencia = (numero_(leerConfig_().ayuda_vigencia_horas) || 12) * 3600000;
+    if (abierto && ahora - abierto.fecha <= vigencia) return { ok: true, data: { guardado: true, ya_activo: true, ayuda_id: abierto.id, fecha: iso_(abierto.fecha) } };
+    var peds = leerTabla_('pedidos').filter(function (p) { return String(p.motorizado_id) === String(m.id) && String(p.estado) === 'En camino'; });
+    var locales = peds.map(function (p) { return String(p.local_id); }).filter(function (x, i, a) { return x && a.indexOf(x) === i; });
+    if (!locales.length && m.local_id && String(m.local_id) !== 'TODOS') locales = [String(m.local_id)];
+    var d = { m: String(m.id), n: limpiarTexto_(m.nombre, 60), p: peds.map(function (p) { return String(p.numero); }).slice(0, 10), l: locales, lat: lat, lng: lng };
+    agregarFilas_('bitacora', [[ahora, usuario, 'motorizado', locales[0] || '', 'AYUDA', 'AVISO', id + '|' + JSON.stringify(d), '']]);
+    SpreadsheetApp.flush(); ayudasReconstruir_();
+    return { ok: true, data: { guardado: true, ayuda_id: id, fecha: iso_(ahora) } };
+  } finally { lock.releaseLock(); }
+}
+
+/* Dueño o cajero marca la alerta como atendida (queda quién y cuándo). Repetir no duplica. */
+function accionAyudaAtender_(data, ctx) {
+  var id = limpiarTexto_(data.ayuda_id, 40), local = localDeSesion_(ctx, data.local_id);
+  var lock = candado_();
+  try {
+    var r = ayudasLeer_(), a = r.avisos.filter(function (x) { return x.id === id; })[0];
+    if (!a) throw fallo_('Esa alerta ya no existe.', 'NO_EXISTE');
+    if (!ayudaVisible_({ l: Array.isArray(a.l) ? a.l : [] }, local)) throw fallo_('Esa alerta no es de su local.', 'PERMISO');
+    if (!r.cerradas[id]) {
+      agregarFilas_('bitacora', [[new Date(), ctx.sesion.usuario || '', ctx.sesion.rol || '', ctx.sesion.local_id || '', 'AYUDA', 'ATENDIDA', id, '']]);
+      SpreadsheetApp.flush(); ayudasReconstruir_();
+    }
+    return { ok: true, data: { atendida: true, ayuda_id: id } };
   } finally { lock.releaseLock(); }
 }
 

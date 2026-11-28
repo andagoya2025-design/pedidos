@@ -165,9 +165,10 @@
   }
 
 
-  /* ---------- Botón de ayuda (solo motorizado) ---------- */
-  var AYUDA_MS = 2000;
-  var ayuda = null, hoja = null, posAyuda = null, temporizadorAyuda = null, pistaAyuda = null;
+  /* ---------- Botón de ayuda (solo motorizado) ----------
+   * 3.1.33: UN SOLO TOQUE. Avisa a la administración de inmediato (sale en su app con sonido y una banda roja).
+   * Luego ofrece avisar también por WhatsApp o marcar «Falsa alarma». Nunca dice «enviado» sin la confirmación del servidor. */
+  var ayuda = null, hoja = null, posAyuda = null, aviso = null;
 
   function esMotorizado() { var s = global.APP && global.APP.sesion; return !!s && s.rol === 'motorizado'; }
 
@@ -184,19 +185,6 @@
     var nav = global.document.getElementById('navegacion');
     var lateral = global.innerWidth >= 900;
     ayuda.style.bottom = lateral ? '20px' : ((nav ? nav.offsetHeight : 72) + 12) + 'px';
-  }
-
-  function cancelarPulso() {
-    if (temporizadorAyuda) { clearTimeout(temporizadorAyuda); temporizadorAyuda = null; }
-    if (ayuda) ayuda.classList.remove('pulsando');
-  }
-
-  function textoAyuda(nuevo) { if (ayuda) ayuda.lastChild.textContent = nuevo; }
-
-  function pistaCorta() {
-    textoAyuda('Mantén 2 s');
-    if (pistaAyuda) clearTimeout(pistaAyuda);
-    pistaAyuda = setTimeout(function () { textoAyuda('Ayuda'); }, 2500);
   }
 
   function pedidosEnCamino() {
@@ -228,47 +216,127 @@
     hoja.remove(); hoja = null;
     if (ayuda) try { ayuda.focus(); } catch (e) { /* sin foco */ }
   }
-  function alTeclaHoja(e) { if (e.key === 'Escape') cerrarHoja(); }
+  function alTeclaHoja(e) { if (e.key === 'Escape' && !(aviso && aviso.estado === 'enviando')) cerrarHoja(); }
 
-  function abrirHoja() {
-    if (hoja || !esMotorizado()) return;
-    var numero = global.UI && UI.digitos ? UI.digitos((global.APP.publico || {}).whatsapp) : '';
-    hoja = crear('div', 'ayuda-fondo');
-    hoja.addEventListener('click', function (e) { if (e.target === hoja) cerrarHoja(); });
+  function numeroAyuda() { return global.UI && global.UI.digitos ? global.UI.digitos((global.APP.publico || {}).whatsapp) : ''; }
+
+  function nuevoIdAyuda() {
+    var letras = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789', s = 'AYU-' + ahora().toString(36).toUpperCase();
+    for (var i = 0; i < 6; i++) s += letras.charAt(Math.floor(Math.random() * letras.length));
+    return s;
+  }
+
+  /* Muestra la ventana de ayuda con botones: [{ clase, texto, alClick }]. Reemplaza la anterior sin cerrar la sesión de aviso. */
+  function mostrarHoja(titulo, texto, botones) {
+    var anterior = hoja;
+    var nueva = crear('div', 'ayuda-fondo');
+    nueva.addEventListener('click', function (e) { if (e.target === nueva && !(aviso && aviso.estado === 'enviando')) cerrarHoja(); });
     var caja = crear('div', 'ayuda-hoja');
     caja.setAttribute('role', 'dialog'); caja.setAttribute('aria-modal', 'true'); caja.setAttribute('aria-labelledby', 'ayuda-titulo');
     caja.appendChild(crear('div', 'ayuda-asa'));
-    var t = crear('h2', 'ayuda-titulo', '¿Necesitas ayuda?'); t.id = 'ayuda-titulo'; caja.appendChild(t);
-    caja.appendChild(crear('p', 'ayuda-texto', numero
-      ? 'Preparamos un WhatsApp para la administración con tu nombre, tu pedido y tu ubicación. Tú solo tocas «Enviar».'
-      : 'La administración todavía no tiene un WhatsApp configurado. Avísale por otro medio.'));
-    var est = crear('p', 'ayuda-estado', ''); est.setAttribute('role', 'status');
-    var avisar = crear('button', 'ayuda-avisar', 'Avisar por WhatsApp'); avisar.type = 'button';
-    avisar.addEventListener('click', function () {
-      if (!numero) { est.textContent = 'No hay un WhatsApp configurado.'; return; }
-      global.open(UI.enlaceWhatsApp(numero, mensajeAyuda()), '_blank', 'noopener');
-      cerrarHoja();
+    var t = crear('h2', 'ayuda-titulo', titulo); t.id = 'ayuda-titulo'; caja.appendChild(t);
+    if (texto) { var p = crear('p', 'ayuda-texto', texto); p.setAttribute('role', 'status'); caja.appendChild(p); }
+    var primero = null;
+    botones.forEach(function (b) {
+      var x = crear('button', b.clase, b.texto); x.type = 'button'; x.addEventListener('click', b.alClick); caja.appendChild(x);
+      if (!primero) primero = x;
     });
-    var cancelar = crear('button', 'ayuda-cancelar', 'Cancelar'); cancelar.type = 'button';
-    cancelar.addEventListener('click', cerrarHoja);
-    if (numero) caja.appendChild(est);
-    if (numero) caja.appendChild(avisar);
-    caja.appendChild(cancelar);
-    hoja.appendChild(caja);
-    global.document.body.appendChild(hoja);
+    nueva.appendChild(caja);
+    global.document.body.appendChild(nueva);
+    if (anterior) anterior.remove();
+    hoja = nueva;
+    global.document.removeEventListener('keydown', alTeclaHoja);
     global.document.addEventListener('keydown', alTeclaHoja);
-    (numero ? avisar : cancelar).focus();
-    // Mientras decide, se busca la ubicación para que vaya en el mensaje.
-    if (numero) {
-      if (mejorPosicion()) est.textContent = 'Ubicación lista.';
-      else if (global.navigator.geolocation) {
-        est.textContent = 'Buscando tu ubicación…';
-        global.navigator.geolocation.getCurrentPosition(function (pos) {
-          posAyuda = { lat: Math.round(pos.coords.latitude * 1e6) / 1e6, lng: Math.round(pos.coords.longitude * 1e6) / 1e6, t: ahora() };
-          est.textContent = 'Ubicación lista.';
-        }, function () { est.textContent = 'No se pudo leer tu ubicación; el aviso irá sin ella.'; }, { enableHighAccuracy: true, maximumAge: 0, timeout: 8000 });
-      } else est.textContent = 'No se pudo leer tu ubicación; el aviso irá sin ella.';
-    }
+    if (primero) primero.focus();
+  }
+
+  function abrirWhatsAppAyuda() {
+    var numero = numeroAyuda();
+    if (!numero) return;
+    global.open(global.UI.enlaceWhatsApp(numero, mensajeAyuda()), '_blank', 'noopener');
+  }
+
+  function botonesFinales(mensajeCancelar) {
+    var b = [];
+    if (numeroAyuda()) b.push({ clase: 'ayuda-avisar', texto: 'Avisar también por WhatsApp', alClick: abrirWhatsAppAyuda });
+    b.push({ clase: 'ayuda-cancelar', texto: 'Falsa alarma', alClick: falsaAlarma });
+    b.push({ clase: 'ayuda-cancelar', texto: 'Cerrar', alClick: cerrarHoja });
+    return b;
+  }
+
+  function mostrarEnviado(extra) {
+    var sinUbic = aviso && !aviso.pos;
+    mostrarHoja('✅ Aviso enviado',
+      (extra ? extra + ' ' : '') + 'Tu aviso quedó registrado y aparece en la app de la administración' + (sinUbic ? ' (sin ubicación: no se pudo leer)' : ' con tu ubicación') + '. Si es seguro, quédate donde estás.',
+      botonesFinales());
+  }
+
+  function mostrarError() {
+    var numero = numeroAyuda(), viejo = aviso && aviso.servidorViejo;
+    var b = [];
+    if (numero) b.push({ clase: 'ayuda-avisar', texto: 'Avisar por WhatsApp', alClick: abrirWhatsAppAyuda });
+    b.push({ clase: numero ? 'ayuda-cancelar' : 'ayuda-avisar', texto: 'Reintentar', alClick: function () { if (aviso) enviarAyuda(aviso.pos); } });
+    b.push({ clase: 'ayuda-cancelar', texto: 'Cerrar', alClick: cerrarHoja });
+    mostrarHoja('⚠️ No se pudo avisar a la app',
+      (viejo ? 'La app de la administración todavía no recibe estos avisos. ' : 'Revisa tu conexión a internet. ') + (numero ? 'Avisa por WhatsApp o vuelve a intentar.' : 'No hay un WhatsApp configurado: avisa por otro medio.'), b);
+  }
+
+  function enviarAyuda(pos) {
+    var mio = aviso;
+    if (!mio) return;
+    mio.estado = 'enviando'; mio.pos = pos || null; mio.servidorViejo = false;
+    mostrarHoja('🆘 Avisando…', 'Estamos avisando a la administración.', []);
+    var datos = { ayuda_id: mio.id };
+    if (pos) { datos.lat = pos.lat; datos.lng = pos.lng; datos.precision = pos.precision || 0; }
+    global.DATOS.pedir('ayudaAviso', datos).then(function (r) {
+      if (aviso !== mio) return;
+      if (r && r.guardado === true) { if (r.ayuda_id) mio.id = String(r.ayuda_id); mio.estado = 'enviado'; mostrarEnviado(r.ya_activo ? 'Ya habías avisado y la administración aún no lo marca como atendido.' : ''); }
+      else { mio.estado = 'error'; mostrarError(); }
+    }, function (e) {
+      if (aviso !== mio) return;
+      mio.estado = 'error'; mio.servidorViejo = !!(e && e.codigo === 'ACCION'); mostrarError();
+    });
+  }
+
+  function falsaAlarma() {
+    var mio = aviso;
+    if (!mio || mio.estado !== 'enviado') return;
+    mio.estado = 'enviando';
+    mostrarHoja('Cancelando…', 'Estamos avisando que fue una falsa alarma.', []);
+    global.DATOS.pedir('ayudaAviso', { ayuda_id: mio.id, accion: 'falsa' }).then(function (r) {
+      if (aviso !== mio) return;
+      if (r && r.cancelado === true) {
+        aviso = null;
+        mostrarHoja('Falsa alarma registrada', 'Avisamos a la administración que fue una falsa alarma. Gracias.', [{ clase: 'ayuda-cancelar', texto: 'Cerrar', alClick: cerrarHoja }]);
+      } else { mio.estado = 'enviado'; mostrarEnviado('No se pudo cancelar el aviso. Inténtalo otra vez.'); }
+    }, function () {
+      if (aviso !== mio) return;
+      mio.estado = 'enviado'; mostrarEnviado('No se pudo cancelar el aviso: revisa tu conexión e inténtalo otra vez.');
+    });
+  }
+
+  /* Ubicación lo más rápida posible: la que ya hay, o una lectura de hasta 3 s. Un pánico no espera al GPS. */
+  function posicionRapida(listo) {
+    var p = mejorPosicion();
+    if (p) return listo(p);
+    if (!global.navigator.geolocation) return listo(null);
+    var hecho = false, espera = null;
+    function fin(pos) { if (hecho) return; hecho = true; if (espera) clearTimeout(espera); listo(pos); }
+    espera = setTimeout(function () { fin(null); }, 3500);
+    global.navigator.geolocation.getCurrentPosition(function (pos) {
+      var c = pos && pos.coords;
+      if (!c) return fin(null);
+      posAyuda = { lat: Math.round(c.latitude * 1e6) / 1e6, lng: Math.round(c.longitude * 1e6) / 1e6, precision: Math.round(c.accuracy || 0), t: ahora() };
+      fin(posAyuda);
+    }, function () { fin(null); }, { enableHighAccuracy: true, maximumAge: 120000, timeout: 3000 });
+  }
+
+  function pulsarAyuda() {
+    if (!esMotorizado() || hoja) return; // con una ventana abierta no se duplica
+    try { if (global.navigator.vibrate) global.navigator.vibrate(60); } catch (x) { /* sin vibración */ }
+    var mio = aviso = { id: nuevoIdAyuda(), estado: 'enviando', pos: null, servidorViejo: false };
+    mostrarHoja('🆘 Avisando…', 'Estamos avisando a la administración.', []);
+    posicionRapida(function (pos) { if (aviso === mio && hoja) enviarAyuda(pos); });
   }
 
   function asegurarAyuda() {
@@ -276,30 +344,17 @@
     if (ayuda) return ubicarAyuda();
     ayuda = crear('button', 'btn-ayuda');
     ayuda.type = 'button'; ayuda.id = 'btn-ayuda';
-    ayuda.setAttribute('aria-label', 'Pedir ayuda a la administración. Mantén presionado 2 segundos');
+    ayuda.setAttribute('aria-label', 'Pedir ayuda a la administración. Un solo toque avisa de inmediato');
     var ico = crear('span', 'ayuda-ico', '🆘'); ico.setAttribute('aria-hidden', 'true');
     ayuda.appendChild(ico); ayuda.appendChild(crear('span', 'ayuda-txt', 'Ayuda'));
-    ayuda.addEventListener('pointerdown', function (e) {
-      if (e.button !== undefined && e.button > 0) return;
-      cancelarPulso();
-      ayuda.classList.add('pulsando');
-      temporizadorAyuda = setTimeout(function () {
-        temporizadorAyuda = null; ayuda.classList.remove('pulsando');
-        try { if (global.navigator.vibrate) global.navigator.vibrate(40); } catch (x) { /* sin vibración */ }
-        abrirHoja();
-      }, AYUDA_MS);
-    });
-    ayuda.addEventListener('pointerup', function () { if (temporizadorAyuda) { cancelarPulso(); pistaCorta(); } });
-    ['pointerleave', 'pointercancel'].forEach(function (ev) { ayuda.addEventListener(ev, cancelarPulso); });
+    ayuda.addEventListener('click', pulsarAyuda);
     ayuda.addEventListener('contextmenu', function (e) { e.preventDefault(); });
-    ayuda.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); abrirHoja(); } });
     global.document.body.appendChild(ayuda);
     ubicarAyuda();
   }
 
   function quitarAyuda() {
-    cancelarPulso(); cerrarHoja(); posAyuda = null;
-    if (pistaAyuda) { clearTimeout(pistaAyuda); pistaAyuda = null; }
+    aviso = null; cerrarHoja(); posAyuda = null;
     if (ayuda) { ayuda.remove(); ayuda = null; }
   }
   global.addEventListener('resize', ubicarAyuda);

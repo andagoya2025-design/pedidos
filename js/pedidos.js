@@ -533,6 +533,7 @@
         catch (e) { if (APP.sesion===s && (APP.local||s.local_id||'TODOS')===local) actualizarEstadoSolicitudes(null,true); return false; }
         if (APP.sesion !== s || (APP.local || s.local_id || 'TODOS') !== local) return;
         actualizarEstadoSolicitudes(r, false);
+        if(global.MIP_AVISOS&&global.MIP_AVISOS.ayudas)global.MIP_AVISOS.ayudas(r.ayudas); // 3.1.33: alerta de ayuda del motorizado
         if (Array.isArray(r.pedidos) && Array.isArray(r.solicitudes)) {
           if(global.MIP_AVISOS&&global.MIP_AVISOS.reconciliarPendientes)global.MIP_AVISOS.reconciliarPendientes(r.pedidos,r.solicitudes);
           var pedidos = [], solicitudes = [];

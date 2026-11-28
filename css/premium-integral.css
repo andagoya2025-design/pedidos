@@ -172,3 +172,15 @@
 .ventana:has(#form-insumo) .campo .ayuda{display:block;margin-top:2px;line-height:1.3}
 .interruptor:has(#solo-bajos){white-space:nowrap;flex:1 1 200px!important}
 /* FIN INVENTARIO FORMULARIO 3.1.51 */
+
+/* INICIO AYUDA ADMINISTRACIÓN 3.1.33 */
+.mip-ayuda-banda{position:fixed;top:0;left:0;right:0;z-index:140;background:#b3261e;color:#fff;padding:max(8px,env(safe-area-inset-top,0px)) 12px 8px;display:grid;gap:8px;box-shadow:0 4px 18px rgba(0,0,0,.35)}
+.mip-ayuda-fila{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.mip-ayuda-texto{flex:1 1 180px;min-width:0;display:grid;overflow-wrap:anywhere}
+.mip-ayuda-texto small{opacity:.92}
+.mip-ayuda-mapa{color:#fff;font-weight:700;text-decoration:underline;min-height:44px;display:inline-flex;align-items:center}
+.mip-ayuda-sin{opacity:.85;font-size:13px}
+.mip-ayuda-ok{min-height:44px;padding:0 18px;border-radius:12px;border:2px solid #fff;background:#fff;color:#b3261e;font-family:inherit;font-size:16px;font-weight:800;cursor:pointer}
+.mip-ayuda-ok:disabled{opacity:.6}
+.mip-ayuda-ok:focus-visible,.mip-ayuda-mapa:focus-visible{outline:3px solid #fff;outline-offset:2px}
+/* FIN AYUDA ADMINISTRACIÓN 3.1.33 */

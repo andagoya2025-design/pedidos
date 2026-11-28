@@ -2,22 +2,23 @@
 (function(g){
  'use strict';
  var APP=g.APP,UI=g.UI,MEM=g.APP_MEMORIA,contexto='',lista=[],vistos=Object.create(null),asignados=null,asignacionSeq=0,atrasados=Object.create(null),generacion=0,timers=[],cerrarDialogo=null,loteAudio=null,salidasUltimas=Object.create(null),salidaSeq=0,pendientes=Object.create(null),revocados=Object.create(null);
- var tipos={salidaAdmin:{titulo:'Confirmación enviada',roles:['dueno','cajero'],vista:'pedidos'},salidaMoto:{titulo:'Confirmación enviada',roles:['motorizado'],vista:'entregas'},pedido:{titulo:'Nuevo pedido',voz:'Atención, nuevo pedido recibido.',roles:['dueno','cajero'],vista:'pedidos'},solicitud:{titulo:'Solicitud de modificación',voz:'Atención, tiene una actualización de modificación de pedido.',roles:['dueno','cajero'],vista:'pedidos'},atraso:{titulo:'Pedido sin atender',voz:'Atención, tiene un pedido pendiente de atender.',roles:['dueno','cajero'],vista:'pedidos'},entrega:{titulo:'Nueva entrega asignada',voz:'Atención, tiene una nueva entrega asignada.',roles:['motorizado'],vista:'entregas'},retiro:{titulo:'Asignación actualizada',voz:'Atención, una entrega ya no está en tus asignaciones.',roles:['motorizado'],vista:'entregas'},cambioEntrega:{titulo:'Modificación de entrega',voz:'Atención, revisa una modificación en tu entrega.',roles:['motorizado'],vista:'entregas'},cambioResuelto:{titulo:'Actualización de entrega',voz:'Atención, una modificación de entrega fue actualizada.',roles:['motorizado'],vista:'entregas'}};
+ var tipos={salidaAdmin:{titulo:'Confirmación enviada',roles:['dueno','cajero'],vista:'pedidos'},salidaMoto:{titulo:'Confirmación enviada',roles:['motorizado'],vista:'entregas'},pedido:{titulo:'Nuevo pedido',voz:'Atención, nuevo pedido recibido.',roles:['dueno','cajero'],vista:'pedidos'},solicitud:{titulo:'Solicitud de modificación',voz:'Atención, tiene una actualización de modificación de pedido.',roles:['dueno','cajero'],vista:'pedidos'},atraso:{titulo:'Pedido sin atender',voz:'Atención, tiene un pedido pendiente de atender.',roles:['dueno','cajero'],vista:'pedidos'},entrega:{titulo:'Nueva entrega asignada',voz:'Atención, tiene una nueva entrega asignada.',roles:['motorizado'],vista:'entregas'},retiro:{titulo:'Asignación actualizada',voz:'Atención, una entrega ya no está en tus asignaciones.',roles:['motorizado'],vista:'entregas'},cambioEntrega:{titulo:'Modificación de entrega',voz:'Atención, revisa una modificación en tu entrega.',roles:['motorizado'],vista:'entregas'},cambioResuelto:{titulo:'Actualización de entrega',voz:'Atención, una modificación de entrega fue actualizada.',roles:['motorizado'],vista:'entregas'},ayuda:{titulo:'Ayuda del motorizado',voz:'Atención, un motorizado pide ayuda.',roles:['dueno','cajero'],vista:'monitoreo'}};
  function scope(){var s=APP.sesion;return s?String(s.usuario_id||s.usuario)+'|'+s.rol+'|'+String(APP.local||s.local_id||'')+'|'+String(g.APP_CONFIG.url||''):'';}
- function reset(conservarPreparacion){if(cerrarDialogo){var cerrar=cerrarDialogo;cerrarDialogo=null;cerrar(null);}generacion++;timers.forEach(function(t){g.clearTimeout(t);});timers=[];loteAudio=null;if(g.MIP_VOZ)g.MIP_VOZ.limpiar(conservarPreparacion===true);lista=[];vistos=Object.create(null);asignados=null;asignacionSeq=0;atrasados=Object.create(null);salidasUltimas=Object.create(null);salidaSeq=0;pendientes=Object.create(null);revocados=Object.create(null);contexto='';pintar();}
+ function reset(conservarPreparacion){limpiarAyudas();if(cerrarDialogo){var cerrar=cerrarDialogo;cerrarDialogo=null;cerrar(null);}generacion++;timers.forEach(function(t){g.clearTimeout(t);});timers=[];loteAudio=null;if(g.MIP_VOZ)g.MIP_VOZ.limpiar(conservarPreparacion===true);lista=[];vistos=Object.create(null);asignados=null;asignacionSeq=0;atrasados=Object.create(null);salidasUltimas=Object.create(null);salidaSeq=0;pendientes=Object.create(null);revocados=Object.create(null);contexto='';pintar();}
  function sync(){var k=scope();if(k!==contexto){reset(!contexto&&!!k);contexto=k;}pintarVoz();return k;}
  function modo(){if(MEM.leer('sonido_pedidos')===false)return 'silencio';var v=MEM.leer('modo_avisos');return ['sonido','voz','ambos'].indexOf(v)>=0?v:'sonido';}
  function volumen(){var v=MEM.leer('volumen_voz');return typeof v==='number'?Math.max(0,Math.min(100,v)):80;}
  function configurar(m,v){if(['sonido','voz','ambos','silencio'].indexOf(m)<0)return;v=Math.max(0,Math.min(100,Number(v)||0));if(m===modo()&&v===volumen())return;MEM.guardar('sonido_pedidos',m!=='silencio');MEM.guardar('modo_avisos',m==='silencio'?'sonido':m);MEM.guardar('volumen_voz',Math.max(0,Math.min(100,Number(v)||0)));generacion++;timers.forEach(function(t){g.clearTimeout(t);});timers=[];loteAudio=null;if(g.MIP_VOZ)g.MIP_VOZ.limpiar();pintarVoz();}
  function primerNombre(v){var x=String(v||'').trim().split(/\s+/)[0]||'';return /^[\p{L}\p{M}][\p{L}\p{M}'’-]{0,23}$/u.test(x)?x:'';}
  function fraseAvisos(tipo,items){var cantidad=items.length,nombres=items.map(function(x){return x.nombre;}).filter(Boolean),n=nombres[0],conNombres=cantidad<=3&&nombres.length===cantidad,listaNombres=nombres.length===2?nombres.join(' y '):nombres.slice(0,-1).join(', ')+' y '+nombres[nombres.length-1];
+  if(tipo==='ayuda')return cantidad===1?(n?'Atención, '+n+' pide ayuda.':tipos[tipo].voz):'Atención, '+cantidad+' motorizados piden ayuda.';
   if(tipo==='pedido')return cantidad===1?(n?'Nuevo pedido de '+n+'.':tipos[tipo].voz):'Atención, '+cantidad+' nuevos pedidos'+(conNombres?' de '+listaNombres:' recibidos')+'.';
   if(tipo==='solicitud'||tipo==='aceptacion'){var aceptada=tipo==='aceptacion';return cantidad===1?(n?n+(aceptada?' aceptó la modificación.':' solicita modificar su pedido.'):(aceptada?'Una modificación fue aceptada.':tipos.solicitud.voz)):'Atención, '+cantidad+(aceptada?' modificaciones aceptadas':' solicitudes de modificación')+(conNombres?' de '+listaNombres:'')+'.';}
   if(tipo==='entrega')return cantidad===1?(n?'Nueva entrega para '+n+'.':tipos[tipo].voz):'Atención, '+cantidad+' nuevas entregas asignadas'+(conNombres?' para '+listaNombres:'')+'.';
   if(cantidad===1)return tipos[tipo].voz;var etiquetas={atraso:'pedidos pendientes de atender',retiro:'asignaciones actualizadas',cambioEntrega:'modificaciones de entrega',cambioResuelto:'actualizaciones de entrega'};return 'Atención, '+cantidad+' '+etiquetas[tipo]+'.';
  }
  function clasificar(tipo,x){return tipo==='solicitud'&&x.estado==='Confirmada cliente'?'aceptacion':tipo;}
- function fraseLote(grupos){var claves=Object.keys(grupos);if(claves.length===1)return fraseAvisos(claves[0],grupos[claves[0]]);var etiquetas={pedido:['nuevo pedido','nuevos pedidos'],solicitud:['solicitud de modificación','solicitudes de modificación'],aceptacion:['modificación aceptada','modificaciones aceptadas'],atraso:['pedido pendiente','pedidos pendientes'],entrega:['nueva entrega','nuevas entregas'],retiro:['asignación actualizada','asignaciones actualizadas'],cambioEntrega:['modificación de entrega','modificaciones de entrega'],cambioResuelto:['actualización de entrega','actualizaciones de entrega']};var partes=claves.map(function(k){var l=grupos[k].length;return l+' '+etiquetas[k][l===1?0:1];});return 'Atención, '+partes.join(', ')+'.';}
+ function fraseLote(grupos){var claves=Object.keys(grupos);if(claves.length===1)return fraseAvisos(claves[0],grupos[claves[0]]);var etiquetas={pedido:['nuevo pedido','nuevos pedidos'],ayuda:['alerta de ayuda','alertas de ayuda'],solicitud:['solicitud de modificación','solicitudes de modificación'],aceptacion:['modificación aceptada','modificaciones aceptadas'],atraso:['pedido pendiente','pedidos pendientes'],entrega:['nueva entrega','nuevas entregas'],retiro:['asignación actualizada','asignaciones actualizadas'],cambioEntrega:['modificación de entrega','modificaciones de entrega'],cambioResuelto:['actualización de entrega','actualizaciones de entrega']};var partes=claves.map(function(k){var l=grupos[k].length;return l+' '+etiquetas[k][l===1?0:1];});return 'Atención, '+partes.join(', ')+'.';}
  function sonar(tipo,espera,prueba,items){
   var s=APP.sesion,k=scope(),gen=generacion,m=modo();if(!s||m==='silencio')return;
   function valido(){return APP.sesion===s&&scope()===k&&gen===generacion&&modo()!=='silencio';}
@@ -119,5 +120,42 @@
  document.addEventListener('keydown',function(e){if(e.key==='Enter'||e.key===' ')gesto(e);},true);
  if(g.MIP_VOZ&&g.MIP_VOZ.observarEstado)g.MIP_VOZ.observarEstado(pintarVoz);
  document.addEventListener('DOMContentLoaded',init);g.addEventListener('app:sesion-terminada',reset);
- g.MIP_AVISOS={prepararIngreso:prepararIngreso,reconciliarPendientes:reconciliarPendientes,capturarSalida:capturarSalida,eliminar:eliminar,registrar:registrar,entregas:entregas,pendientesAtrasados:pendientesAtrasados,sync:sync,reset:reset,ajustes:ajustes,modo:modo,configurar:configurar,estado:function(){sync();return lista.map(function(x){return Object.assign({},x);});}};
+ /* 3.1.33 AYUDA INICIO — alertas de ayuda del motorizado: aviso con sonido/voz y banda roja fija hasta «Atendido». */
+ var ayudasActivas=[],atendiendo=Object.create(null);
+ function limpiarAyudas(){ayudasActivas=[];bandaAyuda();}
+ function bandaAyuda(){
+  var b=document.getElementById('mip-ayuda-banda');
+  if(!ayudasActivas.length){if(b)b.remove();return;}
+  if(!b){b=document.createElement('div');b.id='mip-ayuda-banda';b.className='mip-ayuda-banda';b.setAttribute('role','alert');document.body.appendChild(b);}
+  b.innerHTML=ayudasActivas.map(function(a){
+   var conMapa=a.lat!==''&&a.lat!=null&&a.lng!==''&&a.lng!=null&&isFinite(Number(a.lat))&&isFinite(Number(a.lng));
+   var mapa=conMapa?'<a class="mip-ayuda-mapa" href="https://www.google.com/maps?q='+encodeURIComponent(a.lat)+','+encodeURIComponent(a.lng)+'" target="_blank" rel="noopener">Ver ubicación</a>':'<span class="mip-ayuda-sin">Sin ubicación</span>';
+   return '<div class="mip-ayuda-fila"><div class="mip-ayuda-texto"><b>🆘 '+UI.esc(a.nombre||'Un motorizado')+' pide ayuda</b><small>'+(a.pedidos.length?'Pedido '+UI.esc(a.pedidos.join(', '))+' · ':'')+UI.esc(a.hora?UI.fechaHora(a.hora):'')+'</small></div>'+mapa+'<button type="button" class="mip-ayuda-ok" data-ayuda="'+UI.esc(a.id)+'">Atendido</button></div>';
+  }).join('');
+ }
+ function ayudas(lista){
+  sync();var s=APP.sesion;
+  if(!s||['dueno','cajero'].indexOf(s.rol)<0){limpiarAyudas();return;}
+  if(!Array.isArray(lista))return; // servidor anterior o consulta incompleta: no se toca lo que ya se muestra
+  ayudasActivas=lista.filter(function(a){return a&&a.id&&!atendiendo[a.id];}).slice(0,5).map(function(a){return {id:String(a.id),nombre:String(a.nombre||'').slice(0,60),pedidos:Array.isArray(a.pedidos)?a.pedidos.map(String).slice(0,10):[],hora:String(a.hora||''),lat:a.lat,lng:a.lng};});
+  bandaAyuda();
+  if(registrar('ayuda',ayudasActivas.map(function(a){return {id:a.id,numero:a.pedidos.join(', '),nombre_aviso:primerNombre(a.nombre)};}))){
+   try{if(g.navigator&&g.navigator.vibrate)g.navigator.vibrate([250,100,250,100,250]);}catch(err){/* sin vibración */}
+  }
+ }
+ async function atenderAyuda(id,boton){
+  if(!id||atendiendo[id]||!g.DATOS)return;atendiendo[id]=true;var s=APP.sesion;if(boton)boton.disabled=true;
+  try{
+   await g.DATOS.pedir('ayudaAtender',{ayuda_id:id,local_id:APP.local||''},{guardar:true});
+   if(APP.sesion!==s)return;
+   ayudasActivas=ayudasActivas.filter(function(a){return a.id!==id;});bandaAyuda();
+   if(UI.aviso)UI.aviso('Alerta marcada como atendida.','ok');
+  }catch(err){
+   if(boton)boton.disabled=false;
+   if(UI.error)UI.error('No se pudo marcar como atendida',err&&err.message?err.message:'Revisa tu internet e inténtalo otra vez.');
+  }finally{delete atendiendo[id];}
+ }
+ document.addEventListener('click',function(e){var b=e.target&&e.target.closest?e.target.closest('[data-ayuda]'):null;if(b)atenderAyuda(b.getAttribute('data-ayuda'),b);});
+ /* 3.1.33 AYUDA FIN */
+ g.MIP_AVISOS={ayudas:ayudas,prepararIngreso:prepararIngreso,reconciliarPendientes:reconciliarPendientes,capturarSalida:capturarSalida,eliminar:eliminar,registrar:registrar,entregas:entregas,pendientesAtrasados:pendientesAtrasados,sync:sync,reset:reset,ajustes:ajustes,modo:modo,configurar:configurar,estado:function(){sync();return lista.map(function(x){return Object.assign({},x);});}};
 })(window);

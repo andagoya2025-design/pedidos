@@ -2,7 +2,7 @@
 // Prototipo descartable: no cambia js/pedir.js en disco, servidor ni datos reales.
 const fs=require('node:fs'),assert=require('node:assert/strict'),{execFileSync}=require('node:child_process'),{chromium,webkit,devices}=require('playwright');
 const read=p=>fs.readFileSync(p,'utf8'),base='2f67aec5503a66d95d8f8352d3d06b5c2c0fc45d';
-for(const p of ['js/ui.js','js/app.js','js/datos.js','js/motorizados.js','js/pedidos.js','js/voz.js','js/notificaciones.js','js/avisos-cliente.js','servidor/Codigo.gs'])assert.equal(p==='servidor/Codigo.gs'?require('./proteger-monitoreo.cjs')(read(p)):p==='js/motorizados.js'?require('./proteger-motorizado.cjs')(read(p)):read(p),execFileSync('git',['show',base+':'+p],{encoding:'utf8'}),p);
+for(const p of ['js/ui.js','js/app.js','js/datos.js','js/motorizados.js','js/pedidos.js','js/voz.js','js/notificaciones.js','js/avisos-cliente.js','servidor/Codigo.gs'])assert.equal(p==='servidor/Codigo.gs'?require('./proteger-monitoreo.cjs')(require('./proteger-ayuda.cjs')(read(p))):p==='js/motorizados.js'?require('./proteger-motorizado.cjs')(read(p)):p==='js/pedidos.js'?require('./proteger-ayuda-admin.cjs').pedidos(read(p)):p==='js/notificaciones.js'?require('./proteger-ayuda-admin.cjs').notificaciones(read(p)):read(p),execFileSync('git',['show',base+':'+p],{encoding:'utf8'}),p);
 const source=read('js/pedir.js');
 const gs=read('servidor/Codigo.gs');
 function extract(s,n){let i=s.indexOf('function '+n+'('),j=s.indexOf('\nfunction ',i+1);assert.ok(i>=0&&j>i,n);return s.slice(i,j)}

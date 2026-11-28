@@ -73,8 +73,11 @@ jobs:
       - name: Comparación élite de pantallas reales con datos ficticios
         run: node tests/navegador-premium-elite.cjs
 
-      - name: Botón de ayuda del motorizado y menú sin palabras partidas
+      - name: Botón de ayuda de un toque del motorizado y menú sin palabras partidas
         run: node tests/navegador-ayuda.cjs
+
+      - name: Alerta de ayuda en la app de la administración (banda roja, Atendido)
+        run: node tests/navegador-ayuda-admin.cjs
 
       - name: Activar mi ubicación del motorizado y formulario de inventario
         run: node tests/navegador-ubicacion-inventario.cjs
