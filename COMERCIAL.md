@@ -5,3 +5,7 @@ El proveedor configura LICENCIA_MAX_LOCALES en las propiedades del script (enter
 ## Instalaciones de terceros
 
 La URL de js/config.js en MAIN corresponde al negocio activo. No entregar esa configuración como plantilla. Preparar una copia independiente con la URL propia del nuevo negocio, validar su conexión y permisos, y no reinicializar hojas existentes. Consultar [procedimiento de mantenimiento](docs/MANTENIMIENTO.md). El registro comercial HTML es local y no autentica ni controla licencias remotas; no introducir contraseñas ni datos clínicos o de clientes.
+
+## Entrega 3.1.58
+
+Consultar [lista de entrega](docs/ENTREGA-COMERCIAL-3.1.58.md). Esta rama es candidata de instalación, no un paquete listo para distribuir a terceros: primero aislar la URL de la instalación activa. No se autoriza publicación por el mero éxito de CI.

@@ -2,13 +2,10 @@
 
 | Archivo | Clasificación |
 | --- | --- |
-| Codigo.gs | Fuente candidata 30132, instalar solo con coordinación expresa |
-| Codigo_MiPedido_3.1.32.txt | Distribución candidata 30132, idéntica a Codigo.gs |
-| Codigo_MiPedido_3.1.31.txt | Candidata histórica anterior, no instalar |
-| Codigo_MiPedido_3.1.30.txt | Respaldo estable 30130 |
-| Codigo_MiPedido_3.1.29.txt | Respaldo compatible anterior; no instalar por defecto |
+| Codigo.gs | Fuente candidata 30138, sin desplegar |
+| Codigo_MiPedido_3.1.38.txt | Distribución candidata 30138, idéntica a Codigo.gs |
+| Codigo_MiPedido_3.1.29.txt a Codigo_MiPedido_3.1.37.txt | Históricos protegidos; no instalar como versión actual |
 | Pruebas.gs | Solo hoja de ensayo; nunca ejecutar en producción |
 
-El mínimo comercial de pantalla sigue en 30129. El centro de monitoreo y el rastreo por lote requieren la fuente 30132; no publicar la candidata hasta confirmar el servidor. El despliegue de la fuente 30130 en Apps Script no está confirmado. No reinstalar para cambios exclusivamente web.
+La candidata 3.1.58 no cambia el código servidor de 3.1.57. El mínimo comercial sigue en 30129 por compatibilidad; 30138 es necesario para certificar el inventario completo. Antes de publicar, coordinar respaldo de hoja y proyecto Apps Script; comprobar en copia aislada y verificar el número de versión devuelto por el servidor. No reinicializar hojas existentes ni reutilizar conexiones ajenas.
 
-Versiones 3.1.18, 3.1.19, 3.1.20, 3.1.21, 3.1.27 y 3.1.28: retiradas del árbol activo para evitar instalaciones equivocadas. Recuperables desde [commit histórico 3.1.41](https://github.com/andagoya2025-design/pedidos/tree/ab5ff3845b56cfc6a824a5080096ecc24e5ab45b/servidor) y su historial Git. Mantener la prueba de identidad del TXT vigente y Codigo.gs.

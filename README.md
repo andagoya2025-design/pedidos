@@ -3,7 +3,16 @@
 App instalable (iPhone, Android, tableta y computadora) para pedidos, motorizados, caja, inventario y reportes.
 Una copia por cliente: cada negocio tiene su propia hoja de Google y su propio script. El nombre y el logo de cada negocio salen de su Configuración.
 
-## Versión vigente y fuente de verdad
+## Candidata de entrega 3.1.58 — 27/11/2026
+
+- MAIN permanece en pantalla 3.1.52, fuente servidor 30133, commit `3151d235f23d4446327aad24a4d7f468732c0fe1`. Despliegue efectivo de Apps Script no verificado.
+- Base de desarrollo aprobada 3.1.56: `312d413dbad94d7c40646fb6385f561aa76fe15a`, [CI completo](https://github.com/andagoya2025-design/pedidos/actions/runs/46103897326).
+- Base funcional inmediata 3.1.57: `c51f8781c7da83d2124abe0e07e48276b540a4df`, [CI](https://github.com/andagoya2025-design/pedidos/actions/runs/46104306451). Verificar conclusión final; pruebas unitarias aprobadas al preparar este documento.
+- Candidata 3.1.58: pantalla 3.1.58, servidor 30138 idéntico al de 3.1.57, caché app-3.1.73-consolidacion. Mínimo comercial 30129 se conserva por compatibilidad; para certificar inventario completo instalar y comprobar 30138.
+- No publicar, fusionar ni instalar hasta autorización expresa, CI verde del SHA exacto, respaldo coordinado y validación en instalación de ensayo. Los datos reales no se han modificado.
+- Los apartados históricos siguientes se preservan como registro; las versiones vigentes se verifican mediante código, SHA y CI.
+
+## Versión vigente y fuente de verdad (histórico)
 
 - **MAIN / estable 3.1.49:** base oficial verificada el 27 de noviembre de 2026, commit `bf445362ecf1109b6c343acebcaf0f0fb50b7282`; 445/445 pruebas unitarias y 13 suites de navegador ([CI](https://github.com/andagoya2025-design/pedidos/actions/runs/46017693206)); [Pages](https://github.com/andagoya2025-design/pedidos/actions/runs/46019871185) exitoso.
 - **Próxima candidata 3.1.50:** monitoreo y rastreo múltiple; implementación en candidata; CI y despliegue de servidor pendientes. Consultar MAIN antes de determinar estado vigente.

@@ -45,3 +45,13 @@ MAIN contiene el código publicado, no una candidata. Leer primero js/config.js 
 
 ### Corrección focalizada de mapas 403 / pantalla 3.1.50
 Incidente observado en MAIN tras publicación: OSM denegó cuadros, la pantalla enviaba no-referrer y el SW conservaba imágenes opacas en fotos-1. Ajustar ambos renderizadores para origen válido y CORS, validar estado HTTP, respetar caché HTTP normal y retirar solo cuadros OSM antiguos. Mostrar aviso si falla sin modificar coordenadas, pedidos, almacenamiento de fotos o servidor 30132. Cache nueva app-3.1.64-mapa-403. Sin probar contra proveedor real hasta validar en navegador físico. Rama candidata antes de publicar.
+
+
+## Candidata de entrega 3.1.58 — 27/11/2026
+
+- MAIN permanece en pantalla 3.1.52, fuente servidor 30133, commit `3151d235f23d4446327aad24a4d7f468732c0fe1`. Despliegue efectivo de Apps Script no verificado.
+- Base de desarrollo aprobada 3.1.56: `312d413dbad94d7c40646fb6385f561aa76fe15a`, [CI completo](https://github.com/andagoya2025-design/pedidos/actions/runs/46103897326).
+- Base funcional inmediata 3.1.57: `c51f8781c7da83d2124abe0e07e48276b540a4df`, [CI](https://github.com/andagoya2025-design/pedidos/actions/runs/46104306451). Verificar conclusión final; pruebas unitarias aprobadas al preparar este documento.
+- Candidata 3.1.58: pantalla 3.1.58, servidor 30138 idéntico al de 3.1.57, caché app-3.1.73-consolidacion. Mínimo comercial 30129 se conserva por compatibilidad; para certificar inventario completo instalar y comprobar 30138.
+- No publicar, fusionar ni instalar hasta autorización expresa, CI verde del SHA exacto, respaldo coordinado y validación en instalación de ensayo. Los datos reales no se han modificado.
+- Los apartados históricos siguientes se preservan como registro; las versiones vigentes se verifican mediante código, SHA y CI.

@@ -18,6 +18,16 @@ Aplican a todo el repositorio y a cualquier asistente o colaborador. Leer [READM
 Actúa como arquitecto de software, auditor de seguridad y calidad, y responsable de publicaciones de MiPedido. El objetivo es mejorar exclusivamente lo solicitado, sin degradar ninguna capacidad existente. La estabilidad prima sobre la velocidad de publicación. Aplica estas reglas a toda tarea, incluso cambios aparentemente pequeños. Un cambio aprobado nunca equivale a permiso para reescribir componentes ajenos.
 
 ## 2. Línea base y fuentes de verdad
+
+## Candidata de entrega 3.1.58 — 27/11/2026
+
+- MAIN permanece en pantalla 3.1.52, fuente servidor 30133, commit `3151d235f23d4446327aad24a4d7f468732c0fe1`. Despliegue efectivo de Apps Script no verificado.
+- Base de desarrollo aprobada 3.1.56: `312d413dbad94d7c40646fb6385f561aa76fe15a`, [CI completo](https://github.com/andagoya2025-design/pedidos/actions/runs/46103897326).
+- Base funcional inmediata 3.1.57: `c51f8781c7da83d2124abe0e07e48276b540a4df`, [CI](https://github.com/andagoya2025-design/pedidos/actions/runs/46104306451). Verificar conclusión final; pruebas unitarias aprobadas al preparar este documento.
+- Candidata 3.1.58: pantalla 3.1.58, servidor 30138 idéntico al de 3.1.57, caché app-3.1.73-consolidacion. Mínimo comercial 30129 se conserva por compatibilidad; para certificar inventario completo instalar y comprobar 30138.
+- No publicar, fusionar ni instalar hasta autorización expresa, CI verde del SHA exacto, respaldo coordinado y validación en instalación de ensayo. Los datos reales no se han modificado.
+- Los apartados históricos siguientes se preservan como registro; las versiones vigentes se verifican mediante código, SHA y CI.
+
 - Línea base estable por decisión del operador (2026-11-27): pantalla 3.1.49; commit bf445362ecf1109b6c343acebcaf0f0fb50b7282; CI 46017693206 (445/445, 13 suites de navegador); Pages 46019871185 exitoso. Respaldos exactos estable/3.1.49, estable/3.1.48 y estable/3.1.47. Consultar MAIN antes de comenzar; si cambia, detener y verificar.
 - Caché estable app-3.1.59-actualizacion. Mínimo servidor 30129; fuente 30130; despliegue Apps Script no verificado. No confundir publicación de frontend y servidor.
 - Validación física: el operador observó puntos GPS de PED-0002. El rastreo múltiple presenta una limitación reproducible de la fuente del servidor (caché por motorizado, no por pedido); no se certifica el servidor desplegado. Próxima candidata 3.1.50: monitoreo, previa revisión de alcance y coordinación del servidor. Las pruebas emuladas no certifican audio, GPS ni funcionamiento físico.
