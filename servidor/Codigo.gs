@@ -18,10 +18,10 @@
  * ============================================================
  */
 
-var APP_VERSION = '3.1.34';
+var APP_VERSION = '3.1.35';
 // Marcador opaco, sin datos de pedidos. Una ejecución de Apps Script tiene su propio estado.
 var syncPendiente_ = false;
-var APP_VERSION_NUM = 30134; // 3.1.0 -> 30100 (la pantalla compara con su mínimo)
+var APP_VERSION_NUM = 30135; // 3.1.0 -> 30100 (la pantalla compara con su mínimo)
 var SESION_SEGUNDOS = 21600;  // 6 h; se renueva con cada uso
 var ROLES = ['dueno', 'cajero', 'motorizado'];
 
@@ -1052,9 +1052,10 @@ function asegurarHojas_() {
   }
 }
 
-function candado_() {
+function candado_(inventario) {
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(15000)) throw fallo_('El sistema está ocupado. Intente en un momento.', 'OCUPADO');
+  if (inventario === true) { try { recuperarMovimientoInventario_(); } catch (e) { try { SpreadsheetApp.flush(); } finally { lock.releaseLock(); } throw e; } }
   return lock;
 }
 
@@ -1303,7 +1304,7 @@ function accionPedidoCrear_(data, ctx, soloCotizar) {
   var claveFreno = 'FRENO_' + telefono;
   var claveFrenoD = dispId ? 'FRENOD_' + dispId : '';
 
-  var lock = candado_();
+  var lock = candado_(!soloCotizar);
   var pedido, detalleFilas = [], creado = false;
   try {
     var pedidos = leerTabla_('pedidos');
@@ -1885,7 +1886,7 @@ function validarStockAdicional_(localId, detalle) {
  * Google Sheets no soporta transacciones: el estado Aplicando bloquea despachos y
  * obliga a conciliación manual si un fallo interrumpe alguna escritura. */
 function accionPedidoCambioAplicar_(data, ctx) {
-  var lock = candado_(), resultado;
+  var lock = candado_(true), resultado;
   try {
     var id = limpiarTexto_(data.id, 80);
     var token = limpiarTexto_(data.cotizacion_id, 80);
@@ -2542,7 +2543,7 @@ function accionPedidoRegresar_(data, ctx) {
 function accionPedidoAnular_(data, ctx) {
   var motivo = limpiarTexto_(data.motivo, 200);
   if (motivo.length < 3) throw fallo_('Escriba el motivo de la anulación.');
-  var lock = candado_();
+  var lock = candado_(true);
   var p;
   try {
     p = buscarPedido_(data.id, ctx);
@@ -2901,11 +2902,14 @@ function insumoSalida_(i, nombresLocal) {
 
 function accionInsumosListar_(data, ctx) {
   var local = localDeSesion_(ctx, data.local_id);
+  var lock = candado_(true);
+  try {
   var nombres = {};
   leerTabla_('locales').forEach(function (l) { nombres[String(l.id)] = String(l.nombre); });
   var lista = leerTabla_('insumos').filter(function (i) { return local === 'TODOS' || String(i.local_id) === local; }).map(function (i) { return insumoSalida_(i, nombres); })
     .sort(function (a, b) { return (b.bajo - a.bajo) || a.nombre.localeCompare(b.nombre); });
-  return { ok: true, data: { insumos: lista } };
+  return { ok: true, data: { insumos: lista, movimientos_seguros: true } };
+  } finally { lock.releaseLock(); }
 }
 
 function accionInsumoGuardar_(data, ctx) {
@@ -2918,7 +2922,7 @@ function accionInsumoGuardar_(data, ctx) {
   if (costo !== '' && !(costo >= 0 && costo <= 100000)) throw fallo_('Costo no válido.');
   var proveedor = limpiarTexto_(data.proveedor, 60);
   var provTel = data.proveedor_tel ? normalizarTelefono_(data.proveedor_tel, leerConfig_().pais_codigo) : '';
-  var lock = candado_();
+  var lock = candado_(true);
   try {
     if (!leerTabla_('locales').some(function (l) { return String(l.id) === localId; })) throw fallo_('Elija el local del insumo.');
     var filas = leerTabla_('insumos');
@@ -2956,59 +2960,116 @@ function cantidadInventario_(valor, opcional) {
   return Number.isFinite(n) && n >= 0 && Number.isSafeInteger(entero) && n === entero / 1000 ? entero / 1000 : NaN;
 }
 
+// 3.1.54: registro persistente de UNA operación manual pendiente, bajo el mismo
+// candado que protege pedidos e insumos. No crea hojas, columnas ni permisos.
+function recuperarMovimientoInventario_() {
+  var props = PropertiesService.getScriptProperties(), clave = 'MIPEDIDO_INV_PENDIENTE_V1';
+  var raw = props.getProperty(clave);
+  if (!raw) return;
+  var plan;
+  try { plan = JSON.parse(raw); } catch (e) { throw fallo_('Hay un movimiento de inventario que requiere revisión técnica.', 'INV_PENDIENTE'); }
+  var conflicto = function () { throw fallo_('Hay un movimiento de inventario pendiente de conciliación. No repita ni modifique existencias manualmente.', 'INV_PENDIENTE'); };
+  if (!plan || plan.v !== 1 || !Array.isArray(plan.cambios) || !plan.cambios.length || !Array.isArray(plan.movs) || plan.movs.length !== plan.cambios.length) conflicto();
+  var filas = leerTabla_('insumos'), historial = leerTabla_('movimientos_inventario');
+  // Comprobar TODOS los saldos y filas ANTES de continuar; nunca sumar sobre un saldo incierto.
+  plan.cambios.forEach(function (c) {
+    var matches = filas.filter(function (r) { return String(r.id) === c.id; });
+    if (matches.length > 1 || !Number.isFinite(c.despues)) conflicto();
+    var r = matches[0];
+    if (!r) {
+      if (c.antes !== null || !Array.isArray(c.fila) || filas.some(function (x) { return String(x.local_id) === c.local && claveComparar_(x.nombre) === claveComparar_(c.fila[2]); })) conflicto();
+      return;
+    }
+    if (String(r.local_id) !== c.local || claveComparar_(r.unidad) !== c.unidad || r.stock === '' || r.stock == null || (Number(r.stock) !== c.antes && Number(r.stock) !== c.despues)) conflicto();
+  });
+  function coincide(m, r) { return String(r.id) === m[0] && String(r.local_id) === String(m[2]) && String(r.insumo_id) === String(m[3]) && String(r.tipo) === String(m[4]) && Number(r.cantidad) === m[5] && String(r.motivo) === String(m[6]) && String(r.local_destino || '') === String(m[7]) && String(r.usuario) === String(m[8]); }
+  plan.movs.forEach(function (m) {
+    var rows = historial.filter(function (r) { return String(r.id) === m[0]; });
+    if (rows.length > 1 || (rows.length && !coincide(m, rows[0]))) conflicto();
+  });
+  plan.cambios.forEach(function (c) {
+    var r = filas.filter(function (x) { return String(x.id) === c.id; })[0];
+    if (!r) { var fila = c.fila.slice(); fila[7] = new Date(fila[7]); agregarFilas_('insumos', [fila]); }
+    else if (Number(r.stock) !== c.despues) actualizarCampos_('insumos', r._fila, r, { stock: c.despues });
+    SpreadsheetApp.flush();
+  });
+  var faltan = plan.movs.filter(function (m) { return !historial.some(function (r) { return String(r.id) === m[0]; }); }).map(function (m) { var f = m.slice(); f[1] = new Date(f[1]); return f; });
+  if (faltan.length) agregarFilas_('movimientos_inventario', faltan);
+  SpreadsheetApp.flush();
+  var fin = leerTabla_('insumos'), logs = leerTabla_('movimientos_inventario');
+  plan.cambios.forEach(function (c) { var rows = fin.filter(function (r) { return String(r.id) === c.id && Number(r.stock) === c.despues; }); if (rows.length !== 1) conflicto(); });
+  plan.movs.forEach(function (m) { var rows = logs.filter(function (r) { return String(r.id) === m[0]; }); if (rows.length !== 1 || !coincide(m, rows[0])) conflicto(); });
+  limpiarMenuCache_();
+  props.deleteProperty(clave); // solo después de saldos e historial confirmados
+}
+
 /* tipo: compra (+), salida (−), conteo (queda la cantidad contada), traspaso (− aquí, + en el otro local). */
 function accionInventarioMovimiento_(data, ctx) {
   var tipo = String(data.tipo || ''), cant = cantidadInventario_(data.cantidad, false), motivo = limpiarTexto_(data.motivo, 200), destino = limpiarTexto_(data.local_destino, 40);
   if (['compra', 'salida', 'conteo', 'traspaso'].indexOf(tipo) < 0) throw fallo_('Tipo de movimiento no válido.');
   if (!(cant >= 0 && cant <= 1000000) || (tipo !== 'conteo' && !(cant > 0))) throw fallo_('Escriba una cantidad válida, con hasta tres decimales.');
   if ((tipo === 'salida' || tipo === 'traspaso') && motivo.length < 3) throw fallo_('Escriba el motivo.');
-  var lock = candado_();
-  var res = {};
+  var op = data.op_id == null || data.op_id === '' ? nuevoId_('OP') : String(data.op_id); // pantallas antiguas siguen funcionando; solo la nueva conserva el ID al reintentar
+  if (!/^[A-Za-z0-9_-]{8,100}$/.test(op)) throw fallo_('Código de movimiento no válido.');
+  var lock = candado_(true), res = {}, repetido = false;
   try {
     var filas = leerTabla_('insumos');
     var ins = filas.filter(function (r) { return String(r.id) === String(data.insumo_id); })[0];
     if (!ins) throw fallo_('Ese insumo ya no existe.', 'NO_EXISTE');
     if (!puedeVerLocal_(ctx, ins.local_id)) throw fallo_('Ese insumo no es de su local.', 'PERMISO');
-    var stock = numero_(ins.stock), ahora = new Date(), u = ctx.sesion.usuario, movs = [];
+    var stock = Number(ins.stock), ahora = new Date().toISOString(), u = String(ctx.sesion.usuario), movs = [], cambios = [];
+    if (!Number.isFinite(stock) || ins.stock === '' || ins.stock == null) throw fallo_('Revise las existencias de este insumo.', 'INV_PENDIENTE');
     var r3 = function (n) { return Math.round(n * 1000) / 1000; };
-    if (tipo === 'compra') { stock = r3(stock + cant); movs.push([nuevoId_('MOV'), ahora, ins.local_id, ins.id, 'compra', cant, motivo || 'Compra', '', u]); }
-    if (tipo === 'salida' || tipo === 'traspaso') {
-      if (cant > stock) throw fallo_('Solo hay ' + stock + ' ' + ins.unidad + ' de «' + ins.nombre + '».');
-      stock = r3(stock - cant);
+    var prefijo = 'MOV-INV:' + op + ':';
+    var huella = hashClave_(JSON.stringify([String(ins.id), String(ins.local_id), tipo, cant, motivo, destino]), String(ctx.sesion.usuario_id || u));
+    var idBase = prefijo + huella + ':';
+    var previos = leerTabla_('movimientos_inventario').filter(function (m) { return String(m.id).indexOf(prefijo) === 0; });
+    if (previos.length) {
+      var fuente = previos.filter(function (m) { return String(m.id) === idBase + '0' && String(m.insumo_id) === String(ins.id) && String(m.local_id) === String(ins.local_id); });
+      var n = tipo === 'traspaso' ? 2 : 1;
+      if (previos.length !== n || fuente.length !== 1 || (n === 2 && !previos.some(function (m) { return String(m.id) === idBase + '1' && String(m.local_id) === destino && String(m.tipo) === 'traspaso_entrada'; }))) throw fallo_('El código de movimiento ya está en uso o requiere revisión. No se realizó otro movimiento.', 'INV_OP_CONFLICTO');
+      repetido = true; res.stock = stock; res.nombre = String(ins.nombre);
+      if (tipo === 'conteo') res.diferencia = numero_(fuente[0].cantidad);
+    } else {
+      var antes = stock;
+      function cambio(i, fin) { return { id: String(i.id), local: String(i.local_id), unidad: claveComparar_(i.unidad), antes: Number(i.stock), despues: fin }; }
+      if (tipo === 'compra') { stock = r3(stock + cant); movs.push([idBase+'0', ahora, ins.local_id, ins.id, 'compra', cant, motivo || 'Compra', '', u]); }
+      if (tipo === 'salida' || tipo === 'traspaso') { if (cant > stock) throw fallo_('Solo hay ' + stock + ' ' + ins.unidad + ' de «' + ins.nombre + '».'); stock = r3(stock - cant); }
+      if (tipo === 'salida') movs.push([idBase+'0', ahora, ins.local_id, ins.id, 'salida', -cant, motivo, '', u]);
+      if (tipo === 'conteo') { res.diferencia = r3(cant - stock); stock = r3(cant); movs.push([idBase+'0', ahora, ins.local_id, ins.id, 'conteo', res.diferencia, (motivo || 'Conteo físico') + ' (había ' + antes + ', se contó ' + cant + ')', '', u]); }
+      cambios.push(cambio(ins, stock));
+      if (tipo === 'traspaso') {
+        if (!destino || destino === String(ins.local_id)) throw fallo_('Elija el local que recibe.');
+        if (!leerTabla_('locales').some(function (l) { return String(l.id) === destino && l.activo === true; })) throw fallo_('El local que recibe no existe.');
+        var otros = filas.filter(function (r) { return String(r.local_id) === destino && claveComparar_(r.nombre) === claveComparar_(ins.nombre); });
+        if (otros.length > 1) throw fallo_('Hay insumos duplicados en el destino. Revise antes de traspasar.', 'INV_PENDIENTE');
+        var otro = otros[0];
+        if (!claveComparar_(ins.unidad)) throw fallo_('El insumo no tiene una unidad válida. Revise su ficha.');
+        if (otro && claveComparar_(otro.unidad) !== claveComparar_(ins.unidad)) throw fallo_('Las unidades de los dos locales no coinciden. No se realizó el traspaso.', 'UNIDAD_INSUMO');
+        if (otro && otro.activo !== true) throw fallo_('El insumo del local que recibe está inactivo. No se realizó el traspaso.', 'INSUMO_INACTIVO');
+        var otroId = otro ? String(otro.id) : nuevoId_('INS');
+        if (otro) {
+          if (otro.stock === '' || otro.stock == null || !Number.isFinite(Number(otro.stock))) throw fallo_('Revise las existencias del destino.', 'INV_PENDIENTE');
+          cambios.push(cambio(otro, r3(Number(otro.stock) + cant)));
+        } else cambios.push({ id: otroId, local: destino, unidad: claveComparar_(ins.unidad), antes: null, despues: cant, fila: [otroId, destino, ins.nombre, ins.unidad, cant, 0, true, ahora, ins.costo, ins.proveedor, ins.proveedor_tel] });
+        movs.push([idBase+'0', ahora, ins.local_id, ins.id, 'traspaso_salida', -cant, motivo, destino, u]);
+        movs.push([idBase+'1', ahora, destino, otroId, 'traspaso_entrada', cant, motivo, String(ins.local_id), u]);
+      }
+      if (cambios.some(function (c) { return !Number.isFinite(c.despues); })) throw fallo_('Existencias inválidas. Revise antes de guardar.', 'INV_PENDIENTE');
+      PropertiesService.getScriptProperties().setProperty('MIPEDIDO_INV_PENDIENTE_V1', JSON.stringify({ v: 1, cambios: cambios, movs: movs }));
+      recuperarMovimientoInventario_();
+      res.stock = stock; res.nombre = String(ins.nombre);
     }
-    if (tipo === 'salida') movs.push([nuevoId_('MOV'), ahora, ins.local_id, ins.id, 'salida', -cant, motivo, '', u]);
-    if (tipo === 'conteo') {
-      var dif = r3(cant - stock);
-      res.diferencia = dif;
-      stock = r3(cant);
-      movs.push([nuevoId_('MOV'), ahora, ins.local_id, ins.id, 'conteo', dif, (motivo || 'Conteo físico') + ' (había ' + numero_(ins.stock) + ', se contó ' + cant + ')', '', u]);
-    }
-    if (tipo === 'traspaso') {
-      if (!destino || destino === String(ins.local_id)) throw fallo_('Elija el local que recibe.');
-      if (!leerTabla_('locales').some(function (l) { return String(l.id) === destino && l.activo === true; })) throw fallo_('El local que recibe no existe.');
-      var otro = filas.filter(function (r) { return String(r.local_id) === destino && claveComparar_(r.nombre) === claveComparar_(ins.nombre); })[0];
-      if (!claveComparar_(ins.unidad)) throw fallo_('El insumo no tiene una unidad válida. Revise su ficha.');
-      if (otro && claveComparar_(otro.unidad) !== claveComparar_(ins.unidad)) throw fallo_('Las unidades de los dos locales no coinciden. No se realizó el traspaso.', 'UNIDAD_INSUMO');
-      if (otro && otro.activo !== true) throw fallo_('El insumo del local que recibe está inactivo. No se realizó el traspaso.', 'INSUMO_INACTIVO');
-      var otroId;
-      if (otro) { otroId = String(otro.id); actualizarCampos_('insumos', otro._fila, otro, { stock: r3(numero_(otro.stock) + cant) }); }
-      else { otroId = nuevoId_('INS'); agregarFilas_('insumos', [[otroId, destino, ins.nombre, ins.unidad, cant, 0, true, ahora, ins.costo, ins.proveedor, ins.proveedor_tel]]); }
-      movs.push([nuevoId_('MOV'), ahora, ins.local_id, ins.id, 'traspaso_salida', -cant, motivo, destino, u]);
-      movs.push([nuevoId_('MOV'), ahora, destino, otroId, 'traspaso_entrada', cant, motivo, String(ins.local_id), u]);
-    }
-    actualizarCampos_('insumos', ins._fila, ins, { stock: stock });
-    agregarFilas_('movimientos_inventario', movs);
-    limpiarMenuCache_(); // 3.1.3: el plato vuelve a aparecer (o se agota) al instante
-    res.stock = stock;
-    res.nombre = String(ins.nombre);
-  } finally { lock.releaseLock(); }
-  bitacora_(ctx.sesion, 'INVENTARIO', tipo.toUpperCase(), res.nombre + ' · ' + cant, ctx.dispositivo);
+  } finally { try { SpreadsheetApp.flush(); } finally { lock.releaseLock(); } }
+  if (!repetido) bitacora_(ctx.sesion, 'INVENTARIO', tipo.toUpperCase(), res.nombre + ' · ' + cant, ctx.dispositivo);
   var lista = accionInsumosListar_({ local_id: ctx.sesion.rol === 'dueno' ? 'TODOS' : '' }, ctx).data;
-  lista.resultado = res;
+  res.repetido = repetido; lista.resultado = res;
   return { ok: true, data: lista };
 }
 
 function accionInventarioHistorial_(data, ctx) {
+  var lock = candado_(true);
+  try {
   var ins = leerTabla_('insumos').filter(function (r) { return String(r.id) === String(data.insumo_id); })[0];
   if (!ins) throw fallo_('Ese insumo ya no existe.', 'NO_EXISTE');
   if (!puedeVerLocal_(ctx, ins.local_id)) throw fallo_('Ese insumo no es de su local.', 'PERMISO');
@@ -3016,6 +3077,7 @@ function accionInventarioHistorial_(data, ctx) {
     return { fecha: iso_(m.fecha), tipo: String(m.tipo), cantidad: numero_(m.cantidad), motivo: String(m.motivo), usuario: String(m.usuario) };
   });
   return { ok: true, data: { movimientos: movs } };
+  } finally { lock.releaseLock(); }
 }
 
 /* ---------- 11.9 Caja por local y día de trabajo ---------- */
